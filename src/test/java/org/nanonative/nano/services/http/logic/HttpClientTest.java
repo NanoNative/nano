@@ -173,7 +173,7 @@ public class HttpClientTest {
                 entry("instance", "http://localhost/invalid/url"),
                 entry("status", -1L),
                 entry("title", "ConnectException"),
-                entry("type", "https://github.com/YunaBraska/nano")
+                entry("type", "https://github.com/nanonative/nano")
             ).containsKey("id").containsKey("detail").containsKey("timestamp");
         }
     }
@@ -246,7 +246,7 @@ public class HttpClientTest {
             entry("instance", ""),
             entry("status", -1L),
             entry("title", "URI with undefined scheme"),
-            entry("type", "https://github.com/YunaBraska/nano")
+            entry("type", "https://github.com/nanonative/nano")
         ).containsKey("id").containsKey("detail").containsKey("timestamp");
 
         // verify null request
@@ -257,7 +257,7 @@ public class HttpClientTest {
             entry("instance", null),
             entry("status", 400L),
             entry("title", "Invalid request [null]"),
-            entry("type", "https://github.com/YunaBraska/nano")
+            entry("type", "https://github.com/nanonative/nano")
         ).containsKey("id").containsKey("detail").containsKey("timestamp");
     }
 

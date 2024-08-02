@@ -182,11 +182,11 @@ Nano is open-source software licensed under the [Apache license](LICENSE).
 ## 🙋‍ Support
 
 If you encounter any issues or have questions, please file an
-issue [here](https://github.com/YunaBraska/nano/issues/new/choose).
+issue [here](https://github.com/nanonative/nano/issues/new/choose).
 
 ## 🌐 Stay Connected
 
-* [GitHub](https://github.com/YunaBraska)
+* [GitHub](https://github.com/NanoNative)
 * [X (aka Twitter)](https://twitter.com/YunaMorgenstern)
 * [Mastodon](https://hachyderm.io/@LunaFreyja)
 * [LinkedIn](https://www.linkedin.com/in/yuna-morgenstern-6662a5145/)
@@ -194,51 +194,51 @@ issue [here](https://github.com/YunaBraska/nano/issues/new/choose).
 ![tiny_java_logo](src/test/resources/tiny_java.png)
 
 
-[build_shield]: https://github.com/YunaBraska/nano/workflows/MVN_RELEASE/badge.svg
+[build_shield]: https://github.com/nanonative/nano/workflows/MVN_RELEASE/badge.svg
 
-[build_link]: https://github.com/YunaBraska/nano/actions?query=workflow%3AMVN_RELEASE
+[build_link]: https://github.com/nanonative/nano/actions?query=workflow%3AMVN_RELEASE
 
-[maintainable_shield]: https://img.shields.io/codeclimate/maintainability/YunaBraska/nano?style=flat-square
+[maintainable_shield]: https://img.shields.io/codeclimate/maintainability/nanonative/nano?style=flat-square
 
-[maintainable_link]: https://codeclimate.com/github/YunaBraska/nano/maintainability
+[maintainable_link]: https://codeclimate.com/github/nanonative/nano/maintainability
 
-[coverage_shield]: https://img.shields.io/codeclimate/coverage/YunaBraska/nano?style=flat-square
+[coverage_shield]: https://img.shields.io/codeclimate/coverage/nanonative/nano?style=flat-square
 
-[coverage_link]: https://codeclimate.com/github/YunaBraska/nano/test_coverage
+[coverage_link]: https://codeclimate.com/github/nanonative/nano/test_coverage
 
-[issues_shield]: https://img.shields.io/github/issues/YunaBraska/nano?style=flat-square
+[issues_shield]: https://img.shields.io/github/issues/nanonative/nano?style=flat-square
 
-[issues_link]: https://github.com/YunaBraska/nano/issues/new/choose
+[issues_link]: https://github.com/nanonative/nano/issues/new/choose
 
-[commit_shield]: https://img.shields.io/github/last-commit/YunaBraska/nano?style=flat-square
+[commit_shield]: https://img.shields.io/github/last-commit/nanonative/nano?style=flat-square
 
-[commit_link]: https://github.com/YunaBraska/nano/commits/main
+[commit_link]: https://github.com/nanonative/nano/commits/main
 
-[license_shield]: https://img.shields.io/github/license/YunaBraska/nano?style=flat-square
+[license_shield]: https://img.shields.io/github/license/nanonative/nano?style=flat-square
 
-[license_link]: https://github.com/YunaBraska/nano/blob/main/LICENSE
+[license_link]: https://github.com/nanonative/nano/blob/main/LICENSE
 
-[dependency_shield]: https://img.shields.io/librariesio/github/YunaBraska/nano?style=flat-square
+[dependency_shield]: https://img.shields.io/librariesio/github/nanonative/nano?style=flat-square
 
-[dependency_link]: https://libraries.io/github/YunaBraska/nano
+[dependency_link]: https://libraries.io/github/nanonative/nano
 
 [central_shield]: https://img.shields.io/maven-central/v/org.nanonative/nano?style=flat-square
 
 [central_link]:https://search.maven.org/artifact/org.nanonative/nano
 
-[tag_shield]: https://img.shields.io/github/v/tag/YunaBraska/nano?style=flat-square
+[tag_shield]: https://img.shields.io/github/v/tag/nanonative/nano?style=flat-square
 
-[tag_link]: https://github.com/YunaBraska/nano/releases
+[tag_link]: https://github.com/nanonative/nano/releases
 
 [javadoc_shield]: https://javadoc.io/badge2/org.nanonative/nano/javadoc.svg?style=flat-square
 
 [javadoc_link]: https://javadoc.io/doc/org.nanonative/nano
 
-[size_shield]: https://img.shields.io/github/repo-size/YunaBraska/nano?style=flat-square
+[size_shield]: https://img.shields.io/github/repo-size/nanonative/nano?style=flat-square
 
 [label_shield]: https://img.shields.io/badge/Yuna-QueenInside-blueviolet?style=flat-square
 
-[gitter_shield]: https://img.shields.io/gitter/room/YunaBraska/nano?style=flat-square
+[gitter_shield]: https://img.shields.io/gitter/room/nanonative/nano?style=flat-square
 
 [gitter_link]: https://gitter.im/nano/Lobby
 

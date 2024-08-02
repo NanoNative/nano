@@ -947,7 +947,7 @@ public class HttpObject extends HttpRequest {
         statusCode(statusCode);
         body(new TypeMap()
             .putReturn("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
-            .putReturn("type", "https://github.com/YunaBraska/nano")
+            .putReturn("type", "https://github.com/nanonative/nano")
             .putReturn("title", ofNullable(throwable.getMessage()).orElse(throwable.getClass().getSimpleName()))
             .putReturn("status", statusCode)
             .putReturn("instance", path())

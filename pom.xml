@@ -4,17 +4,17 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>1.0.0</version>
+    <version>2024.0.0</version>
     <packaging>jar</packaging>
 
     <name>nano</name>
     <description>Tiny java tool - back to basics!</description>
-    <url>https://github.com/YunaBraska/nano</url>
+    <url>https://github.com/nanonative/nano</url>
 
     <scm>
-        <connection>scm:git:ssh://git@github.com/YunaBraska/nano.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/YunaBraska/nano.git</developerConnection>
-        <url>https://github.com/YunaBraska/nano.git</url>
+        <connection>scm:git:ssh://git@github.com/nanonative/nano.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/nanonative/nano.git</developerConnection>
+        <url>https://github.com/nanonative/nano.git</url>
     </scm>
 
     <developers>
