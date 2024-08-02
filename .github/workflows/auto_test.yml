@@ -1,0 +1,27 @@
+name: "MVN_TEST"
+
+on:
+  workflow_dispatch:
+  push:
+
+jobs:
+  maven_update:
+    name: "maven"
+    uses: YunaBraska/YunaBraska/.github/workflows/wc_maven_update.yml@main
+    # has_pom                     ${{needs.maven_update.outputs.has_pom}}
+    # has_changes                 ${{needs.maven_update.outputs.has_changes}}
+    # java_version                ${{needs.maven_update.outputs.java_version}}
+    # project_version             ${{needs.maven_update.outputs.project_version}}
+    secrets:
+      CI_TOKEN: ${{ secrets.CI_TOKEN || github.token }}
+  maven_test:
+    needs: maven_update
+    name: "maven"
+    uses: YunaBraska/YunaBraska/.github/workflows/wc_maven_test.yml@main
+    secrets:
+      CC_TEST_REPORTER_ID: ${{secrets.CC_TEST_REPORTER_ID}}
+    # has_pom                     ${{needs.maven_test.outputs.has_pom}}
+    # has_changes                 ${{needs.maven_test.outputs.has_changes}}
+    # java_version                ${{needs.maven_test.outputs.java_version}}
+    # project_version             ${{needs.maven_test.outputs.project_version}}
+    # has_publish_to_code_climate ${{needs.maven_test.outputs.has_publish_to_code_climate}}

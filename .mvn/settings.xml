@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<settings>
+    <profiles>
+        <profile>
+            <id>gpg</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <gpg.executable>gpg</gpg.executable>
+                <gpg.passphrase>${GPG_SECRET}</gpg.passphrase>
+            </properties>
+        </profile>
+    </profiles>
+    <servers>
+        <server>
+            <id>ossrh</id>
+            <username>${OSSH_USER}</username>
+            <password>${OSSH_PASS}</password>
+        </server>
+    </servers>
+</settings>
