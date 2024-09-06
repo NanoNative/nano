@@ -37,7 +37,7 @@ flowchart TD
 #### Access Configs
 
 * `context.get(Integer.class, "app_config_key")` - Get a configuration value as an Integer
-* `context.getList(Integer.class, "app_config_key")` - Get a configuration value as a List of Integers
+* `context.asList(Integer.class, "app_config_key")` - Get a configuration value as a List of Integers
 * `context.getMap(String.class, Integer.class, "app_config_key")` - Get a configuration value as a Map of Strings to
   Integers
 * `context.traceId()` - Get the trace id of the current [Context](../context/README.md)

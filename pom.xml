@@ -38,7 +38,7 @@
         <project.build.sourceEncoding>${project.encoding}</project.build.sourceEncoding>
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
         <!-- PRODUCTION -->
-        <type-map.version>2.1.13</type-map.version>
+        <type-map.version>2.1.18</type-map.version>
         <!-- TEST -->
         <junit-jupiter-api.version>5.11.0-M2</junit-jupiter-api.version>
         <assertj-core.version>3.26.3</assertj-core.version>

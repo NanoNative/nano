@@ -43,7 +43,7 @@ class NanoTest {
     void configFilesTest() {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
         assertThat(nano.context().get(String.class, CONFIG_PROFILES)).isEqualTo("default, local, dev, prod");
-        assertThat(nano.context().getList(String.class, "_scanned_profiles")).containsExactly("local", "default", "dev", "prod");
+        assertThat(nano.context().asList(String.class, "_scanned_profiles")).containsExactly("local", "default", "dev", "prod");
         assertThat(nano.context().get(String.class, "test_placeholder_fallback")).isEqualTo("fallback should be used 1");
         assertThat(nano.context().get(String.class, "test_placeholder_key_empty")).isEqualTo("fallback should be used 2");
         assertThat(nano.context().get(String.class, "test_placeholder_value")).isEqualTo("used placeholder value");

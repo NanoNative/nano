@@ -156,7 +156,7 @@ public class HttpObject extends HttpRequest {
      * @return a list of {@link ContentType} objects representing each content type specified.
      */
     public List<ContentType> contentTypes() {
-        final List<ContentType> contentTypes = splitHeaderValue(headerMap().getList(String.class, CONTENT_TYPE), ContentType::fromValue);
+        final List<ContentType> contentTypes = splitHeaderValue(headerMap().asList(String.class, CONTENT_TYPE), ContentType::fromValue);
         return contentTypes.isEmpty() ? List.of(guessContentType(this, body())) : contentTypes;
     }
 
@@ -212,7 +212,7 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<ContentType> accepts() {
-        return splitHeaderValue(headerMap().getList(String.class, ACCEPT), ContentType::fromValue);
+        return splitHeaderValue(headerMap().asList(String.class, ACCEPT), ContentType::fromValue);
     }
 
     public HttpObject accept(final String... contentType) {
@@ -248,11 +248,11 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<String> acceptEncodings() {
-        return splitHeaderValue(headerMap().getList(String.class, ACCEPT_ENCODING), v -> v);
+        return splitHeaderValue(headerMap().asList(String.class, ACCEPT_ENCODING), v -> v);
     }
 
     public boolean hasAcceptEncoding(final String... encodings) {
-        final List<String> result = splitHeaderValue(headerMap().getList(String.class, ACCEPT_ENCODING), v -> v);
+        final List<String> result = splitHeaderValue(headerMap().asList(String.class, ACCEPT_ENCODING), v -> v);
         return Arrays.stream(encodings).allMatch(result::contains);
     }
 
@@ -262,11 +262,11 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<String> contentEncodings() {
-        return splitHeaderValue(headerMap().getList(String.class, CONTENT_ENCODING), v -> v);
+        return splitHeaderValue(headerMap().asList(String.class, CONTENT_ENCODING), v -> v);
     }
 
     public boolean hasContentEncoding(final String... encodings) {
-        final List<String> result = splitHeaderValue(headerMap().getList(String.class, CONTENT_ENCODING), v -> v);
+        final List<String> result = splitHeaderValue(headerMap().asList(String.class, CONTENT_ENCODING), v -> v);
         return Arrays.stream(encodings).allMatch(result::contains);
     }
 
@@ -275,7 +275,7 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<Locale> acceptLanguages() {
-        final List<Locale> result = splitHeaderValue(headerMap().getList(String.class, ACCEPT_LANGUAGE), Locale::forLanguageTag);
+        final List<Locale> result = splitHeaderValue(headerMap().asList(String.class, ACCEPT_LANGUAGE), Locale::forLanguageTag);
         return result.isEmpty() ? List.of(Locale.ENGLISH) : result;
     }
 
@@ -697,7 +697,7 @@ public class HttpObject extends HttpRequest {
         result.computeIfAbsent(CONTENT_LENGTH, value -> this.body().length);
         result.computeIfAbsent(DATE, value -> HTTP_DATE_FORMATTER.format(ZonedDateTime.now().withZoneSameInstant(java.time.ZoneOffset.UTC)));
         result.computeIfAbsent(USER_AGENT, fallback -> NanoUtils.generateNanoName("%s/%s (%s %s)"));
-        return result.getMap(String.class, value -> collectionOf(value, String.class));
+        return result.asMap(String.class, value -> collectionOf(value, String.class));
     }
 
     /**
