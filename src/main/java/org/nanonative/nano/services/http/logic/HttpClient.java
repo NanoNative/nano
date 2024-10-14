@@ -54,13 +54,13 @@ public class HttpClient {
     public HttpClient(final Context context, final java.net.http.HttpClient client) {
         this.context = context;
         this.client = client != null ? client : java.net.http.HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(ofNullable(context).map(ctx -> ctx.get(Long.class, CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS)).orElse(5000L)))
-            .followRedirects(ofNullable(context).map(ctx -> ctx.get(Boolean.class, CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS)).orElse(true) ? ALWAYS : NEVER)
-            .version(ofNullable(context).map(ctx -> ctx.get(java.net.http.HttpClient.Version.class, CONFIG_HTTP_CLIENT_VERSION)).orElse(HTTP_2))
+            .connectTimeout(Duration.ofMillis(ofNullable(context).map(ctx -> ctx.asLong( CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS)).orElse(5000L)))
+            .followRedirects(ofNullable(context).map(ctx -> ctx.asBoolean(CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS)).orElse(true) ? ALWAYS : NEVER)
+            .version(ofNullable(context).map(ctx -> ctx.as(java.net.http.HttpClient.Version.class, CONFIG_HTTP_CLIENT_VERSION)).orElse(HTTP_2))
             .executor(ofNullable(context).map(Context::nano).map(Nano::threadPool).orElse(NanoThread.VIRTUAL_THREAD_POOL))
             .build();
-        retries = ofNullable(context).map(ctx -> ctx.get(Integer.class, CONFIG_HTTP_CLIENT_MAX_RETRIES)).orElse(3);
-        readTimeoutMs = ofNullable(context).map(ctx -> ctx.get(Integer.class, CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS)).orElse(10000);
+        retries = ofNullable(context).map(ctx -> ctx.asInt( CONFIG_HTTP_CLIENT_MAX_RETRIES)).orElse(3);
+        readTimeoutMs = ofNullable(context).map(ctx -> ctx.asInt( CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS)).orElse(10000);
     }
 
     /**

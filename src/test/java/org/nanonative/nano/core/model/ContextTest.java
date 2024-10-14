@@ -177,9 +177,9 @@ class ContextTest {
             .containsKeys(CONTEXT_NANO_KEY, CONTEXT_TRACE_ID_KEY, CONTEXT_CLASS_KEY, CONTEXT_TRACE_ID_KEY);
 
         //Verify trace id is shared between contexts
-        assertThat(context.newContext(this.getClass()).getList(CONTEXT_TRACE_ID_KEY)).hasSize(1).doesNotContain(context.traceId());
+        assertThat(context.newContext(this.getClass()).asList(CONTEXT_TRACE_ID_KEY)).hasSize(1).doesNotContain(context.traceId());
         final Context subContext = context.newContext(this.getClass());
-        assertThat(subContext.getList(CONTEXT_TRACE_ID_KEY)).hasSize(1).doesNotContain(context.traceId());
+        assertThat(subContext.asList(CONTEXT_TRACE_ID_KEY)).hasSize(1).doesNotContain(context.traceId());
         assertThat(subContext.traceId()).isNotEqualTo(context.traceId());
         assertThat(subContext.traceId(0)).isEqualTo(subContext.traceId()).isNotEqualTo(context.traceId());
         assertThat(subContext.traceId(1)).isNotEqualTo(subContext.traceId()).isEqualTo(context.traceId());
