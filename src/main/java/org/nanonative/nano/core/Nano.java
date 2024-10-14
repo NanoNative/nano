@@ -299,7 +299,7 @@ public class Nano extends NanoServices<Nano> {
     }
 
     protected void printActiveProfiles() {
-        final List<String> list = context.getList(String.class, "_scanned_profiles");
+        final List<String> list = context.asList(String.class, "_scanned_profiles");
         if (!list.isEmpty()) {
             logger.debug(() -> "Profiles [{}] Services [{}]",
                 list.stream().sorted().collect(joining(", ")),

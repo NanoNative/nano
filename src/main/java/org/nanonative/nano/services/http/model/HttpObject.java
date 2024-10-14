@@ -156,7 +156,7 @@ public class HttpObject extends HttpRequest {
      * @return a list of {@link ContentType} objects representing each content type specified.
      */
     public List<ContentType> contentTypes() {
-        final List<ContentType> contentTypes = splitHeaderValue(headerMap().getList(String.class, CONTENT_TYPE), ContentType::fromValue);
+        final List<ContentType> contentTypes = splitHeaderValue(headerMap().asList(String.class, CONTENT_TYPE), ContentType::fromValue);
         return contentTypes.isEmpty() ? List.of(guessContentType(this, body())) : contentTypes;
     }
 
@@ -212,7 +212,7 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<ContentType> accepts() {
-        return splitHeaderValue(headerMap().getList(String.class, ACCEPT), ContentType::fromValue);
+        return splitHeaderValue(headerMap().asList(String.class, ACCEPT), ContentType::fromValue);
     }
 
     public HttpObject accept(final String... contentType) {
@@ -248,11 +248,11 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<String> acceptEncodings() {
-        return splitHeaderValue(headerMap().getList(String.class, ACCEPT_ENCODING), v -> v);
+        return splitHeaderValue(headerMap().asList(String.class, ACCEPT_ENCODING), v -> v);
     }
 
     public boolean hasAcceptEncoding(final String... encodings) {
-        final List<String> result = splitHeaderValue(headerMap().getList(String.class, ACCEPT_ENCODING), v -> v);
+        final List<String> result = splitHeaderValue(headerMap().asList(String.class, ACCEPT_ENCODING), v -> v);
         return Arrays.stream(encodings).allMatch(result::contains);
     }
 
@@ -262,11 +262,11 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<String> contentEncodings() {
-        return splitHeaderValue(headerMap().getList(String.class, CONTENT_ENCODING), v -> v);
+        return splitHeaderValue(headerMap().asList(String.class, CONTENT_ENCODING), v -> v);
     }
 
     public boolean hasContentEncoding(final String... encodings) {
-        final List<String> result = splitHeaderValue(headerMap().getList(String.class, CONTENT_ENCODING), v -> v);
+        final List<String> result = splitHeaderValue(headerMap().asList(String.class, CONTENT_ENCODING), v -> v);
         return Arrays.stream(encodings).allMatch(result::contains);
     }
 
@@ -275,7 +275,7 @@ public class HttpObject extends HttpRequest {
     }
 
     public List<Locale> acceptLanguages() {
-        final List<Locale> result = splitHeaderValue(headerMap().getList(String.class, ACCEPT_LANGUAGE), Locale::forLanguageTag);
+        final List<Locale> result = splitHeaderValue(headerMap().asList(String.class, ACCEPT_LANGUAGE), Locale::forLanguageTag);
         return result.isEmpty() ? List.of(Locale.ENGLISH) : result;
     }
 
@@ -464,7 +464,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the parameter as a String, or {@code null} if the parameter does not exist.
      */
     public String queryParam(final String key) {
-        return queryParams().get(String.class, key);
+        return queryParams().asString( key);
     }
 
     /**
@@ -535,7 +535,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the path parameter, or {@code null} if it does not exist.
      */
     public String pathParam(final String key) {
-        return pathParams().get(String.class, key);
+        return pathParams().asString( key);
     }
 
     /**
@@ -545,7 +545,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the header, or {@code null} if the header is not found or {@code key} is {@code null}.
      */
     public String header(final String key) {
-        return key == null || headers == null ? null : headers.get(String.class, key.toLowerCase());
+        return key == null || headers == null ? null : headers.asString( key.toLowerCase());
     }
 
     /**
@@ -697,7 +697,7 @@ public class HttpObject extends HttpRequest {
         result.computeIfAbsent(CONTENT_LENGTH, value -> this.body().length);
         result.computeIfAbsent(DATE, value -> HTTP_DATE_FORMATTER.format(ZonedDateTime.now().withZoneSameInstant(java.time.ZoneOffset.UTC)));
         result.computeIfAbsent(USER_AGENT, fallback -> NanoUtils.generateNanoName("%s/%s (%s %s)"));
-        return result.getMap(String.class, value -> collectionOf(value, String.class));
+        return result.asMap(String.class, value -> collectionOf(value, String.class));
     }
 
     /**
@@ -921,7 +921,7 @@ public class HttpObject extends HttpRequest {
      * @return the {@link Throwable} that represents the failure, or null if no failure was recorded.
      */
     public Throwable failure() {
-        return headers == null ? null : headers.get(Throwable.class, HTTP_EXCEPTION_HEADER);
+        return headers == null ? null : headers.as(Throwable.class, HTTP_EXCEPTION_HEADER);
     }
 
     public HttpObject successOrElse(final Consumer<HttpObject> onSuccess, final Consumer<HttpObject> onFailure) {
@@ -967,7 +967,7 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isFrontendCall() {
         return ofNullable(headers)
-            .map(header -> header.get(String.class, HttpHeaders.USER_AGENT))
+            .map(header -> header.asString( HttpHeaders.USER_AGENT))
             .map(String::toLowerCase)
             .filter(agent -> (Stream.of(USER_AGENT_BROWSERS).anyMatch(agent::contains)))
             .isPresent();
@@ -981,7 +981,7 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isMobileCall() {
         return ofNullable(headers)
-            .map(header -> header.get(String.class, HttpHeaders.USER_AGENT))
+            .map(header -> header.asString( HttpHeaders.USER_AGENT))
             .map(String::toLowerCase)
             .filter(agent -> (Stream.of(USER_AGENT_MOBILE).anyMatch(agent::contains)))
             .isPresent();
@@ -994,7 +994,7 @@ public class HttpObject extends HttpRequest {
      */
     public String host() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getHostName()))
-            .or(() -> ofNullable(headers).map(header -> header.get(String.class, HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
+            .or(() -> ofNullable(headers).map(header -> header.asString( HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
     }
 
     /**
@@ -1004,7 +1004,7 @@ public class HttpObject extends HttpRequest {
      */
     public int port() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getPort()))
-            .or(() -> ofNullable(headers).map(header -> header.get(String.class, HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
+            .or(() -> ofNullable(headers).map(header -> header.asString( HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
                 .filter(a -> a.length > 1)
                 .map(a -> a[1])
                 .map(s -> convertObj(s, Integer.class))
