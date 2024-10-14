@@ -464,7 +464,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the parameter as a String, or {@code null} if the parameter does not exist.
      */
     public String queryParam(final String key) {
-        return queryParams().get(String.class, key);
+        return queryParams().asString( key);
     }
 
     /**
@@ -535,7 +535,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the path parameter, or {@code null} if it does not exist.
      */
     public String pathParam(final String key) {
-        return pathParams().get(String.class, key);
+        return pathParams().asString( key);
     }
 
     /**
@@ -545,7 +545,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the header, or {@code null} if the header is not found or {@code key} is {@code null}.
      */
     public String header(final String key) {
-        return key == null || headers == null ? null : headers.get(String.class, key.toLowerCase());
+        return key == null || headers == null ? null : headers.asString( key.toLowerCase());
     }
 
     /**
@@ -921,7 +921,7 @@ public class HttpObject extends HttpRequest {
      * @return the {@link Throwable} that represents the failure, or null if no failure was recorded.
      */
     public Throwable failure() {
-        return headers == null ? null : headers.get(Throwable.class, HTTP_EXCEPTION_HEADER);
+        return headers == null ? null : headers.as(Throwable.class, HTTP_EXCEPTION_HEADER);
     }
 
     public HttpObject successOrElse(final Consumer<HttpObject> onSuccess, final Consumer<HttpObject> onFailure) {
@@ -967,7 +967,7 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isFrontendCall() {
         return ofNullable(headers)
-            .map(header -> header.get(String.class, HttpHeaders.USER_AGENT))
+            .map(header -> header.asString( HttpHeaders.USER_AGENT))
             .map(String::toLowerCase)
             .filter(agent -> (Stream.of(USER_AGENT_BROWSERS).anyMatch(agent::contains)))
             .isPresent();
@@ -981,7 +981,7 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isMobileCall() {
         return ofNullable(headers)
-            .map(header -> header.get(String.class, HttpHeaders.USER_AGENT))
+            .map(header -> header.asString( HttpHeaders.USER_AGENT))
             .map(String::toLowerCase)
             .filter(agent -> (Stream.of(USER_AGENT_MOBILE).anyMatch(agent::contains)))
             .isPresent();
@@ -994,7 +994,7 @@ public class HttpObject extends HttpRequest {
      */
     public String host() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getHostName()))
-            .or(() -> ofNullable(headers).map(header -> header.get(String.class, HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
+            .or(() -> ofNullable(headers).map(header -> header.asString( HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
     }
 
     /**
@@ -1004,7 +1004,7 @@ public class HttpObject extends HttpRequest {
      */
     public int port() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getPort()))
-            .or(() -> ofNullable(headers).map(header -> header.get(String.class, HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
+            .or(() -> ofNullable(headers).map(header -> header.asString( HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
                 .filter(a -> a.length > 1)
                 .map(a -> a[1])
                 .map(s -> convertObj(s, Integer.class))

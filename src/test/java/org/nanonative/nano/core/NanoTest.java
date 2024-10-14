@@ -1,23 +1,25 @@
 package org.nanonative.nano.core;
 
-import org.nanonative.nano.core.model.Context;
 import org.assertj.core.api.Assertions;
-import org.nanonative.nano.core.config.TestConfig;
-import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.logic.LogQueue;
-import org.nanonative.nano.helper.logger.model.LogLevel;
-import org.nanonative.nano.model.TestService;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.nanonative.nano.core.config.TestConfig;
+import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.helper.logger.logic.LogQueue;
+import org.nanonative.nano.helper.logger.model.LogLevel;
+import org.nanonative.nano.model.TestService;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.nanonative.nano.core.model.Context.APP_HELP;
 import static org.nanonative.nano.core.model.Context.APP_PARAMS;
 import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
@@ -33,8 +35,6 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 import static org.nanonative.nano.model.TestService.TEST_EVENT;
 import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.assertj.core.api.Assertions.assertThat;
 
 @Execution(ExecutionMode.CONCURRENT)
 class NanoTest {
@@ -42,13 +42,13 @@ class NanoTest {
     @Test
     void configFilesTest() {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
-        assertThat(nano.context().get(String.class, CONFIG_PROFILES)).isEqualTo("default, local, dev, prod");
+        assertThat(nano.context().asString(CONFIG_PROFILES)).isEqualTo("default, local, dev, prod");
         assertThat(nano.context().asList(String.class, "_scanned_profiles")).containsExactly("local", "default", "dev", "prod");
-        assertThat(nano.context().get(String.class, "test_placeholder_fallback")).isEqualTo("fallback should be used 1");
-        assertThat(nano.context().get(String.class, "test_placeholder_key_empty")).isEqualTo("fallback should be used 2");
-        assertThat(nano.context().get(String.class, "test_placeholder_value")).isEqualTo("used placeholder value");
-        assertThat(nano.context().get(String.class, "resource_key1")).isEqualTo("AA");
-        assertThat(nano.context().get(String.class, "resource_key2")).isEqualTo("CC");
+        assertThat(nano.context().asString("test_placeholder_fallback")).isEqualTo("fallback should be used 1");
+        assertThat(nano.context().asString("test_placeholder_key_empty")).isEqualTo("fallback should be used 2");
+        assertThat(nano.context().asString("test_placeholder_value")).isEqualTo("used placeholder value");
+        assertThat(nano.context().asString("resource_key1")).isEqualTo("AA");
+        assertThat(nano.context().asString("resource_key2")).isEqualTo("CC");
         assertThat(nano.context()).doesNotContainKey("test_placeholder_fallback_empty");
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }

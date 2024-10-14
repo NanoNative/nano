@@ -69,7 +69,7 @@ public class MetricService extends Service {
         final AtomicReference<Optional<String>> basePath = new AtomicReference<>(Optional.empty());
         isReady.set(false, true, run -> {
             updateSystemMetrics(contextSupplier);
-            basePath.set(Optional.ofNullable(contextSupplier.get().get(String.class, CONFIG_METRIC_SERVICE_BASE_PATH)).or(() -> Optional.of("/metrics")));
+            basePath.set(Optional.ofNullable(contextSupplier.get().asString( CONFIG_METRIC_SERVICE_BASE_PATH)).or(() -> Optional.of("/metrics")));
 
             prometheusPath = contextSupplier.get().getOpt(String.class, CONFIG_METRIC_SERVICE_PROMETHEUS_PATH).orElseGet(() -> basePath.get().map(base -> base + "/prometheus").orElse(null));
             dynamoPath = contextSupplier.get().getOpt(String.class, CONFIG_METRIC_SERVICE_DYNAMO_PATH).orElseGet(() -> basePath.get().map(base -> base + "/dynamo").orElse(null));

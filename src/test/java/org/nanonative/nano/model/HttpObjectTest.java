@@ -288,7 +288,7 @@ class HttpObjectTest {
         assertThat(nullTest.bodyAsString()).isEmpty();
         assertThat(nullTest.bodyAsJson()).isEqualTo(new TypeList().addReturn(""));
         assertThat(nullTest.bodyAsXml()).isNotNull();
-        assertThat(nullTest.bodyAsJson().get(String.class, "key")).isNull();
+        assertThat(nullTest.bodyAsJson().asString( "key")).isNull();
 
         // Byte[] body
         final HttpObject byteTest = new HttpObject().body(bodyString.getBytes(Charset.defaultCharset()));
@@ -296,7 +296,7 @@ class HttpObjectTest {
         assertThat(byteTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(byteTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(byteTest.bodyAsXml()).isNotNull();
-        assertThat(byteTest.bodyAsJson().get(String.class, "key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsJson().asString( "key")).isEqualTo("value");
 
         // String body
         final HttpObject stringTest = new HttpObject().body(bodyString);
@@ -304,7 +304,7 @@ class HttpObjectTest {
         assertThat(stringTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(stringTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(stringTest.bodyAsXml()).isNotNull();
-        assertThat(stringTest.bodyAsJson().get(String.class, "key")).isEqualTo("value");
+        assertThat(stringTest.bodyAsJson().asString( "key")).isEqualTo("value");
 
         // JSON body
         final HttpObject jsonTest = new HttpObject().body(bodyJson);
@@ -312,7 +312,7 @@ class HttpObjectTest {
         assertThat(jsonTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(jsonTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(jsonTest.bodyAsXml()).isNotNull();
-        assertThat(jsonTest.bodyAsJson().get(String.class, "key")).isEqualTo("value");
+        assertThat(jsonTest.bodyAsJson().asString( "key")).isEqualTo("value");
 
         // HttpExchange body
         final HttpObject exchangeTest = new HttpObject(createMockHttpExchange("GET", "/test", new Headers(), bodyString));
@@ -320,7 +320,7 @@ class HttpObjectTest {
         assertThat(exchangeTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(exchangeTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(exchangeTest.bodyAsXml()).isNotNull();
-        assertThat(exchangeTest.bodyAsJson().get(String.class, "key")).isEqualTo("value");
+        assertThat(exchangeTest.bodyAsJson().asString( "key")).isEqualTo("value");
 
         // General
         assertThat(new HttpObject().bodyAsJson()).isEqualTo(new TypeList().addReturn(""));
@@ -361,8 +361,8 @@ class HttpObjectTest {
         assertThat(httpObject1.pathMatch("/aa/{value1}/cc/{value2}")).isTrue();
         assertThat(httpObject1.pathMatch("/aa/{value1}/cc/{value2}/")).isTrue();
         assertThat(httpObject1.pathParam("value1")).isEqualTo("bb");
-        assertThat(httpObject1.pathParams().get(String.class, "value2")).isEqualTo("dd");
-        assertThat(httpObject1.queryParams().get(Integer.class, "myNumber")).isEqualTo(2468);
+        assertThat(httpObject1.pathParams().asString( "value2")).isEqualTo("dd");
+        assertThat(httpObject1.queryParams().asInt( "myNumber")).isEqualTo(2468);
 
         // with ending /
         final HttpObject httpObject2 = new HttpObject().path("/aa/bb/cc/dd/?myNumber=2468");
@@ -379,8 +379,8 @@ class HttpObjectTest {
         assertThat(httpObject2.pathMatch("/aa/{value1}/cc/{value2}")).isTrue();
         assertThat(httpObject2.pathMatch("/aa/{value1}/cc/{value2}/")).isTrue();
         assertThat(httpObject2.pathParam("value1")).isEqualTo("bb");
-        assertThat(httpObject2.pathParams().get(String.class, "value2")).isEqualTo("dd");
-        assertThat(httpObject2.queryParams().get(Integer.class, "myNumber")).isEqualTo(2468);
+        assertThat(httpObject2.pathParams().asString( "value2")).isEqualTo("dd");
+        assertThat(httpObject2.queryParams().asInt( "myNumber")).isEqualTo(2468);
 
         // General
         assertThat(new HttpObject().path(null).pathMatch("/aa/bb/cc/dd")).isFalse();
@@ -421,7 +421,7 @@ class HttpObjectTest {
             assertThat(httpObject.header("mynumber")).isEqualTo("123");
             assertThat(httpObject.header("invalid")).isNull();
             assertThat(httpObject.header(null)).isNull();
-            assertThat(httpObject.headerMap().get(Integer.class, "mynumber")).isEqualTo(123);
+            assertThat(httpObject.headerMap().asInt( "mynumber")).isEqualTo(123);
             assertThat(httpObject.contentTypes()).containsExactly(APPLICATION_JSON, TEXT_PLAIN);
             assertThat(httpObject.accepts()).containsExactly(APPLICATION_PDF, APPLICATION_JSON);
         }

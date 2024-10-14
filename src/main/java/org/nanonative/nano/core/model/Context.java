@@ -120,7 +120,7 @@ public class Context extends ConcurrentTypeMap {
      * @return Parent {@link Context} or null
      */
     public Context parent() {
-        return this.get(Context.class, CONTEXT_PARENT_KEY);
+        return this.as(Context.class, CONTEXT_PARENT_KEY);
     }
 
     /**
@@ -749,7 +749,7 @@ public class Context extends ConcurrentTypeMap {
     protected Context(final Context parent, final Class<?> clazz, final boolean empty) {
         super(empty ? null : parent);
         final Class<?> resolvedClass = clazz != null ? clazz : (parent == null ? Context.class : parent.clazz());
-        this.put(CONTEXT_NANO_KEY, parent != null ? parent.get(Nano.class, CONTEXT_NANO_KEY) : null);
+        this.put(CONTEXT_NANO_KEY, parent != null ? parent.as(Nano.class, CONTEXT_NANO_KEY) : null);
         this.put(CONTEXT_CLASS_KEY, resolvedClass);
         this.put(CONTEXT_TRACE_ID_KEY, (resolvedClass.getSimpleName()) + "/" + UUID.randomUUID().toString().replace("-", ""));
         if (parent != null)
