@@ -1,8 +1,5 @@
 package org.nanonative.nano.services.http.model;
 
-import org.nanonative.nano.core.model.Context;
-import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.services.http.logic.HttpClient;
 import berlin.yuna.typemap.logic.JsonDecoder;
 import berlin.yuna.typemap.logic.XmlDecoder;
 import berlin.yuna.typemap.model.LinkedTypeMap;
@@ -11,7 +8,10 @@ import berlin.yuna.typemap.model.TypeList;
 import berlin.yuna.typemap.model.TypeMap;
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
+import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.NanoUtils;
+import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.http.logic.HttpClient;
 
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -40,9 +40,23 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.zip.Inflater;
 
+import static berlin.yuna.typemap.logic.TypeConverter.collectionOf;
+import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Collections.emptyList;
+import static java.util.Optional.ofNullable;
+import static java.util.zip.GZIPInputStream.GZIP_MAGIC;
+import static org.nanonative.nano.helper.NanoUtils.hasText;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_ENCODING;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_LANGUAGE;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_MAX_AGE;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD;
 import static org.nanonative.nano.services.http.model.HttpHeaders.CACHE_CONTROL;
 import static org.nanonative.nano.services.http.model.HttpHeaders.CONNECTION;
 import static org.nanonative.nano.services.http.model.HttpHeaders.CONTENT_ENCODING;
@@ -51,15 +65,11 @@ import static org.nanonative.nano.services.http.model.HttpHeaders.CONTENT_RANGE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.CONTENT_TYPE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.DATE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.HOST;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ORIGIN;
 import static org.nanonative.nano.services.http.model.HttpHeaders.RANGE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.TRANSFER_ENCODING;
 import static org.nanonative.nano.services.http.model.HttpHeaders.USER_AGENT;
-import static berlin.yuna.typemap.logic.TypeConverter.collectionOf;
-import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Collections.emptyList;
-import static java.util.Optional.ofNullable;
-import static java.util.zip.GZIPInputStream.GZIP_MAGIC;
+import static org.nanonative.nano.services.http.model.HttpHeaders.VARY;
 
 /**
  * Represents an HTTP request and response object within a server handling context.
@@ -464,7 +474,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the parameter as a String, or {@code null} if the parameter does not exist.
      */
     public String queryParam(final String key) {
-        return queryParams().asString( key);
+        return queryParams().asString(key);
     }
 
     /**
@@ -535,7 +545,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the path parameter, or {@code null} if it does not exist.
      */
     public String pathParam(final String key) {
-        return pathParams().asString( key);
+        return pathParams().asString(key);
     }
 
     /**
@@ -545,7 +555,7 @@ public class HttpObject extends HttpRequest {
      * @return the value of the header, or {@code null} if the header is not found or {@code key} is {@code null}.
      */
     public String header(final String key) {
-        return key == null || headers == null ? null : headers.asString( key.toLowerCase());
+        return key == null || headers == null ? null : headers.asString(key.toLowerCase());
     }
 
     /**
@@ -864,6 +874,153 @@ public class HttpObject extends HttpRequest {
         return new HttpObject();
     }
 
+    /**
+     * Creates and returns a new instance of {@link HttpObject}.
+     * If CORS handling is requested, it delegates to the CORS response method.
+     *
+     * @return a new {@link HttpObject}, CORS-enabled.
+     */
+    public HttpObject corsResponse() {
+        return response(true);
+    }
+
+    /**
+     * Creates and returns a new instance of {@link HttpObject}.
+     * If CORS handling is requested, it delegates to the CORS response method.
+     *
+     * @param cors if true, generates a CORS-enabled response.
+     * @return a new {@link HttpObject}, optionally CORS-enabled.
+     */
+    public HttpObject response(final boolean cors) {
+        return cors ? corsResponse(null) : new HttpObject();
+    }
+
+    /**
+     * Creates and returns a new instance of {@link HttpObject} with CORS handling.
+     * If the origin is not provided, it defaults to "*" (wildcard).
+     *
+     * @param origin comma separated list of whitelisted origins, or null for default.
+     * @return a new {@link HttpObject} with CORS handling.
+     */
+    public HttpObject corsResponse(final String origin) {
+        return corsResponse(origin, null);
+    }
+
+    /**
+     * Creates and returns a new instance of {@link HttpObject} with CORS handling.
+     * Allows defining the origin and allowed methods.
+     *
+     * @param origin  comma separated list of whitelisted origins, or null for default.
+     * @param methods the allowed HTTP methods, or null to use the current method.
+     * @return a new {@link HttpObject} with CORS handling.
+     */
+    public HttpObject corsResponse(final String origin, final String methods) {
+        return corsResponse(origin, methods, null);
+    }
+
+    /**
+     * Creates and returns a new instance of {@link HttpObject} with CORS handling.
+     * Allows defining the origin, methods, and headers.
+     *
+     * @param origin  comma separated list of whitelisted origins, or null for default.
+     * @param methods the allowed HTTP methods, or null to use the current method.
+     * @param headers the allowed HTTP headers, or null to default headers.
+     * @return a new {@link HttpObject} with CORS handling.
+     */
+    public HttpObject corsResponse(final String origin, final String methods, final String headers) {
+        return corsResponse(origin, methods, headers, -1);
+    }
+
+    /**
+     * Creates and returns a new instance of {@link HttpObject} with CORS handling.
+     * Allows defining the origin, methods, headers, and max age for caching preflight responses.
+     *
+     * @param origin  comma separated list of whitelisted origins, or null for default.
+     * @param methods the allowed HTTP methods, or null to use the current method.
+     * @param headers the allowed HTTP headers, or null to default headers.
+     * @param maxAge  the max age for caching preflight responses, or -1 for default (86400 seconds).
+     * @return a new {@link HttpObject} with CORS handling.
+     */
+    public HttpObject corsResponse(final String origin, final String methods, final String headers, final int maxAge) {
+        return corsResponse(origin, methods, headers, maxAge, false);
+    }
+
+    /**
+     * Creates and returns a new instance of {@link HttpObject} with CORS handling.
+     * Allows defining the origin, methods, headers, max age, and whether to allow credentials.
+     *
+     * @param origin      comma separated list of whitelisted origins, or null for default.
+     * @param methods     the allowed HTTP methods, or null to use the current method.
+     * @param headers     the allowed HTTP headers, or null to default headers.
+     * @param maxAge      the max age for caching preflight responses, or -1 for default (86400 seconds).
+     * @param credentials if true, enables Access-Control-Allow-Credentials header.
+     * @return a new {@link HttpObject} with CORS handling.
+     */
+    @SuppressWarnings("java:S3358")
+    public HttpObject corsResponse(
+        final String origin,
+        final String methods,
+        final String headers,
+        final int maxAge,
+        final boolean credentials
+    ) {
+        final String resultOrigin = origin(origin, credentials);
+        return new HttpObject()
+            .header(ACCESS_CONTROL_ALLOW_ORIGIN, resultOrigin)
+            .header(ACCESS_CONTROL_ALLOW_METHODS, hasText(methods) ? methods : (headerMap().getOpt(String.class, ACCESS_CONTROL_REQUEST_METHOD).orElse(method())))
+            .header(ACCESS_CONTROL_ALLOW_HEADERS, hasText(headers) ? headers : (headerMap().getOpt(String.class, ACCESS_CONTROL_REQUEST_HEADERS).orElse("Content-Type, Accept, Authorization, X-Requested-With")))
+            .header(ACCESS_CONTROL_ALLOW_CREDENTIALS, String.valueOf(credentials))
+            .header(ACCESS_CONTROL_MAX_AGE, String.valueOf(maxAge > 0 ? maxAge : 86400))
+            .statusCode(resultOrigin.equals("null") ? 403 : (isMethodOptions() ? 204 : 200)) // 403 if origin doesn't match, 204 for preflight, 200 otherwise
+            .header(VARY, "Origin"); // Ensure the response is cached based on the Origin header
+    }
+
+    /**
+     * Retrieves the origin from the current request.
+     * If the request does not specify an origin, it defaults to "*".
+     *
+     * @return the origin of the request, or "*" if no origin is specified.
+     */
+    public String origin() {
+        return origin(null, false);
+    }
+
+    /**
+     * Determines the value for the {@code Access-Control-Allow-Origin} header.
+     * <p>
+     * If credentials are allowed, the origin cannot be {@code "*"}. It prioritizes the provided {@code origin}.
+     * If no valid origin is provided, it falls back to the {@code ORIGIN} or {@code HOST} headers from the request.
+     * Returns {@code "null"} if credentials are used and no origin is found, otherwise returns {@code "*"}.
+     * </p>
+     *
+     * @param origin      comma separated list of whitelisted origins, or null for default.
+     * @param credentials if {@code true}, prevents using {@code "*"} as the origin.
+     * @return the appropriate origin, or {@code "null"} if credentials are used and no origin is found.
+     */
+    @SuppressWarnings("java:S3358") // too many parameters
+    public String origin(final String origin, final boolean credentials) {
+        final String requestOrigin = headerMap().getOpt(String.class, ORIGIN).or(() -> headerMap().getOpt(String.class, HOST)).orElseGet(() -> credentials ? "null" : "*");
+        return hasText(origin) && !(credentials && origin.equals("*"))
+            ? origin.equals("*")? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equals).findFirst().orElse("null")
+            : requestOrigin;
+    }
+
+    /**
+     * Sets the origin header for the current {@link HttpObject}.
+     * If the provided origin is null or empty, the origin header is removed.
+     *
+     * @param origin the origin to set in the headers.
+     * @return this {@link HttpObject} for method chaining.
+     */
+    public HttpObject origin(final String origin) {
+        if (hasText(origin)) {
+            headerMap().put(ORIGIN, origin);
+        } else {
+            headerMap().remove(ORIGIN);
+        }
+        return this;
+    }
+
     // ########## REQUEST / RESPONSE HELPERS ##########
 
     /**
@@ -967,7 +1124,7 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isFrontendCall() {
         return ofNullable(headers)
-            .map(header -> header.asString( HttpHeaders.USER_AGENT))
+            .map(header -> header.asString(HttpHeaders.USER_AGENT))
             .map(String::toLowerCase)
             .filter(agent -> (Stream.of(USER_AGENT_BROWSERS).anyMatch(agent::contains)))
             .isPresent();
@@ -981,7 +1138,7 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isMobileCall() {
         return ofNullable(headers)
-            .map(header -> header.asString( HttpHeaders.USER_AGENT))
+            .map(header -> header.asString(HttpHeaders.USER_AGENT))
             .map(String::toLowerCase)
             .filter(agent -> (Stream.of(USER_AGENT_MOBILE).anyMatch(agent::contains)))
             .isPresent();
@@ -994,7 +1151,7 @@ public class HttpObject extends HttpRequest {
      */
     public String host() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getHostName()))
-            .or(() -> ofNullable(headers).map(header -> header.asString( HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
+            .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
     }
 
     /**
@@ -1004,7 +1161,7 @@ public class HttpObject extends HttpRequest {
      */
     public int port() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getPort()))
-            .or(() -> ofNullable(headers).map(header -> header.asString( HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
+            .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
                 .filter(a -> a.length > 1)
                 .map(a -> a[1])
                 .map(s -> convertObj(s, Integer.class))

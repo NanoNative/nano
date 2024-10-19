@@ -25,6 +25,22 @@ public class HttpReceive {
 
         // Error handling
         app.subscribeEvent(EVENT_APP_UNHANDLED, HttpReceive::controllerAdvice);
+
+        // CORS
+        app.subscribeEvent(EVENT_HTTP_REQUEST, HttpReceive::cors);
+    }
+
+
+
+
+
+
+
+
+    private static void cors(final Event event) {
+        event.payloadOpt(HttpObject.class)
+            .filter(HttpObject::isMethodOptions)
+            .ifPresent(request -> request.corsResponse().respond(event));
     }
 
     private static void authorize(final Event event) {
