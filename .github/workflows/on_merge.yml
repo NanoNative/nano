@@ -1,0 +1,32 @@
+name: "On Merge"
+
+on:
+  pull_request_target:
+    types: [ closed ]
+    branches:
+      - main
+      - master
+      - default
+    paths-ignore:
+      - '*.md'
+      - '*.cmd'
+      - '*.bat'
+      - '*.sh'
+      - 'FOUNDING.yml'
+      - 'FOUNDING.yaml'
+      - '.editorconfig'
+      - '.gitignore'
+      - 'docs/**'
+      - '.github/**'
+      - '.mvn/**'
+      - '.gradle/**'
+jobs:
+  builld:
+    if: github.event.pull_request.merged == true
+    uses: ./.github/workflows/java_build.yml
+    with:
+      ref: ${{ github.ref_name }}
+      run_update: false  # Updates only on main branches
+      run_test: true     # Always run tests
+      run_deploy: disabled  # Never deploy on non-main branches
+    secrets: inherit

@@ -1001,7 +1001,7 @@ public class HttpObject extends HttpRequest {
     public String origin(final String origin, final boolean credentials) {
         final String requestOrigin = headerMap().getOpt(String.class, ORIGIN).or(() -> headerMap().getOpt(String.class, HOST)).orElseGet(() -> credentials ? "null" : "*");
         return hasText(origin) && !(credentials && origin.equals("*"))
-            ? origin.equals("*")? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equals).findFirst().orElse("null")
+            ? origin.equals("*")? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
             : requestOrigin;
     }
 
