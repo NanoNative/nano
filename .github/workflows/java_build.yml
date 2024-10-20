@@ -156,38 +156,20 @@ jobs:
           has_publish_to_code_climate=$(if [[ -n "${{ secrets.CC_TEST_REPORTER_ID }}" && -n "${jacoco_report}" ]]; then echo "true"; else echo "false"; fi)
           echo "has_publish_to_code_climate [$has_publish_to_code_climate]"
           echo "has_publish_to_code_climate=$has_publish_to_code_climate" >> $GITHUB_OUTPUT
-          
-          echo ""
-          echo "########## SECRETS ##########"
-          log_secret_info() {
-            secret_name=$1
-            secret_value=$2
-            secret_length=$(echo -n "$secret_value" | wc -c)
-
-            if [ "$secret_length" -eq 0 ]; then
-              echo "::warning::Secret '$secret_name' is empty or not set."
-            else
-              echo "Secret '$secret_name' length: $secret_length"
-              if [ "$secret_length" -gt 3 ]; then
-                last_three=$(echo "$secret_value" | tail -c 4)
-                echo "Secret '$secret_name' last three characters: ***${last_three}"
-              else
-                echo "Secret '$secret_name' is shorter than 3 characters, no last three characters to display."
-              fi
-            fi
-          }
-
-          log_secret_info "BOT_TOKEN" "${{ secrets.BOT_TOKEN }}"
-          log_secret_info "OSSH_USER" "${{ secrets.OSSH_USER }}"
-          log_secret_info "OSSH_PASS" "${{ secrets.OSSH_PASS }}"
-          log_secret_info "GPG_SIGNING_KEY" "${{ secrets.GPG_SIGNING_KEY }}"
-          log_secret_info "GPG_PASSPHRASE" "${{ secrets.GPG_PASSPHRASE }}"
       - name: "✅ Commit Changes [${{ steps.metrics.outputs.should_deploy == 'true' }}]"
         if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
         run: |
           ./mvnw versions:set -DnewVersion="${{ steps.semver_info.outputs.clean_semver }}" -DgenerateBackupPoms=false -B -q
           git add .
           git commit -m "chore(⚕️): release [${{ steps.semver_info.outputs.clean_semver }}]"
+      - name: "🏷️ Deploy start [${{ steps.semver_info.outputs.clean_semver }}]"
+        uses: bobheadxi/deployments@v1.5.0
+        id: deployment-status
+        with:
+          step: start
+          token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+          env: "maven_central"
+          desc: "Started deploy [${{ steps.semver_info.outputs.clean_semver }}] to [maven_central]"
       - name: "🍾 Deploy [${{ steps.semver_info.outputs.clean_semver }}]"
         if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
         run: ./mvnw deploy -P release -Dmaven.test.skip=true -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}" -B
@@ -205,6 +187,7 @@ jobs:
           env: "maven_central"
           env_url: "https://central.sonatype.com/publishing"
           status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment-status.outputs.deployment_id }}
           desc: "Finished deploy [${{ steps.semver_info.outputs.clean_semver }}] to [maven_central]"
       - name: "✅ Publish Changes [${{ steps.metrics.outputs.should_deploy == 'true' }}]"
         if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
