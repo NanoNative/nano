@@ -158,10 +158,12 @@ jobs:
           echo "has_publish_to_code_climate=$has_publish_to_code_climate" >> $GITHUB_OUTPUT
       - name: "✅ Commit Changes [${{ steps.metrics.outputs.should_deploy == 'true' }}]"
         if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
+        id: "commit"
         run: |
           ./mvnw versions:set -DnewVersion="${{ steps.semver_info.outputs.clean_semver }}" -DgenerateBackupPoms=false -B -q
           git add .
           git commit -m "chore(⚕️): release [${{ steps.semver_info.outputs.clean_semver }}]"
+          echo "latest_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: "🏷️ Deploy start [${{ steps.semver_info.outputs.clean_semver }}]"
         uses: bobheadxi/deployments@v1.5.0
         id: deployment-status
@@ -198,7 +200,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           body: "${{ steps.git_info.outputs.change_log }}"
-          commit: ${{ steps.git_info.outputs.context_sha }}
+          commit: ${{ steps.commit.outputs.latest_sha }}
           token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
           tag: ${{ steps.semver_info.outputs.clean_semver }}
           name: ${{ steps.semver_info.outputs.clean_semver }}
