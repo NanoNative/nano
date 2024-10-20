@@ -482,17 +482,17 @@ public class HttpObject extends HttpRequest {
      * Checks if the current {@link HttpObject#path()} matches a specified expression.
      * The expression may include:
      * <ul>
-     *     <li</>Path variables enclosed in curly braces ({}), e.g., /users/{userId}.</li>
-     *     <li</>Asterisks ({@literal *}) to match any single path segment, e.g., /users/{@literal *}/profile</li>
-     *     <li</>Double asterisks (**) to match any number of path segments, e.g., /users/**..</li>
-     * </ul>
+     *     <li>Path variables enclosed in curly braces ({}), e.g., /users/{userId}.</li>
+     *      <li>Asterisks ({@literal *}) to match any single path segment, e.g., /users/{@literal *}/profile</li>
+     *      <li>Double asterisks (**) to match any number of path segments, e.g., /users/**..</li>
+     *  </ul>
      * </p><p>
      * Matching rules:
      * <ul>
-     *     <li</>Exact match: Each part of the path must match the corresponding part of the expression.</li>
-     *     <li</>Single asterisk ({@literal *}): Matches any single path segment.</li>
-     *     <li</>Double asterisk (**): Matches zero or more path segments.</li>
-     *     <li</>Path variables: Captures the value of the segment and stores it in {@link HttpObject#pathParams()}.</li>
+     *     <li>Exact match: Each part of the path must match the corresponding part of the expression.</li>
+     *     <li>Single asterisk ({@literal *}): Matches any single path segment.</li>
+     *     <li>Double asterisk (**): Matches zero or more path segments.</li>
+     *     <li>Path variables: Captures the value of the segment and stores it in {@link HttpObject#pathParams()}.</li>
      * </ul>
      * <lp>
      *
@@ -1001,7 +1001,7 @@ public class HttpObject extends HttpRequest {
     public String origin(final String origin, final boolean credentials) {
         final String requestOrigin = headerMap().getOpt(String.class, ORIGIN).or(() -> headerMap().getOpt(String.class, HOST)).orElseGet(() -> credentials ? "null" : "*");
         return hasText(origin) && !(credentials && origin.equals("*"))
-            ? origin.equals("*")? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
+            ? origin.equals("*") ? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
             : requestOrigin;
     }
 

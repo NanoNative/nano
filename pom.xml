@@ -99,8 +99,8 @@
                     <threadCount>2</threadCount>
                     <useUnlimitedThreads>false</useUnlimitedThreads>
                     <!-- Flag to test exit code in NanoTest (https://stackoverflow.com/questions/76151072/error-during-sbt-launcher-java-lang-unsupportedoperationexception-the-security) -->
-                    <argLine>-Djava.security.manager=allow</argLine>
-<!--                    <forkedProcessExitTimeoutInSeconds>240</forkedProcessExitTimeoutInSeconds>-->
+                    <argLine>${argLine} -Djava.security.manager=allow</argLine>
+                    <!--                    <forkedProcessExitTimeoutInSeconds>240</forkedProcessExitTimeoutInSeconds>-->
                 </configuration>
             </plugin>
             <plugin>
@@ -220,6 +220,7 @@
                                     <quiet>true</quiet>
                                     <!-- disable strict checking -->
                                     <doclint>none</doclint>
+                                    <failOnError>false</failOnError>
                                 </configuration>
                             </execution>
                         </executions>
@@ -261,19 +262,20 @@
                     </plugin>
 
                     <!-- DEPLOYMENT -->
-                        <plugin>
-                            <!-- https://central.sonatype.org/publish/publish-portal-maven/#plugin-configuration-options -->
-                            <groupId>org.sonatype.central</groupId>
-                            <artifactId>central-publishing-maven-plugin</artifactId>
-                            <version>${central-publishing-maven-plugin.version}</version>
-                            <extensions>true</extensions>
-                            <configuration>
-                                <publishingServerId>central</publishingServerId>
-                                <autoPublish>true</autoPublish>
-                                <deploymentName>${project.name}-${project.version}</deploymentName>
-<!--                                <ignorePublishedComponents>true</ignorePublishedComponents>-->
-                            </configuration>
-                        </plugin>
+                    <plugin>
+                        <!-- https://central.sonatype.org/publish/publish-portal-maven/#plugin-configuration-options -->
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>${central-publishing-maven-plugin.version}</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <autoPublish>true</autoPublish>
+                            <deploymentName>${project.groupId}:${project.artifactId}:${project.version}
+                            </deploymentName>
+                            <!--                                <ignorePublishedComponents>true</ignorePublishedComponents>-->
+                        </configuration>
+                    </plugin>
                 </plugins>
             </build>
         </profile>

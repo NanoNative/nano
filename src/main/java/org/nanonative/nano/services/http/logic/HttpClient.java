@@ -111,7 +111,7 @@ public class HttpClient {
     /**
      * Returns the {@link java.net.http.HttpClient.Version} used by this {@link HttpClient}.
      *
-     * @return the {@link java.net.http.HttpClient.Version
+     * @return the {@link java.net.http.HttpClient.Version}
      */
     public java.net.http.HttpClient.Version version() {
         return client.version();

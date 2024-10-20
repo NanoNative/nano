@@ -1,4 +1,4 @@
-name: "Build"
+name: "Base Pipeline"
 # This workflow automates the process of updating, building, testing, version bumping, deploying to Maven Central, and tagging a release.
 # - On any error (during build, tests, or deployment), no changes or artifacts will be published, ensuring atomic operations.
 # - Easy to retry: the pipeline can be retriggered from any point by adjusting inputs, with versioning and changes handled automatically.
@@ -39,6 +39,9 @@ on:
         required: true
       GPG_SIGNING_KEY:
         description: "GPG private key for signing artifacts"
+        required: true
+      GPG_PASSPHRASE:
+        description: "GPG passphrase for signing artifacts"
         required: true
 
 jobs:
@@ -81,10 +84,10 @@ jobs:
           java-version: ${{ steps.java_info.outputs.java_version }}
           distribution: 'adopt'
           server-id: central
-          server-username: OSSRH_USERNAME
-          server-password: OSSRH_TOKEN
+          server-username: OSSH_USER
+          server-password: OSSH_PASS
           gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }} # Value of the GPG private key to import
-          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+          gpg-passphrase: GPG_PASSPHRASE
       - name: "🔄 Update [${{ inputs.run_update }}]"
         id: "update"
         if: ${{ inputs.run_update }}
@@ -122,6 +125,7 @@ jobs:
         id: "metrics"
         run: |
           echo ""
+          echo "########## WORKFOW ##########"
           echo "[semver_info] clean_semver [${{ steps.semver_info.outputs.clean_semver }}]"
           echo "[semver_info] increase [${{ inputs.run_deploy != 'disabled' && inputs.run_deploy || 'patch' }}]"
           echo "[git_info] has_changes [${{ steps.git_info.outputs.has_changes }}]"
@@ -143,6 +147,8 @@ jobs:
               echo "should_deploy=false" >> $GITHUB_OUTPUT
           fi
           
+          echo ""
+          echo "########## CODE QUALITY ##########"
           jacoco_report=$(find . -type f -name "testCodeCoverageReport.xml" -o -name "jacocoTestReport.xml" -o -name "jacoco.xml" | awk -F/ '{print NF, $0}' | sort -n | cut -d' ' -f2- | head -n 1)
           echo "jacoco_report [${jacoco_report}]"
           echo "jacoco_report=${jacoco_report}" >> $GITHUB_OUTPUT
@@ -150,18 +156,46 @@ jobs:
           has_publish_to_code_climate=$(if [[ -n "${{ secrets.CC_TEST_REPORTER_ID }}" && -n "${jacoco_report}" ]]; then echo "true"; else echo "false"; fi)
           echo "has_publish_to_code_climate [$has_publish_to_code_climate]"
           echo "has_publish_to_code_climate=$has_publish_to_code_climate" >> $GITHUB_OUTPUT
+          
+          echo ""
+          echo "########## SECRETS ##########"
+          log_secret_info() {
+            secret_name=$1
+            secret_value=$2
+            secret_length=$(echo -n "$secret_value" | wc -c)
+
+            if [ "$secret_length" -eq 0 ]; then
+              echo "::warning::Secret '$secret_name' is empty or not set."
+            else
+              echo "Secret '$secret_name' length: $secret_length"
+              if [ "$secret_length" -gt 3 ]; then
+                last_three=$(echo "$secret_value" | tail -c 4)
+                echo "Secret '$secret_name' last three characters: ***${last_three}"
+              else
+                echo "Secret '$secret_name' is shorter than 3 characters, no last three characters to display."
+              fi
+            fi
+          }
+
+          log_secret_info "BOT_TOKEN" "${{ secrets.BOT_TOKEN }}"
+          log_secret_info "OSSH_USER" "${{ secrets.OSSH_USER }}"
+          log_secret_info "OSSH_PASS" "${{ secrets.OSSH_PASS }}"
+          log_secret_info "GPG_SIGNING_KEY" "${{ secrets.GPG_SIGNING_KEY }}"
+          log_secret_info "GPG_PASSPHRASE" "${{ secrets.GPG_PASSPHRASE }}"
       - name: "✅ Commit Changes [${{ steps.metrics.outputs.should_deploy == 'true' }}]"
         if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
         run: |
-          ./mvnw versions:set -DnewVersion="${{ steps.semver_info.outputs.clean_semver }}" -DgenerateBackupPoms=false
+          ./mvnw versions:set -DnewVersion="${{ steps.semver_info.outputs.clean_semver }}" -DgenerateBackupPoms=false -B -q
           git add .
-          git commit -m "chore(⚕️): update"
+          git commit -m "chore(⚕️): release [${{ steps.semver_info.outputs.clean_semver }}]"
       - name: "🍾 Deploy [${{ steps.semver_info.outputs.clean_semver }}]"
         if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
-        run: ./mvnw deploy -P release -Dmaven.test.skip=true -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}"
+        run: ./mvnw deploy -P release -Dmaven.test.skip=true -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}" -B
         env:
           GITHUB_TOKEN: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
-          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          OSSH_USER: ${{ secrets.OSSH_USER }}
+          OSSH_PASS: ${{ secrets.OSSH_PASS }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: "🏷️ Deploy finish [${{ steps.semver_info.outputs.clean_semver }}]"
         if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
         uses: bobheadxi/deployments@v1.5.0
@@ -185,7 +219,7 @@ jobs:
           token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
           tag: ${{ steps.semver_info.outputs.clean_semver }}
           name: ${{ steps.semver_info.outputs.clean_semver }}
-      - name: "Publish code quality [${{ steps.metrics.outputs.should_deploy == 'true' && steps.metrics.outputs.has_publish_to_code_climate == 'true' }}]"
+      - name: "📝 Publish code quality [${{ steps.metrics.outputs.should_deploy == 'true' && steps.metrics.outputs.has_publish_to_code_climate == 'true' }}]"
         uses: paambaati/codeclimate-action@v9.0.0
         if: ${{ steps.metrics.outputs.should_deploy == 'true' && steps.metrics.outputs.has_publish_to_code_climate == 'true' }}
         env:
