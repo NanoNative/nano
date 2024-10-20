@@ -32,6 +32,11 @@ import static org.nanonative.nano.services.http.model.ContentType.WILDCARD;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_ENCODING;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_LANGUAGE;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN;
+import static org.nanonative.nano.services.http.model.HttpHeaders.ACCESS_CONTROL_MAX_AGE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.AUTHORIZATION;
 import static org.nanonative.nano.services.http.model.HttpHeaders.CACHE_CONTROL;
 import static org.nanonative.nano.services.http.model.HttpHeaders.CONTENT_LENGTH;
@@ -43,6 +48,7 @@ import static org.nanonative.nano.services.http.model.HttpHeaders.USER_AGENT;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.util.Locale.ENGLISH;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.services.http.model.HttpHeaders.VARY;
 
 class HttpObjectTest {
 
@@ -85,6 +91,157 @@ class HttpObjectTest {
         assertThat(event.responseOpt(HttpObject.class)).isPresent();
         assertThat(event.response(HttpObject.class).statusCode()).isEqualTo(201);
         assertThat(event.response(HttpObject.class).bodyAsString()).isEqualTo("success");
+    }
+
+    @Test
+    void testCorsResponse() {
+        final HttpObject request = new HttpObject().header("origin", "aa.bb.cc");
+
+        // DEFAULT
+        assertThat(new HttpObject().response(true).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+            ACCESS_CONTROL_ALLOW_METHODS, "GET",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(new HttpObject().corsResponse().headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+            ACCESS_CONTROL_ALLOW_METHODS, "GET",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(new HttpObject().header("host", "aa.bb.cc").response(true).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+            ACCESS_CONTROL_ALLOW_METHODS, "GET",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.response(true).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+            ACCESS_CONTROL_ALLOW_METHODS, "GET",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        // CUSTOM
+        assertThat(request.corsResponse("*").headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+            ACCESS_CONTROL_ALLOW_METHODS, "GET",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("aa.bb.cc").headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+            ACCESS_CONTROL_ALLOW_METHODS, "GET",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF").headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II").headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", -99).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "86400",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "99",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "99",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "99",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("*", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "99",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("*", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+            ACCESS_CONTROL_MAX_AGE, "99",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "99",
+            VARY, "Origin"
+        ));
+
+        assertThat(request.corsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_MAX_AGE, "99",
+            VARY, "Origin"
+        ));
     }
 
     @Test
