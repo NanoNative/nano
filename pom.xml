@@ -37,21 +37,23 @@
         <project.encoding>UTF-8</project.encoding>
         <project.build.sourceEncoding>${project.encoding}</project.build.sourceEncoding>
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
+
         <!-- PRODUCTION -->
         <type-map.version>2.1.21</type-map.version>
+
         <!-- TEST -->
         <junit-jupiter-api.version>5.11.2</junit-jupiter-api.version>
         <assertj-core.version>3.26.3</assertj-core.version>
+
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
         <maven-scm-plugin.version>1.11.2</maven-scm-plugin.version>
         <maven-source-plugin.version>3.2.1</maven-source-plugin.version>
         <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
         <maven-javadoc-plugin.version>3.1.0</maven-javadoc-plugin.version>
-        <maven-release-plugin.version>2.5.3</maven-release-plugin.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.1</maven-surefire-plugin.version>
-        <nexus-staging-maven-plugin.version>1.6.13</nexus-staging-maven-plugin.version>
+        <central-publishing-maven-plugin.version>0.5.0</central-publishing-maven-plugin.version>
     </properties>
 
     <dependencies>
@@ -259,41 +261,21 @@
                     </plugin>
 
                     <!-- DEPLOYMENT -->
-                    <plugin>
-                        <groupId>org.sonatype.plugins</groupId>
-                        <artifactId>nexus-staging-maven-plugin</artifactId>
-                        <version>${nexus-staging-maven-plugin.version}</version>
-                        <extensions>true</extensions>
-                        <configuration>
-                            <serverId>ossrh</serverId>
-                            <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                            <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-release-plugin</artifactId>
-                        <version>${maven-release-plugin.version}</version>
-                        <configuration>
-                            <autoVersionSubmodules>true</autoVersionSubmodules>
-                            <useReleaseProfile>true</useReleaseProfile>
-                            <releaseProfiles>release</releaseProfiles>
-                            <goals>deploy</goals>
-                        </configuration>
-                    </plugin>
+                        <plugin>
+                            <!-- https://central.sonatype.org/publish/publish-portal-maven/#plugin-configuration-options -->
+                            <groupId>org.sonatype.central</groupId>
+                            <artifactId>central-publishing-maven-plugin</artifactId>
+                            <version>${central-publishing-maven-plugin.version}</version>
+                            <extensions>true</extensions>
+                            <configuration>
+                                <publishingServerId>central</publishingServerId>
+                                <autoPublish>true</autoPublish>
+                                <deploymentName>${project.name}-${project.version}</deploymentName>
+<!--                                <ignorePublishedComponents>true</ignorePublishedComponents>-->
+                            </configuration>
+                        </plugin>
                 </plugins>
             </build>
-
-            <distributionManagement>
-                <snapshotRepository>
-                    <id>ossrh</id>
-                    <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-                </snapshotRepository>
-                <repository>
-                    <id>ossrh</id>
-                    <url>https://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-                </repository>
-            </distributionManagement>
         </profile>
     </profiles>
 </project>

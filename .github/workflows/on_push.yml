@@ -1,0 +1,18 @@
+name: "On Push"
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - master
+      - default
+
+jobs:
+  builld:
+    uses: ./.github/workflows/java_build.yml
+    with:
+      ref: ${{ github.ref_name }}
+      run_update: false  # Updates only on main branches
+      run_test: true     # Always run tests
+      run_deploy: disabled  # Never deploy on non-main branches
+    secrets: inherit

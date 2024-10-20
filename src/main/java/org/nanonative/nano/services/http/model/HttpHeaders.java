@@ -1,6 +1,9 @@
 package org.nanonative.nano.services.http.model;
 
-// TODO: autogenerate from org.apache.http.HttpHeaders
+/**
+ * Common HTTP headers - used in requests and responses.
+ * use always lowercase to avoid confusions and case sensitivity issues - makes lives easier.
+ */
 @SuppressWarnings("unused")
 public class HttpHeaders {
 
@@ -62,4 +65,12 @@ public class HttpHeaders {
     public static final String VIA = "via";
     public static final String WARNING = "warning";
     public static final String WWW_AUTHENTICATE = "www-authenticate";
+    public static final String ACCESS_CONTROL_ALLOW_ORIGIN = "access-control-allow-origin";
+    public static final String ACCESS_CONTROL_ALLOW_METHODS = "access-control-allow-methods";
+    public static final String ACCESS_CONTROL_ALLOW_HEADERS = "access-control-allow-headers";
+    public static final String ACCESS_CONTROL_MAX_AGE = "access-control-max-age";
+    public static final String ACCESS_CONTROL_ALLOW_CREDENTIALS = "access-control-allow-credentials";
+    public static final String ACCESS_CONTROL_REQUEST_METHOD = "access-control-request-method";
+    public static final String ACCESS_CONTROL_REQUEST_HEADERS = "access-control-request-headers";
+    public static final String ORIGIN = "origin";
 }
