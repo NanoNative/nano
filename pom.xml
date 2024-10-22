@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>2024.0.4</version>
+    <version>2024.0.5</version>
     <packaging>jar</packaging>
 
     <name>nano</name>
@@ -42,7 +42,7 @@
         <type-map.version>2.1.22</type-map.version>
 
         <!-- TEST -->
-        <junit-jupiter-api.version>5.11.2</junit-jupiter-api.version>
+        <junit-jupiter-api.version>5.11.3</junit-jupiter-api.version>
         <assertj-core.version>3.26.3</assertj-core.version>
 
         <!-- BUILD -->
