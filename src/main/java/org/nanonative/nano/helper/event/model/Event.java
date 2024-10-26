@@ -120,7 +120,7 @@ public class Event {
     }
 
     public Optional<Object> payloadOpt() {
-        return ofNullable(response);
+        return ofNullable(payload);
     }
 
     public <T> T payload(final Class<T> type) {
