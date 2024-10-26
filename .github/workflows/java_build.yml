@@ -165,6 +165,7 @@ jobs:
           git commit -m "chore(⚕️): release [${{ steps.semver_info.outputs.clean_semver }}]"
           echo "latest_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: "🏷️ Deploy start [${{ steps.semver_info.outputs.clean_semver }}]"
+        if: ${{ steps.metrics.outputs.should_deploy == 'true' }}
         uses: bobheadxi/deployments@v1.5.0
         id: deployment-status
         with:
