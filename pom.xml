@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>2024.0.9</version>
+    <version>2024.0.10</version>
     <packaging>jar</packaging>
 
     <name>nano</name>
@@ -39,11 +39,11 @@
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
 
         <!-- PRODUCTION -->
-        <type-map.version>2.1.24</type-map.version>
+        <type-map.version>2.1.26</type-map.version>
 
         <!-- TEST -->
         <junit-jupiter-api.version>5.11.4</junit-jupiter-api.version>
-        <assertj-core.version>3.26.3</assertj-core.version>
+        <assertj-core.version>3.27.0</assertj-core.version>
 
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
