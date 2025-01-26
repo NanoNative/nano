@@ -202,7 +202,7 @@ public class Nano extends NanoServices<Nano> {
      * Prints the configurations that have been loaded into the {@link Nano} instance.
      */
     public void printParameters() {
-        if (context.getOpt(Boolean.class, APP_PARAMS).filter(printCalled -> printCalled).isPresent()) {
+        if (context.asOpt(Boolean.class, APP_PARAMS).filter(printCalled -> printCalled).isPresent()) {
             final List<String> secrets = List.of("secret", "token", "pass", "pwd", "bearer", "auth", "private", "ssn");
             final int keyLength = context.keySet().stream().map(String::valueOf).mapToInt(String::length).max().orElse(0);
             logger.info(() -> "Configs: " + lineSeparator() + context.entrySet().stream().sorted().map(config -> String.format("%-" + keyLength + "s  %s", config.getKey(), secrets.stream().anyMatch(s -> String.valueOf(config.getKey()).toLowerCase().contains(s)) ? "****" : config.getValue())).collect(joining(lineSeparator())));
@@ -287,7 +287,7 @@ public class Nano extends NanoServices<Nano> {
     protected void cleanUps(final Event event) {
         // WARN ON HEAP USAGE
         final double usage = heapMemoryUsage();
-        final int threshold = context.getOpt(Integer.class, CONFIG_OOM_SHUTDOWN_THRESHOLD).orElse(98);
+        final int threshold = context.asOpt(Integer.class, CONFIG_OOM_SHUTDOWN_THRESHOLD).orElse(98);
         if (threshold > 0 && usage > (threshold / 100d) && !context.sendEventReturn(EVENT_APP_OOM, usage).isAcknowledged()) {
             logger.warn(() -> "Out of mana aka memory [{}] threshold [{}] event [{}] shutting down", usage, threshold, eventNameOf(EVENT_APP_OOM));
             context.put("_app_exit_code", 127);
@@ -334,8 +334,8 @@ public class Nano extends NanoServices<Nano> {
     protected Nano shutdown(final Context context) {
         isReady.set(true, false, run -> {
             final NanoLogger logger = context.logger();
-            final int exitCode = context.getOpt(Integer.class, "_app_exit_code").orElse(0);
-            final boolean exitCodeAllowed = context.getOpt(Boolean.class, CONFIG_ENV_PROD).orElse(false);
+            final int exitCode = context.asOpt(Integer.class, "_app_exit_code").orElse(0);
+            final boolean exitCodeAllowed = context.asOpt(Boolean.class, CONFIG_ENV_PROD).orElse(false);
             gracefulShutdown(logger);
             if (exitCodeAllowed)
                 exit(logger, exitCode);

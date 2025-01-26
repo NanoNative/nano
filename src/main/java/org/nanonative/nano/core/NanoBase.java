@@ -65,7 +65,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         this.context = readConfigs(args);
         if (configs != null)
             configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(convertObj(value, String.class)).orElse("")));
-        this.logger = new NanoLogger(this).level(context.getOpt(LogLevel.class, CONFIG_LOG_LEVEL).orElse(LogLevel.DEBUG)).formatter(context.getOpt(Formatter.class, CONFIG_LOG_FORMATTER).orElseGet(() -> LogFormatRegister.getLogFormatter("console")));
+        this.logger = new NanoLogger(this).level(context.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).orElse(LogLevel.DEBUG)).formatter(context.asOpt(Formatter.class, CONFIG_LOG_FORMATTER).orElseGet(() -> LogFormatRegister.getLogFormatter("console")));
         context.put(CONTEXT_LOGGER_KEY, logger);
         displayHelpMenu();
         subscribeEvent(EVENT_CONFIG_CHANGE, event -> event.payloadOpt(TypeMap.class).map(this::putAll).ifPresent(nano -> event.acknowledge()));
@@ -226,10 +226,10 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * Displays a help menu with available configuration keys and their descriptions and exits.
      */
     protected void displayHelpMenu() {
-        if (context.getOpt(Boolean.class, APP_HELP).filter(helpCalled -> helpCalled).isPresent()) {
+        if (context.asOpt(Boolean.class, APP_HELP).filter(helpCalled -> helpCalled).isPresent()) {
             final int keyLength = CONFIG_KEYS.keySet().stream().mapToInt(String::length).max().orElse(0);
             logger.info(() -> "Available configs keys: " + lineSeparator() + CONFIG_KEYS.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(conf -> String.format("%-" + keyLength + "s  %s", conf.getKey(), conf.getValue())).collect(Collectors.joining(lineSeparator())));
-            if (context.getOpt(Boolean.class, CONFIG_ENV_PROD).orElse(false))
+            if (context.asOpt(Boolean.class, CONFIG_ENV_PROD).orElse(false))
                 System.exit(0);
         }
     }

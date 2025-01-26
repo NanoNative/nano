@@ -1,6 +1,7 @@
 package org.nanonative.nano.services.http;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
+import berlin.yuna.typemap.model.Type;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.nanonative.nano.core.model.Context;
@@ -79,7 +80,7 @@ public class HttpService extends Service {
         isReady.set(false, true, state -> {
             context = contextSub.get().newContext(HttpService.class);
             STARTUP_LOCK.lock();
-            final int port = context.getOpt(Integer.class, CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
+            final int port = context.asOpt(Integer.class, CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
             context.put(CONFIG_SERVICE_HTTP_PORT, port);
             handleHttps(context);
             try {
@@ -95,7 +96,7 @@ public class HttpService extends Service {
                                 response -> sendResponse(exchange, request, response),
                                 () -> sendResponse(exchange, request, new HttpObject()
                                     .statusCode(internalError.get() ? 500 : 404)
-                                    .bodyT(new LinkedTypeMap().putReturn("message", internalError.get() ? "Internal Server Error" : "Not Found").putReturn("timestamp", System.currentTimeMillis()))
+                                    .bodyT(new LinkedTypeMap().putR("message", internalError.get() ? "Internal Server Error" : "Not Found").putR("timestamp", System.currentTimeMillis()))
                                     .contentType(ContentType.APPLICATION_PROBLEM_JSON))
                             )
                         );
@@ -130,8 +131,8 @@ public class HttpService extends Service {
     private static void handleHttps(final Context context) {
         //TODO: add option for HTTPS
         //TODO: handle certificates
-        final Optional<String> crt = context.getOpt(String.class, "app.https.crt.path");
-        final Optional<String> key = context.getOpt(String.class, "app.https.key.path");
+        final Type<String> crt = context.asStringOpt(String.class, "app.https.crt.path");
+        final Type<String> key = context.asStringOpt(String.class, "app.https.key.path");
         if (crt.isPresent() && key.isPresent()) {
 //            // Load the certificate
 //            CertificateFactory cf = CertificateFactory.getInstance("X.509");

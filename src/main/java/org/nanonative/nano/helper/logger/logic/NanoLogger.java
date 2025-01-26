@@ -147,9 +147,9 @@ public class NanoLogger {
     }
 
     public NanoLogger configure(final TypeMap config) {
-        config.getOpt(LogLevel.class, CONFIG_LOG_LEVEL).ifPresent(this::level);
-        config.getOpt(LogQueue.class, CONTEXT_LOG_QUEUE_KEY).ifPresent(this::logQueue);
-        config.getOpt(Formatter.class, CONFIG_LOG_FORMATTER).ifPresent(this::formatter);
+        config.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).ifPresent(this::level);
+        config.asOpt(LogQueue.class, CONTEXT_LOG_QUEUE_KEY).ifPresent(this::logQueue);
+        config.asOpt(Formatter.class, CONFIG_LOG_FORMATTER).ifPresent(this::formatter);
         return this;
     }
 

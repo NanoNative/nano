@@ -39,7 +39,7 @@
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
 
         <!-- PRODUCTION -->
-        <type-map.version>2.1.29</type-map.version>
+        <type-map.version>2025.0.2</type-map.version>
 
         <!-- TEST -->
         <junit-jupiter-api.version>5.11.4</junit-jupiter-api.version>

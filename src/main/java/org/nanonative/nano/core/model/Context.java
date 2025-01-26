@@ -1,23 +1,24 @@
 package org.nanonative.nano.core.model;
 
-import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.core.NanoServices;
-import org.nanonative.nano.helper.ExRunnable;
-import org.nanonative.nano.helper.NanoUtils;
-import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.LogFormatRegister;
-import org.nanonative.nano.helper.logger.logic.NanoLogger;
-import org.nanonative.nano.services.http.model.ContentType;
-import org.nanonative.nano.services.http.model.HttpMethod;
 import berlin.yuna.typemap.model.ConcurrentTypeMap;
 import berlin.yuna.typemap.model.TypeMap;
+import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.core.NanoServices;
 import org.nanonative.nano.core.NanoThreads;
+import org.nanonative.nano.helper.ExRunnable;
+import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.config.ConfigRegister;
 import org.nanonative.nano.helper.event.EventChannelRegister;
+import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.helper.logger.LogFormatRegister;
 import org.nanonative.nano.helper.logger.logic.LogQueue;
+import org.nanonative.nano.helper.logger.logic.NanoLogger;
 import org.nanonative.nano.helper.logger.model.LogLevel;
+import org.nanonative.nano.services.http.model.ContentType;
+import org.nanonative.nano.services.http.model.HttpMethod;
 
 import java.time.LocalTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,12 +29,11 @@ import java.util.function.Consumer;
 import java.util.logging.Formatter;
 import java.util.stream.Stream;
 
-import static org.nanonative.nano.core.model.Service.threadsOf;
 import static berlin.yuna.typemap.config.TypeConversionRegister.registerTypeConvert;
 import static java.net.http.HttpClient.Version.HTTP_1_1;
 import static java.net.http.HttpClient.Version.HTTP_2;
-import static java.util.Arrays.stream;
 import static java.util.Optional.ofNullable;
+import static org.nanonative.nano.core.model.Service.threadsOf;
 
 @SuppressWarnings({"unused", "UnusedReturnValue", "java:S2160"})
 public class Context extends ConcurrentTypeMap {
@@ -203,7 +203,7 @@ public class Context extends ConcurrentTypeMap {
     public void putAll(final Map<?, ?> map) {
         super.putAll(map);
         // Auto change logger
-        getOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).ifPresent(logger -> logger.configure(map instanceof final TypeMap typeMap ? typeMap : new TypeMap(map)));
+        asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).ifPresent(logger -> logger.configure(map instanceof final TypeMap typeMap ? typeMap : new TypeMap(map)));
     }
 
     /**
@@ -218,7 +218,7 @@ public class Context extends ConcurrentTypeMap {
         // ConcurrentHashMap does not allow null keys or values.
         super.put(key, value != null ? value : "");
         // Auto change logger
-        getOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).ifPresent(logger -> logger.configure(new TypeMap().putReturn(key, value)));
+        asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).ifPresent(logger -> logger.configure(new TypeMap().putR(key, value)));
         return this;
     }
 
@@ -230,7 +230,7 @@ public class Context extends ConcurrentTypeMap {
      * @return the updated {@link ConcurrentTypeMap} instance for chaining.
      */
     @Override
-    public Context putReturn(final Object key, final Object value) {
+    public Context putR(final Object key, final Object value) {
         // ConcurrentHashMap does not allow null keys or values.
         this.put(key, value);
         return this;
@@ -340,8 +340,8 @@ public class Context extends ConcurrentTypeMap {
                 .logQueue(p.logger().logQueue())
                 .formatter(p.logger().formatter()),
             () -> logger
-                .level(getOpt(LogLevel.class, CONFIG_LOG_LEVEL).orElse(LogLevel.INFO))
-                .formatter(getOpt(Formatter.class, CONFIG_LOG_FORMATTER).orElseGet(() -> LogFormatRegister.getLogFormatter("console"))));
+                .level(asOpt(LogLevel.class, CONFIG_LOG_LEVEL).orElse(LogLevel.INFO))
+                .formatter(asOpt(Formatter.class, CONFIG_LOG_FORMATTER).orElseGet(() -> LogFormatRegister.getLogFormatter("console"))));
         put(CONTEXT_LOGGER_KEY, logger);
         return logger;
     }
@@ -391,7 +391,7 @@ public class Context extends ConcurrentTypeMap {
      * @return {@link NanoThread}s
      */
     public final NanoThread[] runReturn(final ExRunnable... runnable) {
-        return stream(runnable).map(task -> new NanoThread(this).run(
+        return Arrays.stream(runnable).map(task -> new NanoThread(this).run(
             this.nano() == null ? null : nano().threadPool(),
             () -> this.nano() == null ? null : nano().contextEmpty(clazz()),
             task
@@ -406,7 +406,7 @@ public class Context extends ConcurrentTypeMap {
      * @return {@link NanoThread}s
      */
     public final NanoThread[] runReturnHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
-        return stream(runnable).map(task -> new NanoThread(this)
+        return Arrays.stream(runnable).map(task -> new NanoThread(this)
             .onComplete((thread, error) -> {
                 if (error != null)
                     onFailure.accept(new Unhandled(this, thread, error));
@@ -757,7 +757,7 @@ public class Context extends ConcurrentTypeMap {
     }
 
     private Class<?> clazz() {
-        return this.getOpt(Class.class, CONTEXT_CLASS_KEY).orElse(Context.class);
+        return this.asOpt(Class.class, CONTEXT_CLASS_KEY).orElse(Context.class);
     }
 
     public void tryExecute(final ExRunnable operation) {
@@ -772,8 +772,8 @@ public class Context extends ConcurrentTypeMap {
     public String toString() {
         return "Context{" +
             "size=" + size() +
-            ", loglevel=" + getOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::level).orElse(null) +
-            ", logQueue=" + getOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::logQueue).isPresent() +
+            ", loglevel=" + asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::level).orElse(null) +
+            ", logQueue=" + asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::logQueue).isPresent() +
             '}';
     }
 }

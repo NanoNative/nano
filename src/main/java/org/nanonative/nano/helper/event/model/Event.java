@@ -1,5 +1,6 @@
 package org.nanonative.nano.helper.event.model;
 
+import berlin.yuna.typemap.model.Type;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.logger.logic.NanoLogger;
 import berlin.yuna.typemap.model.TypeMap;
@@ -60,7 +61,7 @@ public class Event {
     }
 
     public int channelIdOrg() {
-        return ofNullable(cache).flatMap(c -> c.getOpt(Integer.class, EVENT_ORIGINAL_CHANNEL_ID)).orElse(channelId);
+        return ofNullable(cache).map(c -> c.asIntOpt(EVENT_ORIGINAL_CHANNEL_ID)).map(Type::value).orElse(channelId);
     }
 
     public Event channelId(final int channelId) {
