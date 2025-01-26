@@ -44,7 +44,7 @@ public class LogQueue extends Service {
     public void start(final Supplier<Context> contextSub) {
         isReady.set(false, true, state -> {
             final Context context = contextSub.get();
-            queueCapacity = context.getOpt(Integer.class, CONFIG_LOG_QUEUE_SIZE).orElse(1000);
+            queueCapacity = context.asOpt(Integer.class, CONFIG_LOG_QUEUE_SIZE).orElse(1000);
             queue = new LinkedBlockingQueue<>(queueCapacity);
             context.run(this::process)
                 .run(this::checkQueueSizeAndWarn, 5, 5, TimeUnit.MINUTES, () -> !isReady())

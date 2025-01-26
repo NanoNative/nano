@@ -756,7 +756,7 @@ public class HttpObject extends HttpRequest {
     public long size() {
         return Math.max(
             body().length,
-            headers == null ? -1L : headers.getOpt(String.class, CONTENT_RANGE).map(s -> s.replace("bytes 0-0/", "")).map(s -> convertObj(s, Long.class)).orElse(-1L)
+            headers == null ? -1L : headers.asOpt(String.class, CONTENT_RANGE).map(s -> s.replace("bytes 0-0/", "")).map(s -> convertObj(s, Long.class)).orElse(-1L)
         );
     }
 
@@ -967,8 +967,8 @@ public class HttpObject extends HttpRequest {
         final String resultOrigin = origin(origin, credentials);
         return new HttpObject()
             .header(ACCESS_CONTROL_ALLOW_ORIGIN, resultOrigin)
-            .header(ACCESS_CONTROL_ALLOW_METHODS, hasText(methods) ? methods : (headerMap().getOpt(String.class, ACCESS_CONTROL_REQUEST_METHOD).orElse(method())))
-            .header(ACCESS_CONTROL_ALLOW_HEADERS, hasText(headers) ? headers : (headerMap().getOpt(String.class, ACCESS_CONTROL_REQUEST_HEADERS).orElse("Content-Type, Accept, Authorization, X-Requested-With")))
+            .header(ACCESS_CONTROL_ALLOW_METHODS, hasText(methods) ? methods : (headerMap().asOpt(String.class, ACCESS_CONTROL_REQUEST_METHOD).orElse(method())))
+            .header(ACCESS_CONTROL_ALLOW_HEADERS, hasText(headers) ? headers : (headerMap().asOpt(String.class, ACCESS_CONTROL_REQUEST_HEADERS).orElse("Content-Type, Accept, Authorization, X-Requested-With")))
             .header(ACCESS_CONTROL_ALLOW_CREDENTIALS, String.valueOf(credentials))
             .header(ACCESS_CONTROL_MAX_AGE, String.valueOf(maxAge > 0 ? maxAge : 86400))
             .statusCode(resultOrigin.equals("null") ? 403 : (isMethodOptions() ? 204 : 200)) // 403 if origin doesn't match, 204 for preflight, 200 otherwise
@@ -999,7 +999,7 @@ public class HttpObject extends HttpRequest {
      */
     @SuppressWarnings("java:S3358") // too many parameters
     public String origin(final String origin, final boolean credentials) {
-        final String requestOrigin = headerMap().getOpt(String.class, ORIGIN).or(() -> headerMap().getOpt(String.class, HOST)).orElseGet(() -> credentials ? "null" : "*");
+        final String requestOrigin = headerMap().asOpt(String.class, ORIGIN).or(() -> headerMap().asOpt(String.class, HOST)).orElseGet(() -> credentials ? "null" : "*");
         return hasText(origin) && !(credentials && origin.equals("*"))
             ? origin.equals("*") ? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
             : requestOrigin;
@@ -1103,13 +1103,13 @@ public class HttpObject extends HttpRequest {
         header(CONTENT_TYPE, ContentType.APPLICATION_PROBLEM_JSON.value());
         statusCode(statusCode);
         body(new TypeMap()
-            .putReturn("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
-            .putReturn("type", "https://github.com/nanonative/nano")
-            .putReturn("title", ofNullable(throwable.getMessage()).orElse(throwable.getClass().getSimpleName()))
-            .putReturn("status", statusCode)
-            .putReturn("instance", path())
-            .putReturn("detail", convertObj(throwable, String.class))
-            .putReturn("timestamp", Instant.now().toEpochMilli())
+            .putR("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
+            .putR("type", "https://github.com/nanonative/nano")
+            .putR("title", ofNullable(throwable.getMessage()).orElse(throwable.getClass().getSimpleName()))
+            .putR("status", statusCode)
+            .putR("instance", path())
+            .putR("detail", convertObj(throwable, String.class))
+            .putR("timestamp", Instant.now().toEpochMilli())
         );
         return this;
     }

@@ -120,7 +120,7 @@ class HttpObjectTest {
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
             ACCESS_CONTROL_MAX_AGE, "86400",
             VARY, "Origin"
         ));
@@ -435,7 +435,7 @@ class HttpObjectTest {
     @Test
     void testBody() {
         final String bodyString = "{\"key\":\"value\"}";
-        final TypeMap bodyJson = new TypeMap().putReturn("key", "value");
+        final TypeMap bodyJson = new TypeMap().putR("key", "value");
         final byte[] bodyBytes = bodyString.getBytes(Charset.defaultCharset());
         //TODO: test bodyAsXml
 
@@ -443,7 +443,7 @@ class HttpObjectTest {
         final HttpObject nullTest = new HttpObject();
         assertThat(nullTest.body()).isEqualTo(new byte[0]);
         assertThat(nullTest.bodyAsString()).isEmpty();
-        assertThat(nullTest.bodyAsJson()).isEqualTo(new TypeList().addReturn(""));
+        assertThat(nullTest.bodyAsJson()).isEqualTo(new TypeList().addR(""));
         assertThat(nullTest.bodyAsXml()).isNotNull();
         assertThat(nullTest.bodyAsJson().asString( "key")).isNull();
 
@@ -480,7 +480,7 @@ class HttpObjectTest {
         assertThat(exchangeTest.bodyAsJson().asString( "key")).isEqualTo("value");
 
         // General
-        assertThat(new HttpObject().bodyAsJson()).isEqualTo(new TypeList().addReturn(""));
+        assertThat(new HttpObject().bodyAsJson()).isEqualTo(new TypeList().addR(""));
         assertThat(new HttpObject().bodyAsXml()).isEqualTo(new TypeList());
         assertThat(new HttpObject().bodyAsString()).isEmpty();
     }

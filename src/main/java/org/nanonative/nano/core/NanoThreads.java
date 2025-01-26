@@ -160,7 +160,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      * Shuts down all threads and scheduled executors gracefully.
      */
     protected void shutdownThreads() {
-        final long timeoutMs = context.getOpt(Long.class, CONFIG_THREAD_POOL_TIMEOUT_MS).filter(l -> l > 0).orElse(500L);
+        final long timeoutMs = context.asOpt(Long.class, CONFIG_THREAD_POOL_TIMEOUT_MS).filter(l -> l > 0).orElse(500L);
         logger.debug(() -> "Shutdown schedulers [{}]", schedulers.size());
         shutdownExecutors(timeoutMs, schedulers.toArray(ScheduledExecutorService[]::new));
         logger.debug(() -> "Shutdown {} [{}]", threadPool.getClass().getSimpleName(), activeNanoThreads());

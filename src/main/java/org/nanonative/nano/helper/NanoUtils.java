@@ -201,7 +201,7 @@ public class NanoUtils {
             "micronaut_profiles",
             "micronaut_environments"
         }) {
-            result.getOpt(String.class, pConfig).ifPresent(profiles -> stream(split(profiles, ",")).map(String::trim).forEach(name -> readConfigFiles(result, name)));
+            result.asStringOpt(pConfig).ifPresent(profiles -> stream(split(profiles, ",")).map(String::trim).forEach(name -> readConfigFiles(result, name)));
         }
         return result;
     }
@@ -234,7 +234,7 @@ public class NanoUtils {
         context.forEach((key, value) -> {
             if (value instanceof final String valueStr && valueStr.startsWith("${") && valueStr.endsWith("}")) {
                 final String[] placeholder = split(valueStr.substring(2, valueStr.length() - 1), ":");
-                addConfig(context, key, context.getOpt(Object.class, NanoBase.standardiseKey(placeholder[0])).orElseGet(() -> placeholder.length > 1 ? placeholder[1].trim() : null));
+                addConfig(context, key, context.asOpt(Object.class, NanoBase.standardiseKey(placeholder[0])).orElseGet(() -> placeholder.length > 1 ? placeholder[1].trim() : null));
             }
         });
         return context;
