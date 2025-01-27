@@ -120,7 +120,7 @@ class HttpObjectTest {
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
             ACCESS_CONTROL_MAX_AGE, "86400",
             VARY, "Origin"
         ));

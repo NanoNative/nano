@@ -80,7 +80,7 @@ public class HttpService extends Service {
         isReady.set(false, true, state -> {
             context = contextSub.get().newContext(HttpService.class);
             STARTUP_LOCK.lock();
-            final int port = context.asOpt(Integer.class, CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
+            final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
             context.put(CONFIG_SERVICE_HTTP_PORT, port);
             handleHttps(context);
             try {

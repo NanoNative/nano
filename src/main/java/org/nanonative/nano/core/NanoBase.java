@@ -226,10 +226,10 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * Displays a help menu with available configuration keys and their descriptions and exits.
      */
     protected void displayHelpMenu() {
-        if (context.asOpt(Boolean.class, APP_HELP).filter(helpCalled -> helpCalled).isPresent()) {
+        if (context.asBooleanOpt(APP_HELP).filter(helpCalled -> helpCalled).isPresent()) {
             final int keyLength = CONFIG_KEYS.keySet().stream().mapToInt(String::length).max().orElse(0);
             logger.info(() -> "Available configs keys: " + lineSeparator() + CONFIG_KEYS.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(conf -> String.format("%-" + keyLength + "s  %s", conf.getKey(), conf.getValue())).collect(Collectors.joining(lineSeparator())));
-            if (context.asOpt(Boolean.class, CONFIG_ENV_PROD).orElse(false))
+            if (context.asBooleanOpt(CONFIG_ENV_PROD).orElse(false))
                 System.exit(0);
         }
     }
