@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>2025.0.2</version>
+    <version>2025.0.3</version>
     <packaging>jar</packaging>
 
     <name>nano</name>
@@ -39,7 +39,7 @@
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
 
         <!-- PRODUCTION -->
-        <type-map.version>2025.0.6</type-map.version>
+        <type-map.version>2025.0.7</type-map.version>
 
         <!-- TEST -->
         <junit-jupiter-api.version>5.11.4</junit-jupiter-api.version>
