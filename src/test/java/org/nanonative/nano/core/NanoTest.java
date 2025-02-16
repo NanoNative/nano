@@ -13,9 +13,12 @@ import org.nanonative.nano.helper.logger.logic.LogQueue;
 import org.nanonative.nano.helper.logger.model.LogLevel;
 import org.nanonative.nano.model.TestService;
 
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -263,13 +266,16 @@ class NanoTest {
         final long timer = 64;
         final CountDownLatch scheduler1Triggered = new CountDownLatch(1);
         final CountDownLatch scheduler2Triggered = new CountDownLatch(1);
+        final CountDownLatch scheduler3Triggered = new CountDownLatch(1);
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
 
         nano.run(null, scheduler1Triggered::countDown, timer, MILLISECONDS);
         nano.run(null, scheduler2Triggered::countDown, timer, timer * 2, MILLISECONDS, () -> false);
+        nano.run(null, scheduler3Triggered::countDown, LocalTime.now().plusNanos(timer * 1000), LocalDateTime.now().getDayOfWeek(), () -> false);
 
         assertThat(scheduler1Triggered.await(TestConfig.TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThat(scheduler2Triggered.await(TestConfig.TEST_TIMEOUT, MILLISECONDS)).isTrue();
+        assertThat(scheduler3Triggered.await(TestConfig.TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 

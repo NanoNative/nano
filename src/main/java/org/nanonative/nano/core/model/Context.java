@@ -17,6 +17,8 @@ import org.nanonative.nano.helper.logger.model.LogLevel;
 import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpMethod;
 
+import java.time.DayOfWeek;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.List;
@@ -303,18 +305,19 @@ public class Context extends ConcurrentTypeMap {
 
     /**
      * Executes a task periodically, starting after an initial delay.
+     * <code>nano.run(() -> myMethod(), LocalTime.of(7, 0, 0))</code>
      *
      * @param task   The task to execute.
      * @param atTime The time of hour/minute/second to start the task.
      * @return Self for chaining
      */
     public Context run(final ExRunnable task, final LocalTime atTime) {
-        nano().run(() -> this, task, atTime, () -> false);
-        return this;
+        return run(task, atTime, () -> false);
     }
 
     /**
      * Executes a task periodically, starting after an initial delay.
+     * <code>nano.run(() -> myMethod(), LocalTime.of(7, 0, 0))</code>
      *
      * @param task   The task to execute.
      * @param atTime The time of hour/minute/second to start the task.
@@ -322,7 +325,20 @@ public class Context extends ConcurrentTypeMap {
      * @return Self for chaining
      */
     public Context run(final ExRunnable task, final LocalTime atTime, final BooleanSupplier until) {
-        nano().run(() -> this, task, atTime, until);
+        return run(task, atTime, null, until);
+    }
+
+    /**
+     * Executes a task periodically, starting after an initial delay.
+     * <code>nano.run(() -> myMethod(), LocalTime.of(7, 0, 0))</code>
+     *
+     * @param task   The task to execute.
+     * @param atTime The time of hour/minute/second to start the task.
+     * @param until  A BooleanSupplier indicating the termination condition. <code>true</code> stops the next execution.
+     * @return Self for chaining
+     */
+    public Context run(final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
+        nano().run(() -> this, task, atTime, dow, until);
         return this;
     }
 
