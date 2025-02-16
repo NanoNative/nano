@@ -4,9 +4,12 @@ import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Scheduler;
 import org.nanonative.nano.helper.ExRunnable;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZonedDateTime;
+import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Set;
@@ -19,6 +22,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
+import static java.util.Collections.unmodifiableSet;
+import static java.util.concurrent.TimeUnit.DAYS;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.nanonative.nano.core.model.Context.CONFIG_THREAD_POOL_TIMEOUT_MS;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_UNREGISTER;
@@ -26,9 +32,6 @@ import static org.nanonative.nano.core.model.NanoThread.activeNanoThreads;
 import static org.nanonative.nano.helper.NanoUtils.callerInfoStr;
 import static org.nanonative.nano.helper.NanoUtils.getThreadName;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
-import static java.util.Collections.unmodifiableSet;
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.SECONDS;
 
 /**
  * The abstract base class for {@link Nano} framework providing thread handling functionalities.
@@ -118,17 +121,19 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
 
     /**
      * Executes a task periodically, starting after an initial delay.
+     * <code>nano.run(() -> myMethod(), LocalTime.of(7, 0, 0))</code>
      *
      * @param task   The task to execute.
      * @param atTime The time of hour/minute/second to start the task.
+     * @param dow    The day of the week to start the task.
      * @param until  A BooleanSupplier indicating the termination condition. <code>true</code> stops the next execution.
      * @return Self for chaining
      */
-    public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final BooleanSupplier until) {
-        final LocalDateTime now = LocalDateTime.now();
-        LocalDateTime nextRun = now.withHour(atTime.getHour()).withMinute(atTime.getMinute()).withSecond(atTime.getSecond());
-        if (now.isAfter(nextRun))
-            nextRun = nextRun.plusDays(1);
+    public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
+        final ZonedDateTime now = ZonedDateTime.now();
+        ZonedDateTime nextRun = now.withHour(atTime.getHour()).withMinute(atTime.getMinute()).withSecond(atTime.getSecond());
+        if(dow != null)
+            nextRun = nextRun.with(TemporalAdjusters.nextOrSame(dow));
 
         return run(context, task, Duration.between(now, nextRun).getSeconds(), DAYS.toSeconds(1), SECONDS, until);
     }
