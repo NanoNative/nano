@@ -1,16 +1,15 @@
 package org.nanonative.nano.core;
 
+import berlin.yuna.typemap.model.FunctionOrNull;
+import berlin.yuna.typemap.model.TypeMap;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.NanoThread;
 import org.nanonative.nano.core.model.Scheduler;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.logic.LogQueue;
 import org.nanonative.nano.helper.logger.logic.NanoLogger;
 import org.nanonative.nano.services.metric.model.MetricUpdate;
-import berlin.yuna.typemap.model.FunctionOrNull;
-import berlin.yuna.typemap.model.TypeMap;
 
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
@@ -24,11 +23,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static java.lang.System.lineSeparator;
+import static java.util.Arrays.asList;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static java.util.stream.Collectors.joining;
 import static org.nanonative.nano.core.model.Context.APP_PARAMS;
 import static org.nanonative.nano.core.model.Context.CONFIG_ENV_PROD;
 import static org.nanonative.nano.core.model.Context.CONFIG_OOM_SHUTDOWN_THRESHOLD;
 import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
-import static org.nanonative.nano.core.model.Context.CONTEXT_LOG_QUEUE_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_HEARTBEAT;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_OOM;
@@ -39,11 +42,6 @@ import static org.nanonative.nano.helper.NanoUtils.generateNanoName;
 import static org.nanonative.nano.helper.event.EventChannelRegister.eventNameOf;
 import static org.nanonative.nano.services.metric.logic.MetricService.EVENT_METRIC_UPDATE;
 import static org.nanonative.nano.services.metric.model.MetricType.GAUGE;
-import static java.lang.System.lineSeparator;
-import static java.util.Arrays.asList;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static java.util.concurrent.TimeUnit.SECONDS;
-import static java.util.stream.Collectors.joining;
 
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public class Nano extends NanoServices<Nano> {
@@ -313,14 +311,7 @@ public class Nano extends NanoServices<Nano> {
             final List<Service> services = startupServices.apply(context);
             if (services != null) {
                 logger.debug(() -> "StartupServices [{}] services [{}]", services.size(), services.stream().map(Service::name).distinct().collect(joining(", ")));
-                final Map<Boolean, List<Service>> partitionedServices = services.stream().collect(Collectors.partitioningBy(LogQueue.class::isInstance));
-                // INIT ASYNC LOGGING
-                partitionedServices.getOrDefault(true, Collections.emptyList()).stream().findFirst().ifPresent(service -> {
-                    context.put(CONTEXT_LOG_QUEUE_KEY, service);
-                    context.run(service);
-                });
-                // INIT SERVICES
-                context.runAwait(partitionedServices.getOrDefault(false, Collections.emptyList()).toArray(Service[]::new));
+                context.runAwait(services.toArray(Service[]::new));
             }
         }
     }
@@ -332,14 +323,13 @@ public class Nano extends NanoServices<Nano> {
      * @return Self for chaining
      */
     protected Nano shutdown(final Context context) {
-        isReady.set(true, false, run -> {
-            final NanoLogger logger = context.logger();
+        if (isReady.compareAndSet(true, false)) {
             final int exitCode = context.asIntOpt("_app_exit_code").orElse(0);
             final boolean exitCodeAllowed = context.asBooleanOpt(CONFIG_ENV_PROD).orElse(false);
-            gracefulShutdown(logger);
+            gracefulShutdown(context.logger());
             if (exitCodeAllowed)
-                exit(logger, exitCode);
-        });
+                exit(context.logger(), exitCode);
+        }
         return this;
     }
 
@@ -382,7 +372,7 @@ public class Nano extends NanoServices<Nano> {
         try {
             final Thread sequence = new Thread(() -> {
                 final long startTimeMs = System.currentTimeMillis();
-                logger.logQueue(null).info(() -> "Stop {} ...", this.getClass().getSimpleName());
+                logger.info(() -> "Stop {} ...", this.getClass().getSimpleName());
                 printSystemInfo();
                 logger.debug(() -> "Shutdown Services count [{}] services [{}]", services.size(), services.stream().map(Service::getClass).map(Class::getSimpleName).distinct().collect(joining(", ")));
                 shutdownServices(this.context);

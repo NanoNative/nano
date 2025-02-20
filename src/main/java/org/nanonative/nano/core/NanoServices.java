@@ -121,7 +121,8 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
         if (service != null) {
             services.remove(service);
             try {
-                service.stop(() -> context);
+                if (service.isReadyState().compareAndSet(true, false))
+                    service.stop();
             } catch (final Exception e) {
                 logger.warn(e, () -> "Stop [{}] error. Somebody call the Ghostbusters!", service.name());
             }

@@ -1,31 +1,31 @@
 package org.nanonative.nano.core.model;
 
+import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.config.TestConfig;
 import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.model.TestService;
-import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.parallel.Execution;
-import org.junit.jupiter.api.parallel.ExecutionMode;
 
 import java.time.LocalTime;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 
+import static java.time.temporal.ChronoUnit.MILLIS;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_LOGGER_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_TRACE_ID_KEY;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_HEARTBEAT;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
-import static java.time.temporal.ChronoUnit.MILLIS;
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @SuppressWarnings("java:S5778")
 @Execution(ExecutionMode.CONCURRENT)
@@ -189,13 +189,17 @@ class ContextTest {
         assertThat(subContext.logger()).isNotNull();
         assertThat(context).containsKey(CONTEXT_LOGGER_KEY);
         assertThat(subContext.logger().level()).isNotNull().isEqualTo(subContext.logLevel());
-        assertThat(subContext.logger().logQueue()).isNull();
     }
 
     @RepeatedTest(TestConfig.TEST_REPEAT)
     void testToString() {
         final Context context = Context.createRootContext(ContextTest.class);
-        assertThat(context).hasToString("Context{size=" + context.size() + ", loglevel=null, logQueue=false}");
+        assertThat(context).hasToString(
+            "Context{size=" + context.size()
+                + ", class=" + this.getClass().getSimpleName()
+                + ", loglevel=null" +
+                "}"
+        );
 
     }
 

@@ -10,9 +10,9 @@ import java.util.Date;
 import java.util.Map;
 import java.util.logging.Level;
 
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Disabled
 public class Yuna {

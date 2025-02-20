@@ -1,20 +1,21 @@
 package org.nanonative.nano.core.model;
 
-import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.core.config.TestConfig;
-import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.model.TestService;
 import org.assertj.core.api.Condition;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.core.config.TestConfig;
+import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.model.TestService;
 
 import java.util.Map;
 
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Execution(ExecutionMode.CONCURRENT)
 class ServiceTest {
@@ -34,10 +35,10 @@ class ServiceTest {
         assertThat(service.events()).isEmpty();
         assertThat(service.failures()).isEmpty();
 
-        service.start(() -> context);
+        service.start();
         assertThat(service.startCount()).isEqualTo(1);
 
-        service.stop(() -> context);
+        service.stop();
         assertThat(service.stopCount()).isEqualTo(1);
 
         service.onFailure(error);
@@ -49,8 +50,8 @@ class ServiceTest {
 
         assertThat(nano.services()).isEmpty();
         service.nanoThread(context).run(null, () -> context, () -> {});
-        assertThat(waitForCondition(() -> service.startCount() == 2, TestConfig.TEST_TIMEOUT)).isTrue();
-        waitForCondition(() -> nano.services().size() == 1, TestConfig.TEST_TIMEOUT);
+        assertThat(waitForCondition(() -> service.startCount() == 2, TEST_TIMEOUT)).isTrue();
+        waitForCondition(() -> nano.services().size() == 1, TEST_TIMEOUT);
         assertThat(service.startCount()).isEqualTo(2);
         assertThat(service.failures()).hasSize(1);
         assertThat(nano.services()).size().isEqualTo(1);

@@ -11,14 +11,12 @@ import org.nanonative.nano.helper.config.ConfigRegister;
 import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.helper.logger.LogFormatRegister;
-import org.nanonative.nano.helper.logger.logic.LogQueue;
 import org.nanonative.nano.helper.logger.logic.NanoLogger;
 import org.nanonative.nano.helper.logger.model.LogLevel;
 import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpMethod;
 
 import java.time.DayOfWeek;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.List;
@@ -36,6 +34,8 @@ import static java.net.http.HttpClient.Version.HTTP_1_1;
 import static java.net.http.HttpClient.Version.HTTP_2;
 import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.model.Service.threadsOf;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_FORMATTER;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @SuppressWarnings({"unused", "UnusedReturnValue", "java:S2160"})
 public class Context extends ConcurrentTypeMap {
@@ -52,9 +52,6 @@ public class Context extends ConcurrentTypeMap {
     public static final String APP_HELP = ConfigRegister.registerConfig("help", "Lists available config keys");
     public static final String APP_PARAMS = ConfigRegister.registerConfig("app_params_print", "Pints all config values");
     public static final String CONFIG_PROFILES = ConfigRegister.registerConfig("app_profiles", "Active config profiles for the application");
-    public static final String CONFIG_LOG_LEVEL = ConfigRegister.registerConfig("app_log_level", "Log level for the application (see " + LogLevel.class.getSimpleName() + ")");
-    public static final String CONFIG_LOG_FORMATTER = ConfigRegister.registerConfig("app_log_formatter", "Log formatter (see " + LogFormatRegister.class.getSimpleName() + ")");
-    public static final String CONFIG_LOG_QUEUE_SIZE = ConfigRegister.registerConfig("app_log_queue_size", "Log queue size. A full queue means that log messages will start to wait to be executed (see " + LogQueue.class.getSimpleName() + ")");
     public static final String CONFIG_THREAD_POOL_TIMEOUT_MS = ConfigRegister.registerConfig("app_thread_pool_shutdown_timeout_ms", "Timeout for thread pool shutdown in milliseconds (see " + NanoThreads.class.getSimpleName() + ")");
     public static final String CONFIG_PARALLEL_SHUTDOWN = ConfigRegister.registerConfig("app_service_shutdown_parallel", "Enable or disable parallel service shutdown (see " + NanoServices.class.getSimpleName() + "). Enabled = Can increase the shutdown performance on`true`");
     public static final String CONFIG_OOM_SHUTDOWN_THRESHOLD = ConfigRegister.registerConfig("app_oom_shutdown_threshold", "Sets the threshold for heap in percentage to send an `EVENT_APP_OOM`. default = `98`, disabled = `-1`. If the event is unhandled, tha pp will try to shutdown with last resources");
@@ -353,7 +350,6 @@ public class Context extends ConcurrentTypeMap {
         final NanoLogger logger = new NanoLogger(clazz());
         ofNullable(parent()).ifPresentOrElse(p -> logger
                 .level(p.logger().level())
-                .logQueue(p.logger().logQueue())
                 .formatter(p.logger().formatter()),
             () -> logger
                 .level(asOpt(LogLevel.class, CONFIG_LOG_LEVEL).orElse(LogLevel.INFO))
@@ -788,8 +784,8 @@ public class Context extends ConcurrentTypeMap {
     public String toString() {
         return "Context{" +
             "size=" + size() +
+            ", class=" + asOpt(Class.class, CONTEXT_CLASS_KEY).map(Class::getSimpleName).orElse(null) +
             ", loglevel=" + asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::level).orElse(null) +
-            ", logQueue=" + asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::logQueue).isPresent() +
             '}';
     }
 }

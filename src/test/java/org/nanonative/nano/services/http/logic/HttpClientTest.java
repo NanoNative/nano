@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.nanonative.nano.core.config.TestConfig.TEST_LOG_LEVEL;
 import static org.nanonative.nano.core.config.TestConfig.TEST_REPEAT;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.core.model.NanoThread.VIRTUAL_THREAD_POOL;
 import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS;
 import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS;
@@ -48,6 +47,7 @@ import static java.net.http.HttpClient.Version.HTTP_1_1;
 import static java.net.http.HttpClient.Version.HTTP_2;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.entry;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Execution(ExecutionMode.CONCURRENT)
 public class HttpClientTest {

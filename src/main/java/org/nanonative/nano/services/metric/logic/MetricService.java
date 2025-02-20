@@ -1,10 +1,5 @@
 package org.nanonative.nano.services.metric.logic;
 
-import org.nanonative.nano.services.http.model.ContentType;
-import org.nanonative.nano.services.http.model.HttpHeaders;
-import org.nanonative.nano.services.http.model.HttpObject;
-import org.nanonative.nano.services.metric.model.MetricCache;
-import org.nanonative.nano.services.metric.model.MetricUpdate;
 import berlin.yuna.typemap.model.TypeMap;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
@@ -14,6 +9,11 @@ import org.nanonative.nano.helper.config.ConfigRegister;
 import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.helper.logger.model.LogLevel;
+import org.nanonative.nano.services.http.model.ContentType;
+import org.nanonative.nano.services.http.model.HttpHeaders;
+import org.nanonative.nano.services.http.model.HttpObject;
+import org.nanonative.nano.services.metric.model.MetricCache;
+import org.nanonative.nano.services.metric.model.MetricUpdate;
 
 import java.io.File;
 import java.lang.management.BufferPoolMXBean;
@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -40,6 +39,7 @@ import java.util.stream.Stream;
 
 import static org.nanonative.nano.helper.NanoUtils.tryExecute;
 import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 
 @SuppressWarnings({"unused", "UnusedReturnValue"})
@@ -60,32 +60,22 @@ public class MetricService extends Service {
     // Register event channels
     public static final int EVENT_METRIC_UPDATE = EventChannelRegister.registerChannelId("EVENT_METRIC_UPDATE");
 
-    public MetricService() {
-        super(null, false);
+    @Override
+    public void start() {
+        updateSystemMetrics(context);
+        final Optional<String> basePath = Optional.ofNullable(context.asString(CONFIG_METRIC_SERVICE_BASE_PATH)).or(() -> Optional.of("/metrics"));
+
+        prometheusPath = context.asStringOpt(CONFIG_METRIC_SERVICE_PROMETHEUS_PATH).orElseGet(() -> basePath.map(base -> base + "/prometheus").orElse(null));
+        dynamoPath = context.asStringOpt(CONFIG_METRIC_SERVICE_DYNAMO_PATH).orElseGet(() -> basePath.map(base -> base + "/dynamo").orElse(null));
+        influx = context.asStringOpt(CONFIG_METRIC_SERVICE_INFLUX_PATH).orElseGet(() -> basePath.map(base -> base + "/influx").orElse(null));
+        wavefront = context.asStringOpt(CONFIG_METRIC_SERVICE_WAVEFRONT_PATH).orElseGet(() -> basePath.map(base -> base + "/wavefront").orElse(null));
     }
 
     @Override
-    public void start(final Supplier<Context> contextSupplier) {
-        final AtomicReference<Optional<String>> basePath = new AtomicReference<>(Optional.empty());
-        isReady.set(false, true, run -> {
-            updateSystemMetrics(contextSupplier);
-            basePath.set(Optional.ofNullable(contextSupplier.get().asString( CONFIG_METRIC_SERVICE_BASE_PATH)).or(() -> Optional.of("/metrics")));
-
-            prometheusPath = contextSupplier.get().asStringOpt( CONFIG_METRIC_SERVICE_PROMETHEUS_PATH).orElseGet(() -> basePath.get().map(base -> base + "/prometheus").orElse(null));
-            dynamoPath = contextSupplier.get().asStringOpt(CONFIG_METRIC_SERVICE_DYNAMO_PATH).orElseGet(() -> basePath.get().map(base -> base + "/dynamo").orElse(null));
-            influx = contextSupplier.get().asStringOpt(CONFIG_METRIC_SERVICE_INFLUX_PATH).orElseGet(() -> basePath.get().map(base -> base + "/influx").orElse(null));
-            wavefront = contextSupplier.get().asStringOpt(CONFIG_METRIC_SERVICE_WAVEFRONT_PATH).orElseGet(() -> basePath.get().map(base -> base + "/wavefront").orElse(null));
-        });
-    }
-
-    @Override
-    public void stop(final Supplier<Context> contextSupplier) {
-        isReady.set(true, false, run -> {
-            metrics.gauges().clear();
-            metrics.timers().clear();
-            metrics.counters().clear();
-        });
-        //remove listener
+    public void stop() {
+        metrics.gauges().clear();
+        metrics.timers().clear();
+        metrics.counters().clear();
     }
 
     @Override
@@ -95,11 +85,10 @@ public class MetricService extends Service {
 
     @Override
     public void onEvent(final Event event) {
-        super.onEvent(event);
         event
             .ifPresentAck(Context.EVENT_APP_HEARTBEAT, Nano.class, this::updateMetrics)
             .ifPresentAck(EVENT_METRIC_UPDATE, MetricUpdate.class, this::updateMetric)
-            .ifPresent(Context.EVENT_CONFIG_CHANGE, TypeMap.class, map -> map.asOpt(LogLevel.class, Context.CONFIG_LOG_LEVEL).ifPresent(level -> metrics.gaugeSet("logger", 1, Map.of("level", level.name()))));
+            .ifPresent(Context.EVENT_CONFIG_CHANGE, TypeMap.class, map -> map.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).ifPresent(level -> metrics.gaugeSet("logger", 1, Map.of("level", level.name()))));
         addMetricsEndpoint(event);
 
     }
@@ -289,17 +278,17 @@ public class MetricService extends Service {
         });
     }
 
-    public void updateSystemMetrics(final Supplier<Context> context) {
+    public void updateSystemMetrics(final Context context) {
         final String numberRegex = "\\D";
         metrics.gaugeSet("application.pid", ProcessHandle.current().pid());
         updateJavaVersion(context);
         updateArch(context);
         updateOs(context);
-        tryExecute(context, () -> metrics.gaugeSet("system.version", Double.parseDouble(System.getProperty("os.version").replaceAll(numberRegex, ""))));
+        tryExecute(() -> context, () -> metrics.gaugeSet("system.version", Double.parseDouble(System.getProperty("os.version").replaceAll(numberRegex, ""))));
     }
 
-    public void updateOs(final Supplier<Context> context) {
-        tryExecute(context, () -> {
+    public void updateOs(final Context context) {
+        tryExecute(() -> context, () -> {
             String osName = System.getProperty("os.name");
             osName = osName == null ? "" : osName.toLowerCase();
             final List<String> osPrefixes = List.of("linux", "mac", "windows", "aix", "irix", "hp-ux", "os/400", "freebsd", "openbsd", "netbsd", "os/2", "solaris", "sunos", "mips", "z/os");
@@ -311,8 +300,8 @@ public class MetricService extends Service {
         });
     }
 
-    public void updateArch(final Supplier<Context> context) {
-        tryExecute(context, () -> {
+    public void updateArch(final Context context) {
+        tryExecute(() -> context, () -> {
             final String metricName = "system.arch.bit";
             String arch = System.getProperty("os.arch");
             arch = arch == null ? "" : arch.toLowerCase();
@@ -327,8 +316,8 @@ public class MetricService extends Service {
         });
     }
 
-    public void updateJavaVersion(final Supplier<Context> context) {
-        tryExecute(context, () -> {
+    public void updateJavaVersion(final Context context) {
+        tryExecute(() -> context, () -> {
             String version = System.getProperty("java.version");
             version = version.startsWith("1.") ? version.substring(2) : version;
             version = version.contains(".") ? version.substring(0, version.indexOf(".")) : version;

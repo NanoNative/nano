@@ -1,13 +1,12 @@
 package org.nanonative.nano.core;
 
+import berlin.yuna.typemap.logic.ArgsDecoder;
+import berlin.yuna.typemap.model.TypeMap;
 import org.nanonative.nano.core.model.Context;
-import org.nanonative.nano.helper.LockedBoolean;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.helper.logger.LogFormatRegister;
 import org.nanonative.nano.helper.logger.logic.NanoLogger;
 import org.nanonative.nano.helper.logger.model.LogLevel;
-import berlin.yuna.typemap.logic.ArgsDecoder;
-import berlin.yuna.typemap.model.TypeMap;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
@@ -17,23 +16,24 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.logging.Formatter;
 import java.util.stream.Collectors;
 
+import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
+import static java.lang.System.lineSeparator;
+import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.model.Context.APP_HELP;
 import static org.nanonative.nano.core.model.Context.CONFIG_ENV_PROD;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_FORMATTER;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.core.model.Context.CONTEXT_LOGGER_KEY;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.addConfig;
 import static org.nanonative.nano.helper.NanoUtils.readConfigFiles;
 import static org.nanonative.nano.helper.NanoUtils.resolvePlaceHolders;
-import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
-import static java.lang.System.lineSeparator;
-import static java.util.Optional.ofNullable;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_FORMATTER;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 /**
  * The abstract base class for {@link Nano} framework providing the core functionalities.
@@ -47,7 +47,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     protected final long createdAtMs;
     protected final NanoLogger logger;
     protected final Map<Integer, Set<Consumer<Event>>> listeners = new ConcurrentHashMap<>();
-    protected final LockedBoolean isReady = new LockedBoolean(true);
+    protected final AtomicBoolean isReady = new AtomicBoolean(true);
     protected final AtomicInteger eventCount = new AtomicInteger(0);
     @SuppressWarnings("java:S2386")
     public static final Map<Integer, String> EVENT_TYPES = new ConcurrentHashMap<>();

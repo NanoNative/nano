@@ -9,7 +9,6 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.nanonative.nano.core.config.TestConfig;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.logic.LogQueue;
 import org.nanonative.nano.helper.logger.model.LogLevel;
 import org.nanonative.nano.model.TestService;
 
@@ -18,18 +17,16 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.core.config.TestConfig.TEST_REPEAT;
 import static org.nanonative.nano.core.model.Context.APP_HELP;
 import static org.nanonative.nano.core.model.Context.APP_PARAMS;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.core.model.Context.CONFIG_PARALLEL_SHUTDOWN;
 import static org.nanonative.nano.core.model.Context.CONFIG_PROFILES;
 import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
-import static org.nanonative.nano.core.model.Context.CONTEXT_LOG_QUEUE_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_PARENT_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_TRACE_ID_KEY;
@@ -38,6 +35,7 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 import static org.nanonative.nano.model.TestService.TEST_EVENT;
 import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Execution(ExecutionMode.CONCURRENT)
 class NanoTest {
@@ -56,20 +54,20 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void stopViaMethod() {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
         assertThat(nano.stop(this.getClass()).waitForStop()).isNotNull().isEqualTo(nano);
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void stopViaEvent() {
         final Context actual = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL)).context(this.getClass()).sendEvent(EVENT_APP_SHUTDOWN, this);
         assertThat(actual).isNotNull();
         assertThat(actual.nano().stop(this.getClass()).waitForStop()).isNotNull().isEqualTo(actual.nano());
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void startMultipleTimes_shouldHaveNoIssues() {
         final TestService service1 = new TestService();
         final TestService service2 = new TestService();
@@ -82,14 +80,22 @@ class NanoTest {
         stopAndTestNano(nano2, service2);
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void shutdownServicesInParallelTest_Sync() throws InterruptedException {
         final CountDownLatch latch = new CountDownLatch(8);
-        final TestService testService = new TestService();
-        testService.doOnStop(context -> context.tryExecute(latch::countDown));
 
-        final Nano nano1 = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL), testService, testService, testService, testService);
-        final Nano nano2 = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL, CONFIG_PARALLEL_SHUTDOWN, true), testService, testService, testService, testService);
+        final Nano nano1 = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+        );
+        final Nano nano2 = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL, CONFIG_PARALLEL_SHUTDOWN, true),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+        );
         TestConfig.waitForStartUp(nano1, 4);
         TestConfig.waitForStartUp(nano2, 4);
         assertThat(nano1.stop(this.getClass())).isEqualTo(nano1);
@@ -102,7 +108,7 @@ class NanoTest {
         assertThat(nano2.waitForStop()).isNotNull().isEqualTo(nano2);
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void shutdownServicesInParallelWithExceptionTest() {
         final TestService testService = new TestService();
         testService.doOnStop(context -> {
@@ -115,7 +121,7 @@ class NanoTest {
     }
 
     @Disabled("No args constructor test is changing the log level of the test. Since the java logger is not stateless, it affects the other tests.")
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void constructorNoArgsTest() {
         final Nano noArgs = new Nano();
         assertThat(noArgs).isNotNull();
@@ -125,7 +131,7 @@ class NanoTest {
         assertThat(noArgs.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void constructor_withConfigTest() {
         final Nano config = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
         assertThat(config).isNotNull();
@@ -133,7 +139,7 @@ class NanoTest {
         assertThat(config.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void constructor_withConfigAndServiceTest() {
         final Nano configAndService = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL), new TestService());
         assertThat(configAndService).isNotNull();
@@ -142,7 +148,7 @@ class NanoTest {
         assertThat(configAndService.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void constructor_withConfigAndLazyServices_Test() {
         final Nano configAndService = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL), context -> List.of(new TestService()));
         assertThat(configAndService).isNotNull();
@@ -151,7 +157,7 @@ class NanoTest {
         assertThat(configAndService.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void constructor_withArgsAndLazyServices_Test() {
         final Nano lazyServices = new Nano(new String[]{"-" + CONFIG_LOG_LEVEL + "=" + TestConfig.TEST_LOG_LEVEL}, context -> List.of(new TestService()));
         assertThat(lazyServices).isNotNull();
@@ -160,7 +166,7 @@ class NanoTest {
         assertThat(lazyServices.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void constructor_withLazyServices_Test() {
         final Nano lazyServices = new Nano(context -> List.of(new TestService()), null, "-" + CONFIG_LOG_LEVEL + "=" + TestConfig.TEST_LOG_LEVEL);
         assertThat(lazyServices).isNotNull();
@@ -169,7 +175,7 @@ class NanoTest {
         assertThat(lazyServices.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void printParameterTest() {
         final Nano config = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL, APP_PARAMS, true, APP_HELP, true));
         assertThat(config).isNotNull();
@@ -177,7 +183,7 @@ class NanoTest {
         assertThat(config.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void toStringTest() {
         final Nano config = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL, APP_PARAMS, true));
         assertThat(config).isNotNull();
@@ -191,7 +197,7 @@ class NanoTest {
         assertThat(config.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void sendEvent_Sync() throws InterruptedException {
         final TestService service = new TestService().doOnEvent(Event::acknowledge);
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL), service);
@@ -221,7 +227,7 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void sendEventWithEventExecutionException_shouldNotInterrupt() {
         final TestService service = new TestService();
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, LogLevel.OFF), service);
@@ -247,7 +253,7 @@ class NanoTest {
         assertThat(nano.waitForStop()).isNotNull().isEqualTo(nano);
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void addAndRemoveEventListener() {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
         final Consumer<Event> listener = event -> {};
@@ -261,7 +267,7 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void runSchedulers() throws InterruptedException {
         final long timer = 64;
         final CountDownLatch scheduler1Triggered = new CountDownLatch(1);
@@ -279,7 +285,7 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void throwExceptionInsideScheduler() throws InterruptedException {
         final long timer = 64;
         final TestService service = new TestService();
@@ -302,7 +308,7 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void errorHandlerTest() throws InterruptedException {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
         final CountDownLatch trigger = new CountDownLatch(2);
@@ -325,18 +331,6 @@ class NanoTest {
         });
 
         assertThat(trigger.await(TestConfig.TEST_TIMEOUT, MILLISECONDS)).isTrue();
-        assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
-    }
-
-    @RepeatedTest(TestConfig.TEST_REPEAT)
-    void setLogQueue() {
-        final LogQueue logQueue = new LogQueue();
-        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL), logQueue);
-
-        assertThat(nano.context()).containsEntry(CONTEXT_LOG_QUEUE_KEY, logQueue);
-        assertThat(nano.context(NanoTest.class)).containsEntry(CONTEXT_LOG_QUEUE_KEY, logQueue);
-
-        TestConfig.waitForStartUp(nano, 1);
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 

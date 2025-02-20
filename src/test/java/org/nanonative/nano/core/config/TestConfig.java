@@ -1,17 +1,18 @@
 package org.nanonative.nano.core.config;
 
 import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.logger.model.LogLevel;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-import static org.nanonative.nano.helper.NanoUtils.tryExecute;
-import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.helper.NanoUtils.tryExecute;
+import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 
 public class TestConfig {
 
@@ -41,7 +42,16 @@ public class TestConfig {
     }
 
     public static Nano waitForStartUp(final Nano nano, final int numberOfServices) {
-        assertThat(waitForCondition(() -> nano.services().size() == numberOfServices, TEST_TIMEOUT)).isTrue();
+        assertThat(waitForCondition(
+            () -> nano.services().size() == numberOfServices
+                && nano.services().stream().allMatch(Service::isReady),
+            TEST_TIMEOUT))
+            .as("Expected %d services to be ready within %d ms, but got %d ready services: %s",
+                numberOfServices,
+                TEST_TIMEOUT,
+                nano.services().size(),
+                nano.services().stream().map(Service::name).toList())
+            .isTrue();
         return nano;
     }
 

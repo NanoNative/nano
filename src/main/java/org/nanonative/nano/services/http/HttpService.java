@@ -27,13 +27,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 import static berlin.yuna.typemap.logic.TypeConverter.collectionOf;
 
 public class HttpService extends Service {
     protected HttpServer server;
-    protected Context context;
 
     // Register configurations
     public static final String CONFIG_SERVICE_HTTP_PORT = ConfigRegister.registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpService.class.getSimpleName() + ")");
@@ -46,10 +44,6 @@ public class HttpService extends Service {
     // Register event channels
     public static final int EVENT_HTTP_REQUEST = EventChannelRegister.registerChannelId("HTTP_REQUEST");
     public static final int EVENT_HTTP_REQUEST_UNHANDLED = EventChannelRegister.registerChannelId("HTTP_REQUEST_UNHANDLED");
-
-    public HttpService() {
-        super(null, false);
-    }
 
     public InetSocketAddress address() {
         return server == null ? null : server.getAddress();
@@ -67,54 +61,49 @@ public class HttpService extends Service {
     protected static final Lock STARTUP_LOCK = new ReentrantLock();
 
     @Override
-    public void stop(final Supplier<Context> contextSub) {
-        isReady.set(true, false, state -> {
-            server.stop(0);
-            logger.info(() -> "[{}] port [{}] stopped", name(), (server == null ? null : server.getAddress().getPort()));
-            server = null;
-        });
+    public void stop() {
+        server.stop(0);
+        log.info(() -> "[{}] port [{}] stopped", name(), (server == null ? null : server.getAddress().getPort()));
+        server = null;
     }
 
     @Override
-    public void start(final Supplier<Context> contextSub) {
-        isReady.set(false, true, state -> {
-            context = contextSub.get().newContext(HttpService.class);
-            STARTUP_LOCK.lock();
-            final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
-            context.put(CONFIG_SERVICE_HTTP_PORT, port);
-            handleHttps(context);
-            try {
-                server = HttpServer.create(new InetSocketAddress(port), 0);
-                server.setExecutor(context.nano().threadPool());
-                server.createContext("/", exchange -> {
-                    final HttpObject request = new HttpObject(exchange);
-                    try {
-                        final AtomicBoolean internalError = new AtomicBoolean(false);
-                        context.sendEventReturn(EVENT_HTTP_REQUEST, request).peek(setError(internalError)).responseOpt(HttpObject.class).ifPresentOrElse(
+    public void start() {
+        STARTUP_LOCK.lock();
+        final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
+        context.put(CONFIG_SERVICE_HTTP_PORT, port);
+        handleHttps(context);
+        try {
+            server = HttpServer.create(new InetSocketAddress(port), 0);
+            server.setExecutor(context.nano().threadPool());
+            server.createContext("/", exchange -> {
+                final HttpObject request = new HttpObject(exchange);
+                try {
+                    final AtomicBoolean internalError = new AtomicBoolean(false);
+                    context.sendEventReturn(EVENT_HTTP_REQUEST, request).peek(setError(internalError)).responseOpt(HttpObject.class).ifPresentOrElse(
+                        response -> sendResponse(exchange, request, response),
+                        () -> context.sendEventReturn(EVENT_HTTP_REQUEST_UNHANDLED, request).responseOpt(HttpObject.class).ifPresentOrElse(
                             response -> sendResponse(exchange, request, response),
-                            () -> context.sendEventReturn(EVENT_HTTP_REQUEST_UNHANDLED, request).responseOpt(HttpObject.class).ifPresentOrElse(
-                                response -> sendResponse(exchange, request, response),
-                                () -> sendResponse(exchange, request, new HttpObject()
-                                    .statusCode(internalError.get() ? 500 : 404)
-                                    .bodyT(new LinkedTypeMap().putR("message", internalError.get() ? "Internal Server Error" : "Not Found").putR("timestamp", System.currentTimeMillis()))
-                                    .contentType(ContentType.APPLICATION_PROBLEM_JSON))
-                            )
-                        );
-                    } catch (final Exception e) {
-                        context.sendEventReturn(Context.EVENT_APP_UNHANDLED, new Unhandled(context, request, e)).responseOpt(HttpObject.class).ifPresentOrElse(
-                            response -> sendResponse(exchange, request, response),
-                            () -> new HttpObject().statusCode(500).body("Internal Server Error".getBytes()).contentType(ContentType.APPLICATION_PROBLEM_JSON)
-                        );
-                    }
-                });
-                server.start();
-                logger.info(() -> "[{}] starting on port [{}]", name(), port);
-            } catch (final IOException e) {
-                logger.error(e, () -> "[{}] failed to start with port [{}]", name(), port);
-            } finally {
-                STARTUP_LOCK.unlock();
-            }
-        });
+                            () -> sendResponse(exchange, request, new HttpObject()
+                                .statusCode(internalError.get() ? 500 : 404)
+                                .bodyT(new LinkedTypeMap().putR("message", internalError.get() ? "Internal Server Error" : "Not Found").putR("timestamp", System.currentTimeMillis()))
+                                .contentType(ContentType.APPLICATION_PROBLEM_JSON))
+                        )
+                    );
+                } catch (final Exception e) {
+                    context.sendEventReturn(Context.EVENT_APP_UNHANDLED, new Unhandled(context, request, e)).responseOpt(HttpObject.class).ifPresentOrElse(
+                        response -> sendResponse(exchange, request, response),
+                        () -> new HttpObject().statusCode(500).body("Internal Server Error".getBytes()).contentType(ContentType.APPLICATION_PROBLEM_JSON)
+                    );
+                }
+            });
+            server.start();
+            log.info(() -> "[{}] starting on port [{}]", name(), port);
+        } catch (final IOException e) {
+            log.error(e, () -> "[{}] failed to start with port [{}]", name(), port);
+        } finally {
+            STARTUP_LOCK.unlock();
+        }
     }
 
     @Override
@@ -125,7 +114,6 @@ public class HttpService extends Service {
                 return;
             event.response(((HttpClient) context.computeIfAbsent(HttpObject.CONTEXT_HTTP_CLIENT_KEY, value -> new HttpClient())).send(request));
         });
-        super.onEvent(event);
     }
 
     private static void handleHttps(final Context context) {
