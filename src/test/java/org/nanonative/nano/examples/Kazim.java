@@ -2,7 +2,7 @@ package org.nanonative.nano.examples;
 
 import org.junit.jupiter.api.Disabled;
 import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.helper.logger.model.LogLevel;
+import org.nanonative.nano.services.logging.model.LogLevel;
 import org.nanonative.nano.services.http.HttpService;
 import org.nanonative.nano.services.metric.logic.MetricService;
 

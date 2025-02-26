@@ -1,10 +1,5 @@
 package org.nanonative.nano.model;
 
-import org.nanonative.nano.core.model.Context;
-import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.services.http.model.HttpHeaders;
-import org.nanonative.nano.services.http.model.HttpMethod;
-import org.nanonative.nano.services.http.model.HttpObject;
 import berlin.yuna.typemap.model.TypeList;
 import berlin.yuna.typemap.model.TypeMap;
 import com.sun.net.httpserver.Headers;
@@ -12,6 +7,11 @@ import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpPrincipal;
 import org.junit.jupiter.api.Test;
+import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.http.model.HttpHeaders;
+import org.nanonative.nano.services.http.model.HttpMethod;
+import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -24,6 +24,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static java.nio.charset.StandardCharsets.US_ASCII;
+import static java.util.Locale.ENGLISH;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_JSON;
 import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PDF;
@@ -45,9 +49,6 @@ import static org.nanonative.nano.services.http.model.HttpHeaders.CONTENT_TYPE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.HOST;
 import static org.nanonative.nano.services.http.model.HttpHeaders.REFERER;
 import static org.nanonative.nano.services.http.model.HttpHeaders.USER_AGENT;
-import static java.nio.charset.StandardCharsets.US_ASCII;
-import static java.util.Locale.ENGLISH;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.nanonative.nano.services.http.model.HttpHeaders.VARY;
 
 class HttpObjectTest {
@@ -81,7 +82,7 @@ class HttpObjectTest {
 
     @Test
     void testRespondResponse() {
-        final Event event = new Event(EVENT_HTTP_REQUEST, Context.createRootContext(HttpObjectTest.class), new HttpObject().methodType(HttpMethod.GET).path("/create"), null);
+        final Event event = eventOf(Context.createRootContext(HttpObjectTest.class), EVENT_HTTP_REQUEST).payload(() -> new HttpObject().methodType(HttpMethod.GET).path("/create"));
 
         event.payloadOpt(HttpObject.class)
             .filter(HttpObject::isMethodGet)
@@ -445,7 +446,7 @@ class HttpObjectTest {
         assertThat(nullTest.bodyAsString()).isEmpty();
         assertThat(nullTest.bodyAsJson()).isEqualTo(new TypeList().addR(""));
         assertThat(nullTest.bodyAsXml()).isNotNull();
-        assertThat(nullTest.bodyAsJson().asString( "key")).isNull();
+        assertThat(nullTest.bodyAsJson().asString("key")).isNull();
 
         // Byte[] body
         final HttpObject byteTest = new HttpObject().body(bodyString.getBytes(Charset.defaultCharset()));
@@ -453,7 +454,7 @@ class HttpObjectTest {
         assertThat(byteTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(byteTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(byteTest.bodyAsXml()).isNotNull();
-        assertThat(byteTest.bodyAsJson().asString( "key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsJson().asString("key")).isEqualTo("value");
 
         // String body
         final HttpObject stringTest = new HttpObject().body(bodyString);
@@ -461,7 +462,7 @@ class HttpObjectTest {
         assertThat(stringTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(stringTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(stringTest.bodyAsXml()).isNotNull();
-        assertThat(stringTest.bodyAsJson().asString( "key")).isEqualTo("value");
+        assertThat(stringTest.bodyAsJson().asString("key")).isEqualTo("value");
 
         // JSON body
         final HttpObject jsonTest = new HttpObject().body(bodyJson);
@@ -469,7 +470,7 @@ class HttpObjectTest {
         assertThat(jsonTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(jsonTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(jsonTest.bodyAsXml()).isNotNull();
-        assertThat(jsonTest.bodyAsJson().asString( "key")).isEqualTo("value");
+        assertThat(jsonTest.bodyAsJson().asString("key")).isEqualTo("value");
 
         // HttpExchange body
         final HttpObject exchangeTest = new HttpObject(createMockHttpExchange("GET", "/test", new Headers(), bodyString));
@@ -477,7 +478,7 @@ class HttpObjectTest {
         assertThat(exchangeTest.bodyAsString()).isEqualTo(bodyString);
         assertThat(exchangeTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(exchangeTest.bodyAsXml()).isNotNull();
-        assertThat(exchangeTest.bodyAsJson().asString( "key")).isEqualTo("value");
+        assertThat(exchangeTest.bodyAsJson().asString("key")).isEqualTo("value");
 
         // General
         assertThat(new HttpObject().bodyAsJson()).isEqualTo(new TypeList().addR(""));
@@ -518,8 +519,8 @@ class HttpObjectTest {
         assertThat(httpObject1.pathMatch("/aa/{value1}/cc/{value2}")).isTrue();
         assertThat(httpObject1.pathMatch("/aa/{value1}/cc/{value2}/")).isTrue();
         assertThat(httpObject1.pathParam("value1")).isEqualTo("bb");
-        assertThat(httpObject1.pathParams().asString( "value2")).isEqualTo("dd");
-        assertThat(httpObject1.queryParams().asInt( "myNumber")).isEqualTo(2468);
+        assertThat(httpObject1.pathParams().asString("value2")).isEqualTo("dd");
+        assertThat(httpObject1.queryParams().asInt("myNumber")).isEqualTo(2468);
 
         // with ending /
         final HttpObject httpObject2 = new HttpObject().path("/aa/bb/cc/dd/?myNumber=2468");
@@ -536,8 +537,8 @@ class HttpObjectTest {
         assertThat(httpObject2.pathMatch("/aa/{value1}/cc/{value2}")).isTrue();
         assertThat(httpObject2.pathMatch("/aa/{value1}/cc/{value2}/")).isTrue();
         assertThat(httpObject2.pathParam("value1")).isEqualTo("bb");
-        assertThat(httpObject2.pathParams().asString( "value2")).isEqualTo("dd");
-        assertThat(httpObject2.queryParams().asInt( "myNumber")).isEqualTo(2468);
+        assertThat(httpObject2.pathParams().asString("value2")).isEqualTo("dd");
+        assertThat(httpObject2.queryParams().asInt("myNumber")).isEqualTo(2468);
 
         // General
         assertThat(new HttpObject().path(null).pathMatch("/aa/bb/cc/dd")).isFalse();
@@ -578,7 +579,7 @@ class HttpObjectTest {
             assertThat(httpObject.header("mynumber")).isEqualTo("123");
             assertThat(httpObject.header("invalid")).isNull();
             assertThat(httpObject.header(null)).isNull();
-            assertThat(httpObject.headerMap().asInt( "mynumber")).isEqualTo(123);
+            assertThat(httpObject.headerMap().asInt("mynumber")).isEqualTo(123);
             assertThat(httpObject.contentTypes()).containsExactly(APPLICATION_JSON, TEXT_PLAIN);
             assertThat(httpObject.accepts()).containsExactly(APPLICATION_PDF, APPLICATION_JSON);
         }

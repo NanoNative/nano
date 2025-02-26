@@ -1,6 +1,6 @@
 package org.nanonative.nano.model;
 
-import org.nanonative.nano.core.config.TestConfig;
+import berlin.yuna.typemap.model.TypeMapI;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.EventChannelRegister;
@@ -12,8 +12,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
+import static java.lang.System.lineSeparator;
 import static java.util.Optional.ofNullable;
+import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_HEARTBEAT;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 
 public class TestService extends Service {
@@ -44,7 +48,7 @@ public class TestService extends Service {
     }
 
     public Event getEvent(final int channelId, final Function<Event, Boolean> condition) {
-        return getEvent(channelId, condition, TestConfig.TEST_TIMEOUT);
+        return getEvent(channelId, condition, TEST_TIMEOUT);
     }
 
     public Event getEvent(final int channelId, final long timeoutMs) {
@@ -66,6 +70,11 @@ public class TestService extends Service {
             }
             , timeoutMs
         );
+        if (result.get() == null)
+            throw new AssertionError("Event not found"
+                + " channel [" + EventChannelRegister.eventNameOf(channelId) + "]"
+                + " events [" + lineSeparator() + events.stream().filter(event -> event.channelId() != EVENT_APP_HEARTBEAT).map(Event::toString).collect(Collectors.joining(lineSeparator())) + lineSeparator() + "]"
+            );
         return result.get();
     }
 
@@ -152,5 +161,10 @@ public class TestService extends Service {
     public void onEvent(final Event event) {
         events.add(event);
         ofNullable(doOnEvent.get()).ifPresent(consumer -> consumer.accept(event));
+    }
+
+    @Override
+    public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
+
     }
 }

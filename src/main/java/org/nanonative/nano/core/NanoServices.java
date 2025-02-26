@@ -8,9 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.LogRecord;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
+import static java.util.logging.Level.SEVERE;
+import static java.util.logging.Level.WARNING;
 
 /**
  * The abstract base class for {@link Nano} framework providing {@link Service} handling functionalities.
@@ -87,7 +90,7 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
             try {
                 context.runAwait(services.stream().map(service -> (ExRunnable) () -> unregisterService(context, service)).toArray(ExRunnable[]::new));
             } catch (final Exception err) {
-                logger.fatal(err, () -> "Service [{}] shutdown error. Looks like the Death Star blew up again.", Service.class.getSimpleName());
+                context.fatal(err, () -> "Service [{}] shutdown error. Looks like the Death Star blew up again.", Service.class.getSimpleName());
                 Thread.currentThread().interrupt();
             }
         } else {
@@ -124,7 +127,7 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
                 if (service.isReadyState().compareAndSet(true, false))
                     service.stop();
             } catch (final Exception e) {
-                logger.warn(e, () -> "Stop [{}] error. Somebody call the Ghostbusters!", service.name());
+                context.warn(e, () -> "Stop [{}] error. Somebody call the Ghostbusters!", service.name());
             }
         }
         return (T) this;

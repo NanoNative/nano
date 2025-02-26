@@ -20,7 +20,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
 import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
-import static org.nanonative.nano.core.model.Context.CONTEXT_LOGGER_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_TRACE_ID_KEY;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_HEARTBEAT;
@@ -40,10 +39,6 @@ class ContextTest {
         final Consumer<Event> myListener = event -> {};
         assertContextBehaviour(context);
 
-        // Verify logger
-        assertThat(context.logger().javaLogger().getName()).isEqualTo(Nano.class.getCanonicalName());
-        assertThat(context.initLogger().javaLogger().getName()).isEqualTo(Nano.class.getCanonicalName());
-
         // Verify event listener
         assertThat(nano.listeners().get(EVENT_APP_HEARTBEAT)).hasSize(1);
         assertThat(context.subscribeEvent(EVENT_APP_HEARTBEAT, myListener)).isEqualTo(context);
@@ -55,21 +50,19 @@ class ContextTest {
         final CountDownLatch eventLatch = new CountDownLatch(4);
         final int channelId = context.registerChannelId("TEST_EVENT");
         context.subscribeEvent(channelId, event -> eventLatch.countDown());
-        context.sendEvent(channelId, "AA");
-        final Event event = context.sendEventReturn(channelId, "BB");
-        context.broadcastEvent(channelId, "CC");
-        context.broadcastEventReturn(channelId, "DD");
+        context.sendEvent(channelId, () -> "AA");
+        final Event event = context.sendEventR(channelId, ()-> "BB");
+        context.broadcastEvent(channelId, ()-> "CC");
+        context.broadcastEventR(channelId, ()-> "DD");
         assertThat(event).isNotNull();
         assertThat(event.payload()).isEqualTo("BB");
-        assertThat(event.name()).isEqualTo("TEST_EVENT");
+        assertThat(event.channel()).isEqualTo("TEST_EVENT");
         assertThat(event.channelId()).isEqualTo(channelId);
         assertThat(event.context()).isEqualTo(context);
         assertThat(event.isAcknowledged()).isFalse();
         assertThat(eventLatch.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThat(eventLatch.getCount()).isZero();
         assertThat(channelId).isEqualTo(TEST_CHANNEL_ID);
-        assertThat(context.channelIdOf("TEST_EVENT")).contains(channelId);
-        assertThat(context.eventNameOf(channelId)).isEqualTo("TEST_EVENT");
 
         // Verify services
         final TestService testService = new TestService();
@@ -185,10 +178,6 @@ class ContextTest {
         assertThat(subContext.traceId(1)).isNotEqualTo(subContext.traceId()).isEqualTo(context.traceId());
         assertThat(subContext.traceId(99)).isEqualTo(subContext.traceId()).isNotEqualTo(context.traceId());
         assertThat(subContext.traceIds()).containsExactlyInAnyOrder(context.traceId(), subContext.traceId());
-        assertThat(context).doesNotContainKey(CONTEXT_LOGGER_KEY);
-        assertThat(subContext.logger()).isNotNull();
-        assertThat(context).containsKey(CONTEXT_LOGGER_KEY);
-        assertThat(subContext.logger().level()).isNotNull().isEqualTo(subContext.logLevel());
     }
 
     @RepeatedTest(TestConfig.TEST_REPEAT)
@@ -197,8 +186,7 @@ class ContextTest {
         assertThat(context).hasToString(
             "Context{size=" + context.size()
                 + ", class=" + this.getClass().getSimpleName()
-                + ", loglevel=null" +
-                "}"
+                + "}"
         );
 
     }

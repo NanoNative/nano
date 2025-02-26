@@ -1,17 +1,16 @@
 package org.nanonative.nano.services.metric.logic;
 
 import berlin.yuna.typemap.model.TypeMap;
+import berlin.yuna.typemap.model.TypeMapI;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.NanoThread;
 import org.nanonative.nano.core.model.Service;
-import org.nanonative.nano.helper.config.ConfigRegister;
-import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.model.LogLevel;
 import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpHeaders;
 import org.nanonative.nano.services.http.model.HttpObject;
+import org.nanonative.nano.services.logging.model.LogLevel;
 import org.nanonative.nano.services.metric.model.MetricCache;
 import org.nanonative.nano.services.metric.model.MetricUpdate;
 
@@ -38,6 +37,8 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.nanonative.nano.helper.NanoUtils.tryExecute;
+import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
+import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
 import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
@@ -51,24 +52,18 @@ public class MetricService extends Service {
     protected String wavefront;
 
     // Register configurations
-    public static final String CONFIG_METRIC_SERVICE_BASE_PATH = ConfigRegister.registerConfig("app_service_metrics_base_url", "Base path for the metric service");
-    public static final String CONFIG_METRIC_SERVICE_PROMETHEUS_PATH = ConfigRegister.registerConfig("app_service_prometheus_metrics_url", "Prometheus path for the metric service");
-    public static final String CONFIG_METRIC_SERVICE_INFLUX_PATH = ConfigRegister.registerConfig("app_service_influx_metrics_url", "Influx path for the metric service");
-    public static final String CONFIG_METRIC_SERVICE_WAVEFRONT_PATH = ConfigRegister.registerConfig("app_service_wavefront_metrics_url", "Wavefront path for the metric service");
-    public static final String CONFIG_METRIC_SERVICE_DYNAMO_PATH = ConfigRegister.registerConfig("app_service_dynamo_metrics_url", "Dynamo path for the metric service");
+    public static final String CONFIG_METRIC_SERVICE_BASE_PATH = registerConfig("app_service_metrics_base_url", "Base path for the metric service");
+    public static final String CONFIG_METRIC_SERVICE_PROMETHEUS_PATH = registerConfig("app_service_prometheus_metrics_url", "Prometheus path for the metric service");
+    public static final String CONFIG_METRIC_SERVICE_INFLUX_PATH = registerConfig("app_service_influx_metrics_url", "Influx path for the metric service");
+    public static final String CONFIG_METRIC_SERVICE_WAVEFRONT_PATH = registerConfig("app_service_wavefront_metrics_url", "Wavefront path for the metric service");
+    public static final String CONFIG_METRIC_SERVICE_DYNAMO_PATH = registerConfig("app_service_dynamo_metrics_url", "Dynamo path for the metric service");
 
     // Register event channels
-    public static final int EVENT_METRIC_UPDATE = EventChannelRegister.registerChannelId("EVENT_METRIC_UPDATE");
+    public static final int EVENT_METRIC_UPDATE = registerChannelId("EVENT_METRIC_UPDATE");
 
     @Override
     public void start() {
         updateSystemMetrics(context);
-        final Optional<String> basePath = Optional.ofNullable(context.asString(CONFIG_METRIC_SERVICE_BASE_PATH)).or(() -> Optional.of("/metrics"));
-
-        prometheusPath = context.asStringOpt(CONFIG_METRIC_SERVICE_PROMETHEUS_PATH).orElseGet(() -> basePath.map(base -> base + "/prometheus").orElse(null));
-        dynamoPath = context.asStringOpt(CONFIG_METRIC_SERVICE_DYNAMO_PATH).orElseGet(() -> basePath.map(base -> base + "/dynamo").orElse(null));
-        influx = context.asStringOpt(CONFIG_METRIC_SERVICE_INFLUX_PATH).orElseGet(() -> basePath.map(base -> base + "/influx").orElse(null));
-        wavefront = context.asStringOpt(CONFIG_METRIC_SERVICE_WAVEFRONT_PATH).orElseGet(() -> basePath.map(base -> base + "/wavefront").orElse(null));
     }
 
     @Override
@@ -91,6 +86,16 @@ public class MetricService extends Service {
             .ifPresent(Context.EVENT_CONFIG_CHANGE, TypeMap.class, map -> map.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).ifPresent(level -> metrics.gaugeSet("logger", 1, Map.of("level", level.name()))));
         addMetricsEndpoint(event);
 
+    }
+
+    @Override
+    public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
+        final Optional<String> basePath = Optional.of(merged.asStringOpt(CONFIG_METRIC_SERVICE_BASE_PATH).orElseGet(() -> "/metrics"));
+
+        prometheusPath = merged.asStringOpt(CONFIG_METRIC_SERVICE_PROMETHEUS_PATH).orElseGet(() -> basePath.map(base -> base + "/prometheus").orElse(null));
+        dynamoPath = merged.asStringOpt(CONFIG_METRIC_SERVICE_DYNAMO_PATH).orElseGet(() -> basePath.map(base -> base + "/dynamo").orElse(null));
+        influx = merged.asStringOpt(CONFIG_METRIC_SERVICE_INFLUX_PATH).orElseGet(() -> basePath.map(base -> base + "/influx").orElse(null));
+        wavefront = merged.asStringOpt(CONFIG_METRIC_SERVICE_WAVEFRONT_PATH).orElseGet(() -> basePath.map(base -> base + "/wavefront").orElse(null));
     }
 
     protected void addMetricsEndpoint(final Event event) {

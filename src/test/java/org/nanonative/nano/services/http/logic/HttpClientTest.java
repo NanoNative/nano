@@ -1,11 +1,5 @@
 package org.nanonative.nano.services.http.logic;
 
-import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.core.model.Context;
-import org.nanonative.nano.helper.NanoUtils;
-import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.services.http.HttpService;
-import org.nanonative.nano.services.http.model.HttpObject;
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -13,6 +7,12 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.helper.NanoUtils;
+import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.http.HttpService;
+import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.net.ConnectException;
 import java.net.URI;
@@ -24,9 +24,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
+import static java.net.http.HttpClient.Version.HTTP_1_1;
+import static java.net.http.HttpClient.Version.HTTP_2;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.entry;
 import static org.nanonative.nano.core.config.TestConfig.TEST_LOG_LEVEL;
 import static org.nanonative.nano.core.config.TestConfig.TEST_REPEAT;
-import static org.nanonative.nano.core.model.NanoThread.VIRTUAL_THREAD_POOL;
+import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS;
 import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS;
 import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_MAX_RETRIES;
@@ -42,11 +47,6 @@ import static org.nanonative.nano.services.http.model.HttpHeaders.CONTENT_RANGE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.CONTENT_TYPE;
 import static org.nanonative.nano.services.http.model.HttpHeaders.USER_AGENT;
 import static org.nanonative.nano.services.http.model.HttpMethod.GET;
-import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
-import static java.net.http.HttpClient.Version.HTTP_1_1;
-import static java.net.http.HttpClient.Version.HTTP_2;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.entry;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Execution(ExecutionMode.CONCURRENT)
@@ -73,7 +73,7 @@ public class HttpClientTest {
         assertThat(httpClient).isNotNull();
         assertThat(httpClient.context()).isNull();
         assertThat(httpClient.client()).isNotNull();
-        assertThat(httpClient.client().executor()).contains(VIRTUAL_THREAD_POOL);
+        assertThat(httpClient.client().executor()).contains(GLOBAL_THREAD_POOL);
         assertThat(httpClient.readTimeoutMs()).isEqualTo(10000);
         assertThat(httpClient.connectionTimeoutMs()).isEqualTo(5000L);
         assertThat(httpClient.followRedirects()).isTrue();
@@ -105,7 +105,7 @@ public class HttpClientTest {
         assertThat(httpClient).isNotNull();
         assertThat(httpClient.context()).isEqualTo(context);
         assertThat(httpClient.client()).isNotNull();
-        assertThat(httpClient.client().executor()).contains(VIRTUAL_THREAD_POOL);
+        assertThat(httpClient.client().executor()).contains(GLOBAL_THREAD_POOL);
         assertThat(httpClient.readTimeoutMs()).isEqualTo(10000);
         assertThat(httpClient.connectionTimeoutMs()).isEqualTo(5000L);
         assertThat(httpClient.followRedirects()).isTrue();
@@ -149,7 +149,7 @@ public class HttpClientTest {
     @RepeatedTest(TEST_REPEAT)
     void sendRequestViaEvent() {
         final HttpObject response = nano.context(HttpClientTest.class)
-            .sendEventReturn(EVENT_HTTP_REQUEST, new HttpObject().path(serverUrl).body("{Hällo Wörld?!}"))
+            .sendEventR(EVENT_HTTP_REQUEST, () -> new HttpObject().path(serverUrl).body("{Hällo Wörld?!}"))
             .response(HttpObject.class);
         assertThat(response.failure()).isNull();
         assertThat(response.bodyAsString()).isEqualTo("{Hällo Wörld?!}");

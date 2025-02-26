@@ -1,5 +1,6 @@
 package org.nanonative.nano.core.model;
 
+import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.helper.ExRunnable;
 import org.nanonative.nano.helper.LockedBoolean;
 
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
+import static org.nanonative.nano.core.NanoThreads.runAsync;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 import static java.util.Optional.ofNullable;
 
@@ -27,7 +29,7 @@ public class NanoThread {
     protected final Context context;
     protected final LockedBoolean isComplete = new LockedBoolean();
 
-    public static final ExecutorService VIRTUAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
+    public static final ExecutorService GLOBAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
     protected static final AtomicLong activeNanoThreadCount = new AtomicLong(0);
 
     public NanoThread() {
@@ -66,8 +68,8 @@ public class NanoThread {
     }
 
     @SuppressWarnings("java:S1181") // Throwable is caught
-    public NanoThread run(final ExecutorService executor, final Supplier<Context> context, final ExRunnable task) {
-        (executor != null ? executor : VIRTUAL_THREAD_POOL).submit(() -> {
+    public NanoThread run(final Nano nano, final Supplier<Context> context, final ExRunnable task) {
+        runAsync(() -> {
             try {
                 activeNanoThreadCount.incrementAndGet();
                 task.run();

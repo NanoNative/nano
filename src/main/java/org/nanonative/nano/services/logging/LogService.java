@@ -1,32 +1,33 @@
 package org.nanonative.nano.services.logging;
 
-import berlin.yuna.typemap.model.TypeMap;
+import berlin.yuna.typemap.model.LinkedTypeMap;
+import berlin.yuna.typemap.model.TypeMapI;
 import org.nanonative.nano.core.model.Service;
-import org.nanonative.nano.helper.config.ConfigRegister;
-import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.LogFormatRegister;
-import org.nanonative.nano.helper.logger.logic.LogFormatterConsole;
-import org.nanonative.nano.helper.logger.model.LogLevel;
+import org.nanonative.nano.services.logging.model.LogLevel;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import java.util.logging.Formatter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
-import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
+import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
+import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
 
 public class LogService extends Service {
 
     // CONFIG
-    public static final String CONFIG_LOG_LEVEL = ConfigRegister.registerConfig("app_log_level", "Log level for the application (see " + LogLevel.class.getSimpleName() + ")");
-    public static final String CONFIG_LOG_FORMATTER = ConfigRegister.registerConfig("app_log_formatter", "Log formatter (see " + LogFormatRegister.class.getSimpleName() + ")");
-    public static final String CONFIG_LOG_EXCLUDE_PATTERNS = ConfigRegister.registerConfig("app_log_excludes", "Exclude patterns for logger names");
+    public static final String CONFIG_LOG_LEVEL = registerConfig("app_log_level", "Log level for the application (see " + LogLevel.class.getSimpleName() + ")");
+    public static final String CONFIG_LOG_FORMATTER = registerConfig("app_log_formatter", "Log formatter (see " + LogFormatRegister.class.getSimpleName() + ")");
+    public static final String CONFIG_LOG_EXCLUDE_PATTERNS = registerConfig("app_log_excludes", "Exclude patterns for logger names");
 
     // CHANNEL
-    public static final int EVENT_LOGGING = EventChannelRegister.registerChannelId("EVENT_LOGGING");
+    public static final int EVENT_LOGGING = registerChannelId("EVENT_LOGGING");
 
+    public static final AtomicInteger MAX_LOG_NAME_LENGTH = new AtomicInteger(10);
     protected List<String> excludePatterns;
     protected Formatter logFormatter = new LogFormatterConsole();
     protected Level level = Level.FINE;
@@ -48,12 +49,16 @@ public class LogService extends Service {
 
     @Override
     public void onEvent(final Event event) {
-        event.ifPresentAck(EVENT_CONFIG_CHANGE, TypeMap.class, config -> {
-            config.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).map(LogLevel::toJavaLogLevel).ifPresent(this::level);
-            config.asOpt(Formatter.class, CONFIG_LOG_FORMATTER).ifPresent(this::formatter);
-            config.asStringOpt(CONFIG_LOG_EXCLUDE_PATTERNS).map(patterns -> Arrays.stream(patterns.split(",")).map(String::trim).toList()).ifPresent(patterns -> excludePatterns = patterns);
-        });
-        event.ifPresentAck(EVENT_LOGGING, LogRecord.class, this::log);
+        event.filter(this::isLoggable).ifPresent(
+            event1 -> context.run(() -> event1.ifPresentAck(EVENT_LOGGING, LogRecord.class, this::log))
+        );
+    }
+
+    @Override
+    public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
+        merged.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).map(LogLevel::toJavaLogLevel).ifPresent(this::level);
+        merged.asOpt(Formatter.class, CONFIG_LOG_FORMATTER).ifPresent(this::formatter);
+        excludePatterns = merged.asStringOpt(CONFIG_LOG_EXCLUDE_PATTERNS).map(patterns -> Arrays.stream(patterns.split(",")).map(String::trim).toList()).orElseGet(List::of);
     }
 
     public synchronized LogService level(final Level level) {
@@ -74,21 +79,44 @@ public class LogService extends Service {
         return this.logFormatter;
     }
 
-    public void log(final LogRecord logRecord) {
-        if (isLoggable(logRecord)) {
-            context.run(() -> {
-                final String formattedMessage = logFormatter.format(logRecord);
-                if (logRecord.getLevel().intValue() < Level.WARNING.intValue()) {
-                    System.out.println(formattedMessage);
-                } else {
-                    System.err.println(formattedMessage);
-                }
-            });
-        }
+    public void log(final Supplier<LogRecord> logRecord) {
+        context.run(() -> log(logRecord.get()));
+    }
+
+    protected void log(final LogRecord logRecord) {
+        context.run(() -> {
+            final String formattedMessage = logFormatter.format(logRecord);
+            if (logRecord.getLevel().intValue() < Level.WARNING.intValue()) {
+                System.out.print(formattedMessage);
+            } else {
+                System.err.print(formattedMessage);
+            }
+        });
+    }
+
+    private boolean isLoggable(final Event event) {
+        return event.channelId() == EVENT_LOGGING && event.asOpt(Level.class, "level")
+            .filter(level -> level.intValue() > this.level.intValue())
+            .map(level -> event.asString("name"))
+            .filter(name -> excludePatterns == null || excludePatterns.stream().noneMatch(name::contains))
+            .isPresent();
     }
 
     private boolean isLoggable(final LogRecord logRecord) {
         if (logRecord.getLevel().intValue() > level.intValue()) return false;
         return excludePatterns == null || excludePatterns.stream().noneMatch(exclusion -> logRecord.getLoggerName().contains(exclusion));
+    }
+
+    @Override
+    public String toString() {
+        return new LinkedTypeMap()
+            .putR("name", this.getClass().getSimpleName())
+            .putR("level", level)
+            .putR("isReady", isReady.get())
+            .putR("context", context.size())
+            .putR("excludePatterns", excludePatterns != null ? excludePatterns.size() : 0)
+            .putR("logFormatter", logFormatter.getClass().getSimpleName())
+            .putR("MAX_LOG_NAME_LENGTH", MAX_LOG_NAME_LENGTH.get())
+            .toJson();
     }
 }

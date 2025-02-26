@@ -22,7 +22,7 @@ public class Yuna {
         final Nano nano = new Nano(new HttpService());
 
         final Date myConfigValue = nano.context().asDate("unix-timestamp");
-        nano.logger().info(() -> "Config value converted to date [{}]", myConfigValue);
+        nano.context().info(() -> "Config value converted to date [{}]", myConfigValue);
 
         nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
             .filter(HttpObject::isMethodGet)
@@ -37,9 +37,9 @@ public class Yuna {
 
 
         final Context context = nano.context(Yuna.class);
-        nano.logger().info(() -> "Hello World 1");
-        context.sendEvent(EVENT_CONFIG_CHANGE, Map.of(CONFIG_LOG_LEVEL, Level.OFF));
-        nano.logger().info(() -> "Hello World 2");
+        context.info(() -> "Hello World 1");
+        context.sendEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, Level.OFF));
+        context.info(() -> "Hello World 2");
         nano.stop(context);
 //
 //        // Nano with configuration
