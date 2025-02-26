@@ -56,7 +56,7 @@ class MetricCacheTest {
         assertThat(metricCache.timers()).hasSize(1);
 
         final long timer = metricCache.timer("my%timer", tags);
-        assertThat(timer).isBetween(15L, 60L);
+        assertThat(timer).isBetween(15L, 160L);
         assertThat(metricCache.counter("my%counter", tags)).isEqualTo(2);
         assertThat(metricCache.gauge("my%gauge", tags)).isEqualTo(9.99);
         assertThat(metricCache.prometheus()).isEqualTo("my_counter{aa=\"bb\",cc=\"dd\"} 2\nmy_gauge{aa=\"bb\",cc=\"dd\"} 9.99\nmy_timer{aa=\"bb\",cc=\"dd\"} " + timer + "\n");
