@@ -66,8 +66,8 @@ public class NanoThread {
     }
 
     @SuppressWarnings("java:S1181") // Throwable is caught
-    public NanoThread run(final ExecutorService executor, final Supplier<Context> context, final ExRunnable task) {
-        (executor != null ? executor : VIRTUAL_THREAD_POOL).submit(() -> {
+    public NanoThread run(final Supplier<Context> context, final ExRunnable task) {
+        VIRTUAL_THREAD_POOL.submit(() -> {
             try {
                 activeNanoThreadCount.incrementAndGet();
                 task.run();

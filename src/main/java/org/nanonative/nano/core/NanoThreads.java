@@ -6,7 +6,6 @@ import org.nanonative.nano.helper.ExRunnable;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
@@ -16,7 +15,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -28,6 +26,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.nanonative.nano.core.model.Context.CONFIG_THREAD_POOL_TIMEOUT_MS;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_UNREGISTER;
+import static org.nanonative.nano.core.model.NanoThread.VIRTUAL_THREAD_POOL;
 import static org.nanonative.nano.core.model.NanoThread.activeNanoThreads;
 import static org.nanonative.nano.helper.NanoUtils.callerInfoStr;
 import static org.nanonative.nano.helper.NanoUtils.getThreadName;
@@ -42,7 +41,6 @@ import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> {
 
     protected final Set<ScheduledExecutorService> schedulers;
-    protected final ExecutorService threadPool = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
 
     /**
      * Initializes {@link NanoThreads} with configurations and command-line arguments.
@@ -59,15 +57,6 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
             schedulers.remove(scheduler);
             return this;
         }).ifPresent(nano -> event.acknowledge()));
-    }
-
-    /**
-     * Gets the thread pool executor used by {@link Nano}.
-     *
-     * @return The ThreadPoolExecutor instance.
-     */
-    public ExecutorService threadPool() {
-        return !threadPool.isTerminated() && !threadPool.isShutdown() ? threadPool : null;
     }
 
     /**
@@ -132,7 +121,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
     public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
         final ZonedDateTime now = ZonedDateTime.now();
         ZonedDateTime nextRun = now.withHour(atTime.getHour()).withMinute(atTime.getMinute()).withSecond(atTime.getSecond());
-        if(dow != null)
+        if (dow != null)
             nextRun = nextRun.with(TemporalAdjusters.nextOrSame(dow));
 
         return run(context, task, Duration.between(now, nextRun).getSeconds(), DAYS.toSeconds(1), SECONDS, until);
@@ -150,8 +139,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
             protected void beforeExecute(final Thread t, final Runnable r) {
                 t.setName("Scheduler_" + schedulerId);
                 try {
-                    if (!threadPool.isTerminated() && !threadPool.isShutdown())
-                        threadPool.submit(r);
+                    VIRTUAL_THREAD_POOL.submit(r);
                 } catch (final Throwable error) {
                     handleJavaError(context, error);
                 }
@@ -168,8 +156,8 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
         final long timeoutMs = context.asLongOpt(CONFIG_THREAD_POOL_TIMEOUT_MS).filter(l -> l > 0).orElse(500L);
         logger.debug(() -> "Shutdown schedulers [{}]", schedulers.size());
         shutdownExecutors(timeoutMs, schedulers.toArray(ScheduledExecutorService[]::new));
-        logger.debug(() -> "Shutdown {} [{}]", threadPool.getClass().getSimpleName(), activeNanoThreads());
-        shutdownExecutors(timeoutMs, threadPool);
+//        logger.debug(() -> "Shutdown {} [{}]", threadPool.getClass().getSimpleName(), activeNanoThreads());
+//        shutdownExecutors(timeoutMs, threadPool);
     }
 
     /**

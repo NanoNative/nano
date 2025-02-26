@@ -57,7 +57,7 @@ public abstract class Service {
 
     //########## GLOBAL SERVICE METHODS ##########
     public NanoThread nanoThread(final Context context) {
-        return new NanoThread().run(context.nano() != null ? context.nano().threadPool() : null, () -> context.nano() != null ? context : null, () -> {
+        return new NanoThread().run(() -> context.nano() != null ? context : null, () -> {
             final long startTime = System.currentTimeMillis();
             if (isReady.compareAndSet(false, true)) {
                 this.context = context.newContext(this.getClass());

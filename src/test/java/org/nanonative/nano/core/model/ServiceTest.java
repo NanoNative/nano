@@ -49,7 +49,7 @@ class ServiceTest {
         assertThat(service.getEvent(EVENT_APP_UNHANDLED)).isNotNull().has(new Condition<>(e -> e.payload(Event.class) == error, "Should contain payload with error"));
 
         assertThat(nano.services()).isEmpty();
-        service.nanoThread(context).run(null, () -> context, () -> {});
+        service.nanoThread(context).run(() -> context, () -> {});
         assertThat(waitForCondition(() -> service.startCount() == 2, TEST_TIMEOUT)).isTrue();
         waitForCondition(() -> nano.services().size() == 1, TEST_TIMEOUT);
         assertThat(service.startCount()).isEqualTo(2);
