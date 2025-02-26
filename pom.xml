@@ -96,11 +96,10 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
                 <configuration>
-                    <threadCount>4</threadCount>
+                    <threadCount>2</threadCount>
                     <useUnlimitedThreads>false</useUnlimitedThreads>
                     <!-- Flag to test exit code in NanoTest (https://stackoverflow.com/questions/76151072/error-during-sbt-launcher-java-lang-unsupportedoperationexception-the-security) -->
-                    <skipAfterFailureCount>1</skipAfterFailureCount>
-                    <redirectTestOutputToFile>true</redirectTestOutputToFile>
+                    <argLine>${argLine} -Djava.security.manager=allow</argLine>
                     <!--                    <forkedProcessExitTimeoutInSeconds>240</forkedProcessExitTimeoutInSeconds>-->
                 </configuration>
             </plugin>

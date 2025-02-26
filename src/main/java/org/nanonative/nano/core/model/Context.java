@@ -404,6 +404,7 @@ public class Context extends ConcurrentTypeMap {
      */
     public final NanoThread[] runReturn(final ExRunnable... runnable) {
         return Arrays.stream(runnable).map(task -> new NanoThread(this).run(
+            this.nano() == null ? null : nano().threadPool(),
             () -> this.nano() == null ? null : nano().contextEmpty(clazz()),
             task
         )).toArray(NanoThread[]::new);
@@ -422,6 +423,7 @@ public class Context extends ConcurrentTypeMap {
                 if (error != null)
                     onFailure.accept(new Unhandled(this, thread, error));
             }).run(
+                nano() == null ? null : nano().threadPool(),
                 () -> this.nano() == null ? null : nano().contextEmpty(clazz()),
                 task
             )

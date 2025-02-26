@@ -29,7 +29,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static berlin.yuna.typemap.logic.TypeConverter.collectionOf;
-import static org.nanonative.nano.core.model.NanoThread.VIRTUAL_THREAD_POOL;
 
 public class HttpService extends Service {
     protected HttpServer server;
@@ -76,7 +75,7 @@ public class HttpService extends Service {
         handleHttps(context);
         try {
             server = HttpServer.create(new InetSocketAddress(port), 0);
-            server.setExecutor(VIRTUAL_THREAD_POOL);
+            server.setExecutor(context.nano().threadPool());
             server.createContext("/", exchange -> {
                 final HttpObject request = new HttpObject(exchange);
                 try {

@@ -380,6 +380,7 @@ public class Nano extends NanoServices<Nano> {
                 listeners.clear();
                 printSystemInfo();
                 logger.info(() -> "Stopped [{}] in [{}] with uptime [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(System.currentTimeMillis() - startTimeMs), NanoUtils.formatDuration(System.currentTimeMillis() - createdAtMs));
+                threadPool.shutdown();
                 schedulers.clear();
             }, Nano.class.getSimpleName() + " Shutdown-Hook");
             sequence.start();

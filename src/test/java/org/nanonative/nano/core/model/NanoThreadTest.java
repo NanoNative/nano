@@ -1,9 +1,9 @@
 package org.nanonative.nano.core.model;
 
+import org.nanonative.nano.core.config.TestConfig;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
-import org.nanonative.nano.core.config.TestConfig;
 
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
@@ -12,10 +12,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
+import static org.nanonative.nano.core.model.NanoThread.*;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.nanonative.nano.core.model.NanoThread.VIRTUAL_THREAD_POOL;
-import static org.nanonative.nano.core.model.NanoThread.activeCarrierThreads;
-import static org.nanonative.nano.core.model.NanoThread.activeNanoThreads;
 
 @Execution(ExecutionMode.CONCURRENT)
 class NanoThreadTest {
@@ -69,7 +67,7 @@ class NanoThreadTest {
 
     @RepeatedTest(TestConfig.TEST_REPEAT)
     void activeNanoThreadCount() {
-        new NanoThread().run(null, () -> {
+        new NanoThread().run(null, null, () -> {
             assertThat(activeNanoThreads()).isPositive();
             assertThat(activeCarrierThreads()).isPositive();
         });
@@ -79,7 +77,7 @@ class NanoThreadTest {
     private static NanoThread[] startConcurrentThreads(final AtomicInteger doneThreads) {
         return IntStream.range(0, TestConfig.TEST_REPEAT).parallel().mapToObj(i -> {
             final NanoThread thread = new NanoThread();
-            thread.run(null, () -> {
+            thread.run(null, null, () -> {
                 try {
                     Thread.sleep((long) (Math.random() * 100));
                     doneThreads.incrementAndGet();
