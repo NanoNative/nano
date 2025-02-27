@@ -1,4 +1,4 @@
-package org.nanonative.nano.helper.logger.model;
+package org.nanonative.nano.services.logging.model;
 
 import org.nanonative.nano.helper.NanoUtils;
 

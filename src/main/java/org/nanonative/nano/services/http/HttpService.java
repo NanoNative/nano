@@ -2,14 +2,13 @@ package org.nanonative.nano.services.http;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.Type;
+import berlin.yuna.typemap.model.TypeMapI;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.core.model.Unhandled;
 import org.nanonative.nano.helper.NanoUtils;
-import org.nanonative.nano.helper.config.ConfigRegister;
-import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.logic.HttpClient;
 import org.nanonative.nano.services.http.model.ContentType;
@@ -27,29 +26,27 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 import static berlin.yuna.typemap.logic.TypeConverter.collectionOf;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
+import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
+import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
+import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
 
 public class HttpService extends Service {
     protected HttpServer server;
-    protected Context context;
 
     // Register configurations
-    public static final String CONFIG_SERVICE_HTTP_PORT = ConfigRegister.registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpService.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_VERSION = ConfigRegister.registerConfig("app_service_http_version", "HTTP client version 1 or 2 (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_MAX_RETRIES = ConfigRegister.registerConfig("app_service_http_max_retries", "Maximum number of retries for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS = ConfigRegister.registerConfig("app_service_http_con_timeoutMs", "Connection timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS = ConfigRegister.registerConfig("app_service_http_read_timeoutMs", "Read timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS = ConfigRegister.registerConfig("app_service_http_follow_redirects", "Follow redirects for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_SERVICE_HTTP_PORT = registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpService.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_VERSION = registerConfig("app_service_http_version", "HTTP client version 1 or 2 (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_MAX_RETRIES = registerConfig("app_service_http_max_retries", "Maximum number of retries for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS = registerConfig("app_service_http_con_timeoutMs", "Connection timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS = registerConfig("app_service_http_read_timeoutMs", "Read timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS = registerConfig("app_service_http_follow_redirects", "Follow redirects for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
 
     // Register event channels
-    public static final int EVENT_HTTP_REQUEST = EventChannelRegister.registerChannelId("HTTP_REQUEST");
-    public static final int EVENT_HTTP_REQUEST_UNHANDLED = EventChannelRegister.registerChannelId("HTTP_REQUEST_UNHANDLED");
-
-    public HttpService() {
-        super(null, false);
-    }
+    public static final int EVENT_HTTP_REQUEST = registerChannelId("HTTP_REQUEST");
+    public static final int EVENT_HTTP_REQUEST_UNHANDLED = registerChannelId("HTTP_REQUEST_UNHANDLED");
 
     public InetSocketAddress address() {
         return server == null ? null : server.getAddress();
@@ -67,54 +64,49 @@ public class HttpService extends Service {
     protected static final Lock STARTUP_LOCK = new ReentrantLock();
 
     @Override
-    public void stop(final Supplier<Context> contextSub) {
-        isReady.set(true, false, state -> {
-            server.stop(0);
-            logger.info(() -> "[{}] port [{}] stopped", name(), (server == null ? null : server.getAddress().getPort()));
-            server = null;
-        });
+    public void stop() {
+        server.stop(0);
+        context.info(() -> "[{}] port [{}] stopped", name(), (server == null ? null : server.getAddress().getPort()));
+        server = null;
     }
 
     @Override
-    public void start(final Supplier<Context> contextSub) {
-        isReady.set(false, true, state -> {
-            context = contextSub.get().newContext(HttpService.class);
-            STARTUP_LOCK.lock();
-            final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
-            context.put(CONFIG_SERVICE_HTTP_PORT, port);
-            handleHttps(context);
-            try {
-                server = HttpServer.create(new InetSocketAddress(port), 0);
-                server.setExecutor(context.nano().threadPool());
-                server.createContext("/", exchange -> {
-                    final HttpObject request = new HttpObject(exchange);
-                    try {
-                        final AtomicBoolean internalError = new AtomicBoolean(false);
-                        context.sendEventReturn(EVENT_HTTP_REQUEST, request).peek(setError(internalError)).responseOpt(HttpObject.class).ifPresentOrElse(
+    public void start() {
+        STARTUP_LOCK.lock();
+        final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
+        context.put(CONFIG_SERVICE_HTTP_PORT, port);
+        handleHttps(context);
+        try {
+            server = HttpServer.create(new InetSocketAddress(port), 0);
+            server.setExecutor(GLOBAL_THREAD_POOL);
+            server.createContext("/", exchange -> {
+                final HttpObject request = new HttpObject(exchange);
+                try {
+                    final AtomicBoolean internalError = new AtomicBoolean(false);
+                    context.sendEventR(EVENT_HTTP_REQUEST, () -> request).peek(setError(internalError)).responseOpt(HttpObject.class).ifPresentOrElse(
+                        response -> sendResponse(exchange, request, response),
+                        () -> context.sendEventR(EVENT_HTTP_REQUEST_UNHANDLED, () -> request).responseOpt(HttpObject.class).ifPresentOrElse(
                             response -> sendResponse(exchange, request, response),
-                            () -> context.sendEventReturn(EVENT_HTTP_REQUEST_UNHANDLED, request).responseOpt(HttpObject.class).ifPresentOrElse(
-                                response -> sendResponse(exchange, request, response),
-                                () -> sendResponse(exchange, request, new HttpObject()
-                                    .statusCode(internalError.get() ? 500 : 404)
-                                    .bodyT(new LinkedTypeMap().putR("message", internalError.get() ? "Internal Server Error" : "Not Found").putR("timestamp", System.currentTimeMillis()))
-                                    .contentType(ContentType.APPLICATION_PROBLEM_JSON))
-                            )
-                        );
-                    } catch (final Exception e) {
-                        context.sendEventReturn(Context.EVENT_APP_UNHANDLED, new Unhandled(context, request, e)).responseOpt(HttpObject.class).ifPresentOrElse(
-                            response -> sendResponse(exchange, request, response),
-                            () -> new HttpObject().statusCode(500).body("Internal Server Error".getBytes()).contentType(ContentType.APPLICATION_PROBLEM_JSON)
-                        );
-                    }
-                });
-                server.start();
-                logger.info(() -> "[{}] starting on port [{}]", name(), port);
-            } catch (final IOException e) {
-                logger.error(e, () -> "[{}] failed to start with port [{}]", name(), port);
-            } finally {
-                STARTUP_LOCK.unlock();
-            }
-        });
+                            () -> sendResponse(exchange, request, new HttpObject()
+                                .statusCode(internalError.get() ? 500 : 404)
+                                .bodyT(new LinkedTypeMap().putR("message", internalError.get() ? "Internal Server Error" : "Not Found").putR("timestamp", System.currentTimeMillis()))
+                                .contentType(ContentType.APPLICATION_PROBLEM_JSON))
+                        )
+                    );
+                } catch (final Exception e) {
+                    context.sendEventR(EVENT_APP_UNHANDLED, () -> new Unhandled(context, request, e)).responseOpt(HttpObject.class).ifPresentOrElse(
+                        response -> sendResponse(exchange, request, response),
+                        () -> new HttpObject().statusCode(500).body("Internal Server Error".getBytes()).contentType(ContentType.APPLICATION_PROBLEM_JSON)
+                    );
+                }
+            });
+            server.start();
+            context.info(() -> "[{}] starting on port [{}]", name(), port);
+        } catch (final IOException e) {
+            context.error(e, () -> "[{}] failed to start with port [{}]", name(), port);
+        } finally {
+            STARTUP_LOCK.unlock();
+        }
     }
 
     @Override
@@ -125,7 +117,11 @@ public class HttpService extends Service {
                 return;
             event.response(((HttpClient) context.computeIfAbsent(HttpObject.CONTEXT_HTTP_CLIENT_KEY, value -> new HttpClient())).send(request));
         });
-        super.onEvent(event);
+    }
+
+    @Override
+    public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
+
     }
 
     private static void handleHttps(final Context context) {

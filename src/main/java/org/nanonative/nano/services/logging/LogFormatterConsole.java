@@ -1,7 +1,7 @@
-package org.nanonative.nano.helper.logger.logic;
+package org.nanonative.nano.services.logging;
 
 import org.nanonative.nano.helper.NanoUtils;
-import org.nanonative.nano.helper.logger.model.LogLevel;
+import org.nanonative.nano.services.logging.model.LogLevel;
 
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
@@ -10,7 +10,8 @@ import java.util.logging.Formatter;
 import java.util.logging.LogRecord;
 
 import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
-import static org.nanonative.nano.helper.logger.model.LogLevel.nanoLogLevelOf;
+import static org.nanonative.nano.services.logging.LogService.MAX_LOG_NAME_LENGTH;
+import static org.nanonative.nano.services.logging.model.LogLevel.nanoLogLevelOf;
 
 /**
  * Formatter for logging messages to the console.
@@ -67,7 +68,7 @@ public class LogFormatterConsole extends Formatter {
     @SuppressWarnings("java:S3457")
     protected static String formatLoggerName(final LogRecord logRecord) {
         final int dot = logRecord.getLoggerName().lastIndexOf(".");
-        return String.format("%-" + NanoLogger.MAX_LOG_NAME_LENGTH.get() + "s", (dot != -1 ? logRecord.getLoggerName().substring(dot + 1) : logRecord.getLoggerName()));
+        return String.format("%-" + MAX_LOG_NAME_LENGTH.get() + "s", (dot != -1 ? logRecord.getLoggerName().substring(dot + 1) : logRecord.getLoggerName()));
     }
 
     /**

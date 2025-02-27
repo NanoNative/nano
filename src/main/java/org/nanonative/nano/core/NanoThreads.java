@@ -6,7 +6,6 @@ import org.nanonative.nano.helper.ExRunnable;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
@@ -16,7 +15,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
@@ -28,10 +26,12 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.nanonative.nano.core.model.Context.CONFIG_THREAD_POOL_TIMEOUT_MS;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_UNREGISTER;
+import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.core.model.NanoThread.activeNanoThreads;
 import static org.nanonative.nano.helper.NanoUtils.callerInfoStr;
 import static org.nanonative.nano.helper.NanoUtils.getThreadName;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
+import static org.nanonative.nano.helper.event.model.Event.eventOf;
 
 /**
  * The abstract base class for {@link Nano} framework providing thread handling functionalities.
@@ -42,7 +42,6 @@ import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> {
 
     protected final Set<ScheduledExecutorService> schedulers;
-    protected final ExecutorService threadPool = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
 
     /**
      * Initializes {@link NanoThreads} with configurations and command-line arguments.
@@ -61,13 +60,8 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
         }).ifPresent(nano -> event.acknowledge()));
     }
 
-    /**
-     * Gets the thread pool executor used by {@link Nano}.
-     *
-     * @return The ThreadPoolExecutor instance.
-     */
-    public ExecutorService threadPool() {
-        return !threadPool.isTerminated() && !threadPool.isShutdown() ? threadPool : null;
+    public static void runAsync(final Runnable task) {
+        GLOBAL_THREAD_POOL.submit(task);
     }
 
     /**
@@ -129,10 +123,11 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      * @param until  A BooleanSupplier indicating the termination condition. <code>true</code> stops the next execution.
      * @return Self for chaining
      */
+    //TODO: it should not run if the time is already passed - happens currently on dow
     public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
         final ZonedDateTime now = ZonedDateTime.now();
         ZonedDateTime nextRun = now.withHour(atTime.getHour()).withMinute(atTime.getMinute()).withSecond(atTime.getSecond());
-        if(dow != null)
+        if (dow != null)
             nextRun = nextRun.with(TemporalAdjusters.nextOrSame(dow));
 
         return run(context, task, Duration.between(now, nextRun).getSeconds(), DAYS.toSeconds(1), SECONDS, until);
@@ -150,14 +145,13 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
             protected void beforeExecute(final Thread t, final Runnable r) {
                 t.setName("Scheduler_" + schedulerId);
                 try {
-                    if (!threadPool.isTerminated() && !threadPool.isShutdown())
-                        threadPool.submit(r);
+                    GLOBAL_THREAD_POOL.submit(r);
                 } catch (final Throwable error) {
                     handleJavaError(context, error);
                 }
             }
         };
-        sendEvent(EVENT_APP_SCHEDULER_REGISTER, context(Scheduler.class), scheduler, result -> {}, true);
+        eventOf(context(Scheduler.class), EVENT_APP_SCHEDULER_REGISTER).payload(() -> scheduler).broadcast(true).async(true).send();
         return scheduler;
     }
 
@@ -166,10 +160,10 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      */
     protected void shutdownThreads() {
         final long timeoutMs = context.asLongOpt(CONFIG_THREAD_POOL_TIMEOUT_MS).filter(l -> l > 0).orElse(500L);
-        logger.debug(() -> "Shutdown schedulers [{}]", schedulers.size());
+        context.debug(() -> "Shutdown schedulers [{}]", schedulers.size());
         shutdownExecutors(timeoutMs, schedulers.toArray(ScheduledExecutorService[]::new));
-        logger.debug(() -> "Shutdown {} [{}]", threadPool.getClass().getSimpleName(), activeNanoThreads());
-        shutdownExecutors(timeoutMs, threadPool);
+//        context.debug(() -> "Shutdown {} [{}]", threadPool.getClass().getSimpleName(), activeNanoThreads());
+//        shutdownExecutors(timeoutMs, threadPool);
     }
 
     /**
@@ -213,10 +207,10 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      */
     protected void kill(final ExecutorService executorService, final long timeoutMs) throws InterruptedException {
         if (!executorService.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-            logger.debug(() -> "Kill [{}]", getThreadName(executorService));
+            context.debug(() -> "Kill [{}]", getThreadName(executorService));
             executorService.shutdownNow();
             if (!executorService.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
-                logger.warn(() -> "[{}] did not terminate. Is this a glitch in the Matrix?", getThreadName(executorService));
+                context.warn(() -> "[{}] did not terminate. Is this a glitch in the Matrix?", getThreadName(executorService));
             }
         }
     }
@@ -225,10 +219,10 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
         try {
             task.run();
             if (!periodically)
-                sendEvent(EVENT_APP_SCHEDULER_UNREGISTER, context(this.getClass()), scheduler, result -> {}, true);
+                eventOf(context(this.getClass()), EVENT_APP_SCHEDULER_UNREGISTER).payload(() -> scheduler).async(true).send();
         } catch (final Throwable e) {
             handleJavaError(context, e);
-            sendEvent(EVENT_APP_SCHEDULER_UNREGISTER, context(this.getClass()), scheduler, result -> {}, true);
+            eventOf(context(this.getClass()), EVENT_APP_SCHEDULER_UNREGISTER).payload(() -> scheduler).broadcast(true).async(true).send();
             context(this.getClass()).sendEventError(scheduler, e);
         }
     }

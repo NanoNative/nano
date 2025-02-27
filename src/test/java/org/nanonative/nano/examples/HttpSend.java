@@ -1,11 +1,11 @@
 package org.nanonative.nano.examples;
 
+import org.junit.jupiter.api.Disabled;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.services.http.HttpService;
 import org.nanonative.nano.services.http.logic.HttpClient;
 import org.nanonative.nano.services.http.model.HttpObject;
-import org.junit.jupiter.api.Disabled;
 
 import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.http.model.HttpMethod.GET;
@@ -18,7 +18,7 @@ public class HttpSend {
         final Context context = new Nano(args, new HttpService()).context(HttpSend.class);
 
         // send request via event
-        final HttpObject response1 = context.sendEventReturn(EVENT_HTTP_REQUEST, new HttpObject()
+        final HttpObject response1 = context.sendEventR(EVENT_HTTP_REQUEST, () -> new HttpObject()
             .methodType(GET)
             .path("http://localhost:8080/hello")
             .body("Hello World")

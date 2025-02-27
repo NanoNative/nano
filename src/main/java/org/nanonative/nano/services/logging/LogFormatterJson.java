@@ -1,4 +1,4 @@
-package org.nanonative.nano.helper.logger.logic;
+package org.nanonative.nano.services.logging;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 
 import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
 import static org.nanonative.nano.helper.NanoUtils.LINE_SEPARATOR;
-import static org.nanonative.nano.helper.logger.model.LogLevel.nanoLogLevelOf;
+import static org.nanonative.nano.services.logging.model.LogLevel.nanoLogLevelOf;
 
 /**
  * A log formatter that outputs log records in JSON format.

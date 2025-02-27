@@ -1,7 +1,4 @@
-package org.nanonative.nano.helper.logger;
-
-import org.nanonative.nano.helper.logger.logic.LogFormatterConsole;
-import org.nanonative.nano.helper.logger.logic.LogFormatterJson;
+package org.nanonative.nano.services.logging;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

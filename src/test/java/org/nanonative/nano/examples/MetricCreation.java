@@ -22,12 +22,12 @@ public class MetricCreation {
         final Map<String, String> metricTags = Map.of("tag_key", "tag_value");
 
         // create counter
-        context.sendEvent(EVENT_METRIC_UPDATE, new MetricUpdate(GAUGE, "my.counter.key", 130624, metricTags));
+        context.sendEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "my.counter.key", 130624, metricTags));
         // create gauge
-        context.sendEvent(EVENT_METRIC_UPDATE, new MetricUpdate(GAUGE, "my.gauge.key", 200888, metricTags));
+        context.sendEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "my.gauge.key", 200888, metricTags));
         // start timer
-        context.sendEvent(EVENT_METRIC_UPDATE, new MetricUpdate(TIMER_START, "my.timer.key", null, metricTags));
+        context.sendEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(TIMER_START, "my.timer.key", null, metricTags));
         // end timer
-        context.sendEvent(EVENT_METRIC_UPDATE, new MetricUpdate(TIMER_END, "my.timer.key", null, metricTags));
+        context.sendEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(TIMER_END, "my.timer.key", null, metricTags));
     }
 }

@@ -8,8 +8,8 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 import java.util.Map;
 
 import static org.nanonative.nano.core.config.TestConfig.*;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Execution(ExecutionMode.CONCURRENT)
 class UnhandledTest {

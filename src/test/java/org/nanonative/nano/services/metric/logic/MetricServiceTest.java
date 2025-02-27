@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.nanonative.nano.core.config.TestConfig.TEST_LOG_LEVEL;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.services.metric.logic.MetricService.CONFIG_METRIC_SERVICE_BASE_PATH;
 import static org.nanonative.nano.services.metric.logic.MetricService.CONFIG_METRIC_SERVICE_PROMETHEUS_PATH;
 import static org.assertj.core.api.Assertions.assertThat;

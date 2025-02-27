@@ -47,7 +47,7 @@ on:
 jobs:
   build:
     name: "Build"
-    timeout-minutes: 15
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     # These permissions are needed to interact with GitHub's OIDC Token endpoint.
     permissions:
