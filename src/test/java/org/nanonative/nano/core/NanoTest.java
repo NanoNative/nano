@@ -198,7 +198,7 @@ class NanoTest {
 
     @RepeatedTest(TEST_REPEAT)
     void sendEvent_Sync() throws InterruptedException {
-        final TestService service = new TestService().doOnEvent(Event::acknowledge);
+        final TestService service = new TestService().doOnEvent(event -> event.ifPresentAck(TEST_EVENT, evt -> {}));
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), service);
 
         // send to first service
@@ -231,7 +231,8 @@ class NanoTest {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, LogLevel.OFF), service);
 
         service.doOnEvent(event -> {
-            throw new RuntimeException("Nothing to see here, just a test exception");
+            if (event.channelId() == TEST_EVENT)
+                throw new RuntimeException("Nothing to see here, just a test exception");
         });
 
         final Context context = nano.contextEmpty(this.getClass());
@@ -305,7 +306,7 @@ class NanoTest {
 
     @RepeatedTest(TEST_REPEAT)
     void errorHandlerTest() {
-        final TestService service = new TestService().doOnEvent(Event::acknowledge);
+        final TestService service = new TestService().doOnEvent(event -> event.ifPresentAck(TEST_EVENT, evt -> {}));
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), service);
 
         // Execution with error
@@ -317,12 +318,12 @@ class NanoTest {
         service.resetEvents();
 
         // Event with error
-        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> {
+        nano.subscribeEvent(TEST_EVENT, event -> {
             throw new RuntimeException("Nothing to see here, just a test exception");
         });
 
         // Trigger error
-        nano.context(NanoTest.class).sendEvent(EVENT_HTTP_REQUEST, () -> "test");
+        nano.context(NanoTest.class).sendEvent(TEST_EVENT, () -> "test");
 
         assertThat(service.getEvent(EVENT_APP_UNHANDLED)).isNotNull();
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();

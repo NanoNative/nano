@@ -94,9 +94,8 @@ public class NanoUtils {
     public static boolean waitForCondition(final BooleanSupplier condition, final long timeout) {
         final long startTime = System.currentTimeMillis();
         while (System.currentTimeMillis() - startTime < timeout) {
-            if (condition.getAsBoolean()) {
+            if (condition.getAsBoolean())
                 return true;
-            }
             try {
                 TimeUnit.MILLISECONDS.sleep(64);
             } catch (final InterruptedException e) {

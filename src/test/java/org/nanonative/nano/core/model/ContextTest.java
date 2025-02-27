@@ -51,9 +51,9 @@ class ContextTest {
         final int channelId = context.registerChannelId("TEST_EVENT");
         context.subscribeEvent(channelId, event -> eventLatch.countDown());
         context.sendEvent(channelId, () -> "AA");
-        final Event event = context.sendEventR(channelId, ()-> "BB");
-        context.broadcastEvent(channelId, ()-> "CC");
-        context.broadcastEventR(channelId, ()-> "DD");
+        final Event event = context.sendEventR(channelId, () -> "BB");
+        context.broadcastEvent(channelId, () -> "CC");
+        context.broadcastEventR(channelId, () -> "DD");
         assertThat(event).isNotNull();
         assertThat(event.payload()).isEqualTo("BB");
         assertThat(event.channel()).isEqualTo("TEST_EVENT");
@@ -183,11 +183,7 @@ class ContextTest {
     @RepeatedTest(TestConfig.TEST_REPEAT)
     void testToString() {
         final Context context = Context.createRootContext(ContextTest.class);
-        assertThat(context).hasToString(
-            "Context{size=" + context.size()
-                + ", class=" + this.getClass().getSimpleName()
-                + "}"
-        );
+        assertThat(context).hasToString("{\"size\":" + context.size() + ",\"class\":\"" + this.getClass().getSimpleName() + "\"}");
 
     }
 
