@@ -122,14 +122,20 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      * @param until  A BooleanSupplier indicating the termination condition. <code>true</code> stops the next execution.
      * @return Self for chaining
      */
-    //TODO: it should not run if the time is already passed - happens currently on dow
     public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
         final ZonedDateTime now = ZonedDateTime.now();
         ZonedDateTime nextRun = now.withHour(atTime.getHour()).withMinute(atTime.getMinute()).withSecond(atTime.getSecond());
-        if (dow != null)
-            nextRun = nextRun.with(TemporalAdjusters.nextOrSame(dow));
 
-        return run(context, task, Duration.between(now, nextRun).getSeconds(), DAYS.toSeconds(1), SECONDS, until);
+        if (dow != null) {
+            nextRun = nextRun.with(TemporalAdjusters.nextOrSame(dow));
+            if(nextRun.isBefore(now))
+                // don't try to catch up past events
+                nextRun = nextRun.with(TemporalAdjusters.next(dow));
+        } else if (nextRun.isBefore(now))
+            // don't try to catch up past events
+            nextRun = nextRun.plusDays(1);
+
+        return run(context, task, Duration.between(now, nextRun).getSeconds(), (dow != null) ? DAYS.toSeconds(7) : DAYS.toSeconds(1), SECONDS, until);
     }
 
     /**

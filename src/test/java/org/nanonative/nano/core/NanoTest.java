@@ -12,11 +12,14 @@ import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.model.TestService;
 import org.nanonative.nano.services.logging.model.LogLevel;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -263,22 +266,47 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TEST_REPEAT)
+    @RepeatedTest(32) // custom repeats as they are time heavy tests
     void runSchedulers() throws InterruptedException {
         final long timer = 64;
         final CountDownLatch scheduler1Triggered = new CountDownLatch(1);
         final CountDownLatch scheduler2Triggered = new CountDownLatch(1);
-        final CountDownLatch scheduler3Triggered = new CountDownLatch(1);
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
 
         nano.run(null, scheduler1Triggered::countDown, timer, MILLISECONDS);
         nano.run(null, scheduler2Triggered::countDown, timer, timer * 2, MILLISECONDS, () -> false);
-        nano.run(null, scheduler3Triggered::countDown, LocalTime.now().plusNanos(timer * 1000), LocalDateTime.now().getDayOfWeek(), () -> false);
 
         assertThat(scheduler1Triggered.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThat(scheduler2Triggered.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
-        assertThat(scheduler3Triggered.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
+    }
+
+    @RepeatedTest(32) // custom repeats as they are time heavy tests
+    void schedulerRunDayOfWeek() throws InterruptedException {
+        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
+
+        // Schedule next time
+        final AtomicBoolean scheduled = new AtomicBoolean(false);
+        nano.run(
+            null,
+            () -> scheduled.set(true),
+            LocalTime.now().minusHours(1),
+            LocalDateTime.now().getDayOfWeek(),
+            () -> false
+        );
+        Thread.sleep(24);
+        assertThat(scheduled.get()).isFalse();
+
+        // Schedule now
+        final CountDownLatch latch = new CountDownLatch(1);
+        nano.run(
+            null,
+            latch::countDown,
+            LocalTime.now().plusNanos(64 * 1000),
+            LocalDateTime.now().getDayOfWeek(),
+            () -> false
+        );
+        assertThat(latch.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
     }
 
     @RepeatedTest(TEST_REPEAT)

@@ -535,11 +535,8 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable function to execute.
      * @return {@link NanoThread}s
      */
-    // TODO: new context needed on every thread?
     public final NanoThread[] runR(final ExRunnable... runnable) {
-        return Arrays.stream(runnable).map(task ->
-                new NanoThread(this).run(this.nano(), () -> this.nano() == null ? null : nano().contextEmpty(clazz()), task))
-            .toArray(NanoThread[]::new);
+        return Arrays.stream(runnable).map(task -> new NanoThread().run(() -> this, task)).toArray(NanoThread[]::new);
     }
 
     /**
@@ -549,13 +546,12 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable  function to execute.
      * @return {@link NanoThread}s
      */
-    // TODO: new context needed on every thread?
     public final NanoThread[] runReturnHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
-        return Arrays.stream(runnable).map(task -> new NanoThread(this)
+        return Arrays.stream(runnable).map(task -> new NanoThread()
             .onComplete((thread, error) -> {
                 if (error != null)
                     onFailure.accept(new Unhandled(this, thread, error));
-            }).run(nano(), () -> this.nano() == null ? null : nano().contextEmpty(clazz()), task)
+            }).run(() -> this, task)
         ).toArray(NanoThread[]::new);
     }
 

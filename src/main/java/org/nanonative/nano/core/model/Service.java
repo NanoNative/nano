@@ -81,7 +81,7 @@ public abstract class Service {
     }
 
     public NanoThread nanoThread(final Context context) {
-        return new NanoThread().run(context.nano(), () -> context.nano() != null ? context : null, () -> {
+        return new NanoThread().run(() -> context.nano() != null ? context : null, () -> {
             final long startTime = System.currentTimeMillis();
             if (!isReady.get()) {
                 this.context = context.newContext(this.getClass());

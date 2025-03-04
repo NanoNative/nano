@@ -50,7 +50,6 @@ class NanoThreadTest {
         Arrays.stream(threads).forEach(NanoThread::await);
         assertThat(doneThreads.get()).isEqualTo(TEST_REPEAT);
         assertThat(Arrays.stream(threads).parallel().allMatch(NanoThread::isComplete)).isTrue();
-        assertThat(Arrays.stream(threads).parallel().allMatch(thread -> thread.context() == null)).isTrue();
     }
 
     @RepeatedTest(TEST_REPEAT)
@@ -64,12 +63,12 @@ class NanoThreadTest {
         assertThat(latch.await(TEST_REPEAT, TimeUnit.SECONDS)).isTrue();
         assertThat(doneThreads.get()).isEqualTo(TEST_REPEAT);
         Arrays.stream(threads).parallel().forEach(thread -> assertThat(thread.isComplete()).isTrue());
-        Arrays.stream(threads).parallel().forEach(thread -> assertThat(thread.toString()).contains(NanoThread.class.getSimpleName() + "{onCompleteCallbacks=", ", context=false, isComplete=true}"));
+        Arrays.stream(threads).parallel().forEach(thread -> assertThat(thread.toString()).contains(NanoThread.class.getSimpleName() + "{onCompleteCallbacks=", ", isComplete=true}"));
     }
 
     @RepeatedTest(TEST_REPEAT)
     void activeNanoThreadCount() {
-        new NanoThread().run(null, null, () -> {
+        new NanoThread().run(() -> null, () -> {
             assertThat(activeNanoThreads()).isPositive();
             assertThat(activeCarrierThreads()).isPositive();
         });
@@ -79,7 +78,7 @@ class NanoThreadTest {
     private static NanoThread[] startConcurrentThreads(final AtomicInteger doneThreads) {
         return IntStream.range(0, TEST_REPEAT).parallel().mapToObj(i -> {
             final NanoThread thread = new NanoThread();
-            thread.run(null, null, () -> {
+            thread.run(null, () -> {
                 try {
                     Thread.sleep((long) (Math.random() * 100));
                     doneThreads.incrementAndGet();

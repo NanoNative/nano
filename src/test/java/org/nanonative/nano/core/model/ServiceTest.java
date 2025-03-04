@@ -52,7 +52,7 @@ class ServiceTest {
         assertThat(receivedEvent.payload(Event.class)).isEqualTo(error);
 
         assertThat(nano.services()).hasSize(1);
-        service.nanoThread(context).run(null, () -> context, () -> {});
+        service.nanoThread(context).run(() -> context, () -> {});
         assertThat(waitForCondition(() -> service.startCount() == 2, TEST_TIMEOUT)).isTrue();
         waitForCondition(() -> nano.services().size() == 2, TEST_TIMEOUT);
         assertThat(service.startCount()).isEqualTo(2);
