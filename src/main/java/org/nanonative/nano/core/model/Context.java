@@ -816,30 +816,6 @@ public class Context extends ConcurrentTypeMap {
     }
 
     /**
-     * Waits for a {@link Service} of a specified type to be available within the given timeout.
-     *
-     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
-     * @param serviceClass The class of the {@link Service} to retrieve.
-     * @param timeoutMs    The maximum time to wait, in milliseconds.
-     * @return The first instance of the specified {@link Service}, or null if not found within the timeout.
-     */
-    public <S extends Service> S service(final Class<S> serviceClass, final long timeoutMs) {
-        final long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < timeoutMs) {
-            final S service = service(serviceClass);
-            if (service != null)
-                return service;
-            try {
-                Thread.sleep(16);
-            } catch (final InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-                return null;
-            }
-        }
-        return null;
-    }
-
-    /**
      * Retrieves a list of services of a specified type.
      *
      * @param <S>          The type of the service to retrieve, which extends {@link Service}.

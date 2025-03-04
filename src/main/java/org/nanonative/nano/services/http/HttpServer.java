@@ -35,6 +35,7 @@ public class HttpServer extends Service {
 
     // Register configurations
     public static final String CONFIG_SERVICE_HTTP_PORT = registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpServer.class.getSimpleName() + ")");
+    public static final String CONFIG_SERVICE_HTTP_CLIENT = registerConfig("app_service_http_client", "Boolean if " + HttpClient.class.getSimpleName() + " should start as well");
 
     // Register event channels
     public static final int EVENT_HTTP_REQUEST = registerChannelId("HTTP_REQUEST");
@@ -94,6 +95,7 @@ public class HttpServer extends Service {
             });
             server.start();
             context.info(() -> "[{}] starting on port [{}]", name(), port);
+            context.asBooleanOpt(CONFIG_SERVICE_HTTP_CLIENT).ifPresent(start -> context.runAwait(new HttpClient()));
         } catch (final IOException e) {
             context.error(e, () -> "[{}] failed to start with port [{}]", name(), port);
         } finally {

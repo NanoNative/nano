@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Map;
 
 import static org.nanonative.nano.core.config.TestConfig.TEST_LOG_LEVEL;
+import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTP_CLIENT;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.services.metric.logic.MetricService.CONFIG_METRIC_SERVICE_BASE_PATH;
 import static org.nanonative.nano.services.metric.logic.MetricService.CONFIG_METRIC_SERVICE_PROMETHEUS_PATH;
@@ -21,7 +22,7 @@ class MetricServiceTest {
 
     @Test
     void metricEndpointsWithoutBasePath() {
-        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), new MetricService(), new HttpServer(), new HttpClient());
+        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, CONFIG_SERVICE_HTTP_CLIENT, true), new MetricService(), new HttpServer());
 
         final HttpObject result = new HttpObject()
             .methodType(HttpMethod.GET)
