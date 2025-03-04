@@ -101,6 +101,7 @@ public class LogService extends Service {
             .filter(level -> level.intValue() > this.level.intValue())
             .map(level -> event.asString("name"))
             .filter(name -> excludePatterns == null || excludePatterns.stream().noneMatch(name::contains))
+            .map(name -> event.acknowledge())
             .isPresent();
     }
 

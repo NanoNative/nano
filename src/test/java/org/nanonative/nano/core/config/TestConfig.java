@@ -1,7 +1,5 @@
 package org.nanonative.nano.core.config;
 
-import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.services.logging.model.LogLevel;
 
 import java.util.concurrent.CountDownLatch;
@@ -10,9 +8,7 @@ import java.util.function.Supplier;
 
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.nanonative.nano.helper.NanoUtils.tryExecute;
-import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 
 public class TestConfig {
 
@@ -20,7 +16,7 @@ public class TestConfig {
      * Defines the log level for testing purposes, allowing for easy adjustment during debugging.
      * This can be particularly useful when trying to isolate or identify specific issues within tests.
      */
-    public static final LogLevel TEST_LOG_LEVEL = LogLevel.TRACE;
+    public static final LogLevel TEST_LOG_LEVEL = LogLevel.WARN;
 
     /**
      * Specifies the number of times tests should be repeated to ensure concurrency reliability. This setting aims to strike a balance between thorough testing and practical execution times.

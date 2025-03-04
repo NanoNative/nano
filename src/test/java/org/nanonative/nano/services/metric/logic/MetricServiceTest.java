@@ -1,20 +1,20 @@
 package org.nanonative.nano.services.metric.logic;
 
+import org.junit.jupiter.api.Test;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.services.http.HttpClient;
 import org.nanonative.nano.services.http.HttpServer;
 import org.nanonative.nano.services.http.model.HttpMethod;
 import org.nanonative.nano.services.http.model.HttpObject;
-import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.nanonative.nano.core.config.TestConfig.TEST_LOG_LEVEL;
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTP_CLIENT;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.services.metric.logic.MetricService.CONFIG_METRIC_SERVICE_BASE_PATH;
 import static org.nanonative.nano.services.metric.logic.MetricService.CONFIG_METRIC_SERVICE_PROMETHEUS_PATH;
-import static org.assertj.core.api.Assertions.assertThat;
 
 class MetricServiceTest {
 
@@ -32,7 +32,6 @@ class MetricServiceTest {
         assertThat(result).isNotNull();
         assertThat(result.bodyAsString()).contains("java_version ");
         assertThat(nano.stop(MetricServiceTest.class).waitForStop().isReady()).isFalse();
-
     }
 
     @Test

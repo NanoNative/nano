@@ -216,9 +216,8 @@ public class Event extends TypeMap {
     }
 
     public Event response(final Object response) {
-        if (responseListener != null) {
+        if (responseListener != null)
             responseListener.accept(response);
-        }
         this.response = response;
         return this;
     }

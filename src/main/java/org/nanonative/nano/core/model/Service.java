@@ -83,12 +83,13 @@ public abstract class Service {
     public NanoThread nanoThread(final Context context) {
         return new NanoThread().run(context.nano(), () -> context.nano() != null ? context : null, () -> {
             final long startTime = System.currentTimeMillis();
-            if (isReady.compareAndSet(false, true)) {
+            if (!isReady.get()) {
                 this.context = context.newContext(this.getClass());
                 this.configure(context);
                 this.start();
                 this.context.broadcastEvent(EVENT_APP_SERVICE_REGISTER, () -> this);
                 this.context.sendEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "application.services.ready.time", System.currentTimeMillis() - startTime, Map.of("class", this.getClass().getSimpleName())), result -> {});
+                isReady.set(true);
             }
         }).onComplete((nanoThread, error) -> {
             if (error != null)

@@ -26,6 +26,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Formatter;
+import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.stream.Stream;
 
@@ -75,6 +76,8 @@ public class Context extends ConcurrentTypeMap {
         registerTypeConvert(String.class, Formatter.class, LogFormatRegister::getLogFormatter);
         registerTypeConvert(String.class, LogLevel.class, LogLevel::nanoLogLevelOf);
         registerTypeConvert(LogLevel.class, String.class, Enum::name);
+        registerTypeConvert(Level.class, String.class, Level::toString);
+        registerTypeConvert(String.class, Level.class, level -> LogLevel.nanoLogLevelOf(level).toJavaLogLevel());
         registerTypeConvert(ContentType.class, String.class, ContentType::name);
         registerTypeConvert(String.class, ContentType.class, ContentType::fromValue);
         registerTypeConvert(HttpMethod.class, String.class, HttpMethod::name);
@@ -320,15 +323,17 @@ public class Context extends ConcurrentTypeMap {
      * @return self for chaining
      */
     public Context log(final LogLevel level, final Throwable thrown, final Supplier<String> message, final Object... params) {
-        newEvent(EVENT_LOGGING).async(true).payload(
-            () -> {
-                final LogRecord logRecord = new LogRecord(level.toJavaLogLevel(), message.get());
-                logRecord.setParameters(params);
-                logRecord.setThrown(thrown);
-                logRecord.setLoggerName(clazz().getCanonicalName());
-                return logRecord;
-            }
-        ).putR("level", level).putR("name", clazz().getCanonicalName()).send();
+        newEvent(EVENT_LOGGING).async(true).broadcast(false).payload(
+                () -> {
+                    final LogRecord logRecord = new LogRecord(level.toJavaLogLevel(), message.get());
+                    logRecord.setParameters(params);
+                    logRecord.setThrown(thrown);
+                    logRecord.setLoggerName(clazz().getCanonicalName());
+                    return logRecord;
+                }
+            ).putR("level", level)
+            .putR("name", clazz().getCanonicalName())
+            .send();
         return this;
     }
 

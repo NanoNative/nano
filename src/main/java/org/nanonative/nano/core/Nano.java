@@ -259,21 +259,20 @@ public class Nano extends NanoServices<Nano> {
         event.put("send", true);
         eventCount.incrementAndGet();
         event.context().tryExecute(() -> {
-            final boolean match = listeners.getOrDefault(event.channelId(), Collections.emptySet()).stream().anyMatch(listener -> {
+            boolean match = listeners.getOrDefault(event.channelId(), Collections.emptySet()).stream().anyMatch(listener -> {
                 event.context().tryExecute(() -> listener.accept(event), throwable -> event.context().sendEventError(event, throwable));
                 return !event.isBroadcast() && event.isAcknowledged();
             });
             if (!match) {
-                services.stream().filter(Service::isReady).anyMatch(service -> {
+                match = services.stream().filter(Service::isReady).anyMatch(service -> {
                     event.context().tryExecute(() -> service.receiveEvent(event), throwable -> event.context().sendEventError(event, service, throwable));
                     return !event.isBroadcast() && event.isAcknowledged();
                 });
             }
+            // LOGGING FALLBACK
+            if (event.channelId() == EVENT_LOGGING && !match)
+                logService.onEvent(event);
         });
-
-        // LOGGING FALLBACK
-        if (event.channelId() == EVENT_LOGGING && !event.isAcknowledged())
-            logService.onEvent(event);
         eventCount.decrementAndGet();
         return this;
     }
