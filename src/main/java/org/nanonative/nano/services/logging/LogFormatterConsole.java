@@ -28,7 +28,7 @@ import static org.nanonative.nano.services.logging.model.LogLevel.nanoLogLevelOf
  * <p>
  * Usage Example:
  * <pre>
- * logger.info(() -> throwable, "Processed records - success: [{}], failure: [%s], ignored; [{2}]", successCount, failureCount, ignoreCount);
+ * context.info(() -> throwable, "Processed records - success: [{}], failure: [%s], ignored; [{2}]", successCount, failureCount, ignoreCount);
  * </pre>
  * In this example, 'successCount' replaces the first '{}' placeholder, 'failureCount' replaces the '%s' placeholder and 'ignoreCount' replaces the last [{2}] placeholder.
  * </p>

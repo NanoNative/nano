@@ -2,7 +2,6 @@
 
  [Context](../context/README.md)
 | [Events](../events/README.md)
-| [Logger](../logger/README.md)
 | [**> Schedulers <**](README.md)
 | [Services](../services/README.md)
 

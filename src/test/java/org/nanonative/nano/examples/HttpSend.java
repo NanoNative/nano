@@ -7,7 +7,7 @@ import org.nanonative.nano.services.http.HttpClient;
 import org.nanonative.nano.services.http.HttpServer;
 import org.nanonative.nano.services.http.model.HttpObject;
 
-import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpClient.EVENT_SEND_HTTP;
 import static org.nanonative.nano.services.http.model.HttpMethod.GET;
 
 @Disabled
@@ -18,7 +18,7 @@ public class HttpSend {
         final Context context = new Nano(args, new HttpServer()).context(HttpSend.class);
 
         // send request via event
-        final HttpObject response1 = context.sendEventR(EVENT_HTTP_REQUEST, () -> new HttpObject()
+        final HttpObject response1 = context.sendEventR(EVENT_SEND_HTTP, () -> new HttpObject()
             .methodType(GET)
             .path("http://localhost:8080/hello")
             .body("Hello World")
