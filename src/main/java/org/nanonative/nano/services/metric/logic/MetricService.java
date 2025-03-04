@@ -39,7 +39,7 @@ import java.util.stream.Stream;
 import static org.nanonative.nano.helper.NanoUtils.tryExecute;
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
 import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
-import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 
@@ -150,13 +150,15 @@ public class MetricService extends Service {
             );
     }
 
-    public void updateMetric(final MetricUpdate metric) {
+    @SuppressWarnings("SameReturnValue")
+    public boolean updateMetric(final MetricUpdate metric) {
         switch (metric.type()) {
             case GAUGE -> metrics.gaugeSet(metric.name(), metric.value().doubleValue(), metric.tags());
             case COUNTER -> metrics.counterIncrement(metric.name(), metric.tags());
             case TIMER_START -> metrics.timerStart(metric.name(), metric.tags());
             case TIMER_END -> metrics.timerStop(metric.name(), metric.tags());
         }
+        return true;
     }
 
     public MetricCache metrics() {

@@ -152,12 +152,11 @@ public class Event extends TypeMap {
         return this;
     }
 
-    public <T> Event ifPresentAck(final int channelId, final Class<T> clazz, final Consumer<T> consumer) {
+    public <T> Event ifPresentAck(final int channelId, final Class<T> clazz, final Function<T, Object> consumer) {
         if (this.channelId == channelId) {
             final T payloadObj = payload(clazz);
             if (payloadObj != null) {
-                consumer.accept(payloadObj);
-                acknowledge();
+                response(consumer.apply(payloadObj));
             }
         }
         return this;
@@ -169,6 +168,7 @@ public class Event extends TypeMap {
         return payloadRaw;
     }
 
+    @SuppressWarnings({"BooleanMethodIsAlwaysInverted"})
     public boolean isBroadcast() {
         return asBooleanOpt("isBroadcast").orElse(false);
     }

@@ -114,21 +114,27 @@ public class Nano extends NanoServices<Nano> {
 
         final long service_startUpTime = System.currentTimeMillis();
         // INIT SHUTDOWN HOOK
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(context(this.getClass()))));
-        startServicesAndLogger(startupServices);
-        run(() -> context, () -> eventOf(context, EVENT_APP_HEARTBEAT).payload(() -> this).async(true).send(), 256, 256, MILLISECONDS, () -> false);
-        run(() -> context, System::gc, 5, 5, SECONDS, () -> false);
-        final long readyTime = System.currentTimeMillis() - service_startUpTime;
-        printActiveProfiles();
-        context.info(() -> "Started [{}] in [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(readyTime));
-        printSystemInfo();
+        try {
+            // java.lang.IllegalStateException: Shutdown in progress
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(context(this.getClass()))));
+            startServicesAndLogger(startupServices);
+            run(() -> context, () -> eventOf(context, EVENT_APP_HEARTBEAT).payload(() -> this).async(true).send(), 256, 256, MILLISECONDS, () -> false);
+            run(() -> context, System::gc, 5, 5, SECONDS, () -> false);
+            final long readyTime = System.currentTimeMillis() - service_startUpTime;
+            printActiveProfiles();
+            context.info(() -> "Started [{}] in [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(readyTime));
+            printSystemInfo();
 
-        eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.started.time", initTime, null)).async(true).send();
-        eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.ready.time", readyTime, null)).async(true).send();
-        subscribeEvent(EVENT_APP_SHUTDOWN, event -> event.acknowledge(() -> CompletableFuture.runAsync(() -> shutdown(event.context()))));
-        // INIT CLEANUP TASK - just for safety
-        subscribeEvent(EVENT_APP_HEARTBEAT, this::cleanUps);
-        eventOf(context, EVENT_APP_START).payload(() -> this).broadcast(true).async(true).send();
+            eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.started.time", initTime, null)).async(true).send();
+            eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.ready.time", readyTime, null)).async(true).send();
+            subscribeEvent(EVENT_APP_SHUTDOWN, event -> event.acknowledge(() -> CompletableFuture.runAsync(() -> shutdown(event.context()))));
+            // INIT CLEANUP TASK - just for safety
+            subscribeEvent(EVENT_APP_HEARTBEAT, this::cleanUps);
+            eventOf(context, EVENT_APP_START).payload(() -> this).broadcast(true).async(true).send();
+        } catch (final Exception e) {
+            context.error(e, () -> "Failed to start [{}] in [{}]", this.getClass().getSimpleName(), NanoUtils.formatDuration(System.currentTimeMillis() - service_startUpTime));
+            shutdown(context);
+        }
     }
 
     /**
@@ -307,6 +313,7 @@ public class Nano extends NanoServices<Nano> {
         }
     }
 
+    @SuppressWarnings("SlowListContainsAll")
     protected void startServicesAndLogger(final FunctionOrNull<Context, List<Service>> startupServices) {
         if (startupServices != null) {
             final List<Service> services = startupServices.apply(context);

@@ -59,7 +59,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         this.createdAtMs = System.currentTimeMillis();
         this.context = readConfigs(args);
         if (configs != null)
-            configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(convertObj(value, String.class)).orElse("")));
+            configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(value).orElse("")));
         this.logService = new LogService();
         this.logService.context(context);
         this.logService.configure(context, context);
@@ -79,7 +79,6 @@ public abstract class NanoBase<T extends NanoBase<T>> {
 
     /**
      * Sends an event to {@link Nano#listeners} and {@link Nano#services}.
-     * Used {@link Context#sendEvent(int, Object)} from {@link Nano#context(Class)} instead of the core method.
      *
      * @param event The {@link Event} object that encapsulates the event's context, type, and payload. use {@link Event#eventOf(Context, int)} or {@link Event#asyncEventOf(Context, int)}  to create an instance.
      * @return Self for chaining

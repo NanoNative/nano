@@ -1,6 +1,9 @@
-package org.nanonative.nano.services.http.logic;
+package org.nanonative.nano.services.http;
 
-import org.nanonative.nano.core.model.Context;
+import berlin.yuna.typemap.model.LinkedTypeMap;
+import berlin.yuna.typemap.model.TypeMapI;
+import org.nanonative.nano.core.model.Service;
+import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.io.IOException;
@@ -12,112 +15,67 @@ import java.util.function.Consumer;
 import static java.net.http.HttpClient.Redirect.ALWAYS;
 import static java.net.http.HttpClient.Redirect.NEVER;
 import static java.net.http.HttpClient.Version.HTTP_2;
-import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
-import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS;
-import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS;
-import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_MAX_RETRIES;
-import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS;
-import static org.nanonative.nano.services.http.HttpService.CONFIG_HTTP_CLIENT_VERSION;
+import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
+import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
 
-public class HttpClient {
+public class HttpClient extends Service {
 
-    protected final Context context;
-    protected final java.net.http.HttpClient client;
-    protected final int retries;
-    protected final int readTimeoutMs;
+    public static final String CONFIG_HTTP_CLIENT_VERSION = registerConfig("app_service_http_version", "HTTP client version 1 or 2 (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_MAX_RETRIES = registerConfig("app_service_http_max_retries", "Maximum number of retries for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS = registerConfig("app_service_http_con_timeoutMs", "Connection timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS = registerConfig("app_service_http_read_timeoutMs", "Read timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS = registerConfig("app_service_http_follow_redirects", "Follow redirects for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
 
-    /**
-     * Constructs a new {@link HttpClient} with default settings.
-     */
-    public HttpClient() {
-        this(null, null);
-    }
+    public static final int EVENT_SEND_HTTP = registerChannelId("SEND_HTTP");
 
-    /**
-     * Constructs a new {@link HttpClient} with the provided context.
-     *
-     * @param context the context to use for configuration
-     */
-    public HttpClient(final Context context) {
-        this(context, null);
-    }
+    protected java.net.http.HttpClient client;
+    protected int retries = 3;
+    protected long readTimeoutMs = 10000;
 
-    /**
-     * Constructs a new {@link HttpClient} with the optional provided context and custom {@link java.net.http.HttpClient}.
-     *
-     * @param context the context to use for configuration
-     * @param client  the custom HttpClient instance to use
-     */
-    @SuppressWarnings("java:S3358") // Ternary operator should not be nested
-    public HttpClient(final Context context, final java.net.http.HttpClient client) {
-        this.context = context;
-        this.client = client != null ? client : java.net.http.HttpClient.newBuilder()
-            .connectTimeout(Duration.ofMillis(ofNullable(context).map(ctx -> ctx.asLong(CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS)).orElse(5000L)))
-            .followRedirects(ofNullable(context).map(ctx -> ctx.asBoolean(CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS)).orElse(true) ? ALWAYS : NEVER)
-            .version(ofNullable(context).map(ctx -> ctx.as(java.net.http.HttpClient.Version.class, CONFIG_HTTP_CLIENT_VERSION)).orElse(HTTP_2))
+    @Override
+    public void start() {
+        client = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(Duration.ofMillis(context.asLongOpt(CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS).orElse(5000L)))
+            .followRedirects(context.asBooleanOpt(CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS).orElse(true) ? ALWAYS : NEVER)
+            .version(context.asOpt(java.net.http.HttpClient.Version.class, CONFIG_HTTP_CLIENT_VERSION).orElse(HTTP_2))
             .executor(GLOBAL_THREAD_POOL)
             .build();
-        retries = ofNullable(context).map(ctx -> ctx.asInt(CONFIG_HTTP_CLIENT_MAX_RETRIES)).orElse(3);
-        readTimeoutMs = ofNullable(context).map(ctx -> ctx.asInt(CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS)).orElse(10000);
     }
 
-    /**
-     * Returns the context used for configuring this {@link HttpClient}.
-     *
-     * @return the context used for configuring this {@link HttpClient}
-     */
-    public Context context() {
-        return context;
+    @Override
+    public void stop() {
+        client.close();
+        client = null;
     }
 
-    /**
-     * Returns the number of retries configured for this {@link HttpClient}.
-     *
-     * @return the number of retries
-     */
-    public int retries() {
-        return retries;
+    @Override
+    public Object onFailure(final Event error) {
+        return null;
     }
 
-    /**
-     * Returns whether this {@link HttpClient} follows redirects.
-     *
-     * @return {@code true} if redirects are followed, {@code false} otherwise
-     */
-    public boolean followRedirects() {
-        return ALWAYS.equals(client.followRedirects());
+    @Override
+    @SuppressWarnings("unchecked")
+    public void onEvent(final Event event) {
+        event.ifPresentAck(EVENT_SEND_HTTP, HttpObject.class, httpObject -> send(httpObject, event.as(Consumer.class, "callback")));
+        event.ifPresentAck(EVENT_SEND_HTTP, HttpRequest.class, httpRequest -> send(httpRequest, event.as(Consumer.class, "callback")));
     }
 
-    /**
-     * Returns the read timeout in milliseconds configured for this {@link HttpClient}.
-     *
-     * @return the read timeout in milliseconds
-     */
-    public int readTimeoutMs() {
-        return readTimeoutMs;
+    @Override
+    public void configure(final TypeMapI<?> changes, final TypeMapI<?> merged) {
+        changes.asIntOpt(CONFIG_HTTP_CLIENT_MAX_RETRIES).ifPresent(value -> retries = value);
+        changes.asIntOpt(CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS).ifPresent(value -> readTimeoutMs = value);
     }
 
-    /**
-     * Returns the connection timeout in milliseconds configured for this {@link HttpClient}.
-     *
-     * @return the connection timeout in milliseconds
-     */
-    public long connectionTimeoutMs() {
-        return client.connectTimeout().map(Duration::toMillis).orElse(-1L);
-    }
-
-    /**
-     * Returns the {@link java.net.http.HttpClient.Version} used by this {@link HttpClient}.
-     *
-     * @return the {@link java.net.http.HttpClient.Version}
-     */
-    public java.net.http.HttpClient.Version version() {
-        return client.version();
-    }
-
-    public java.net.http.HttpClient client() {
-        return client;
+    @Override
+    public String toString() {
+        return new LinkedTypeMap()
+            .putR("version", version())
+            .putR("retries", retries)
+            .putR("followRedirects", followRedirects())
+            .putR("readTimeoutMs", readTimeoutMs)
+            .putR("connectionTimeoutMs", connectionTimeoutMs())
+            .toJson();
     }
 
     /**
@@ -145,7 +103,58 @@ public class HttpClient {
         return request != null ? send(0, request, new HttpObject(), callback) : new HttpObject().failure(400, new IllegalArgumentException("Invalid request [null]"));
     }
 
+    /**
+     * Returns the number of retries configured for this {@link HttpClient}.
+     *
+     * @return the number of retries
+     */
+    public int retries() {
+        return retries;
+    }
+
+    /**
+     * Returns whether this {@link HttpClient} follows redirects.
+     *
+     * @return {@code true} if redirects are followed, {@code false} otherwise
+     */
+    public boolean followRedirects() {
+        return ALWAYS.equals(client.followRedirects());
+    }
+
+    /**
+     * Returns the read timeout in milliseconds configured for this {@link HttpClient}.
+     *
+     * @return the read timeout in milliseconds
+     */
+    public long readTimeoutMs() {
+        return readTimeoutMs;
+    }
+
+    /**
+     * Returns the connection timeout in milliseconds configured for this {@link HttpClient}.
+     *
+     * @return the connection timeout in milliseconds
+     */
+    public long connectionTimeoutMs() {
+        return client.connectTimeout().map(Duration::toMillis).orElse(-1L);
+    }
+
+    /**
+     * Returns the {@link java.net.http.HttpClient.Version} used by this {@link HttpClient}.
+     *
+     * @return the {@link java.net.http.HttpClient.Version}
+     */
+    public java.net.http.HttpClient.Version version() {
+        return client.version();
+    }
+
+    public java.net.http.HttpClient client() {
+        return client;
+    }
+
     protected HttpObject send(final int attempt, final HttpRequest request, final HttpObject response, final Consumer<HttpObject> callback) {
+        if (client == null)
+            configure(context);
         try {
             if (callback == null) {
                 return responseOf(client.send(request, HttpResponse.BodyHandlers.ofByteArray()), response);
@@ -196,14 +205,4 @@ public class HttpClient {
         return response.path(request.uri().toString()).failure(-1, throwable);
     }
 
-    @Override
-    public String toString() {
-        return "HttpClient{" +
-            "version=" + version() +
-            ", retries=" + retries +
-            ", followRedirects=" + followRedirects() +
-            ", readTimeoutMs=" + readTimeoutMs +
-            ", connectionTimeoutMs=" + connectionTimeoutMs() +
-            '}';
-    }
 }

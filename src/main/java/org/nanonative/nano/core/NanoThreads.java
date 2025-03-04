@@ -27,7 +27,6 @@ import static org.nanonative.nano.core.model.Context.CONFIG_THREAD_POOL_TIMEOUT_
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_UNREGISTER;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
-import static org.nanonative.nano.core.model.NanoThread.activeNanoThreads;
 import static org.nanonative.nano.helper.NanoUtils.callerInfoStr;
 import static org.nanonative.nano.helper.NanoUtils.getThreadName;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
@@ -162,8 +161,6 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
         final long timeoutMs = context.asLongOpt(CONFIG_THREAD_POOL_TIMEOUT_MS).filter(l -> l > 0).orElse(500L);
         context.debug(() -> "Shutdown schedulers [{}]", schedulers.size());
         shutdownExecutors(timeoutMs, schedulers.toArray(ScheduledExecutorService[]::new));
-//        context.debug(() -> "Shutdown {} [{}]", threadPool.getClass().getSimpleName(), activeNanoThreads());
-//        shutdownExecutors(timeoutMs, threadPool);
     }
 
     /**

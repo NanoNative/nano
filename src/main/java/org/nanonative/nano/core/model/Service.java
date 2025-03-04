@@ -32,6 +32,10 @@ public abstract class Service {
 
     public abstract void onEvent(final Event event);
 
+    public void configure(final TypeMapI<?> config) {
+        configure(config, config);
+    }
+
     public abstract void configure(final TypeMapI<?> changes, final TypeMapI<?> merged);
 
     public String name() {
@@ -81,7 +85,7 @@ public abstract class Service {
             final long startTime = System.currentTimeMillis();
             if (isReady.compareAndSet(false, true)) {
                 this.context = context.newContext(this.getClass());
-                this.configure(context, context);
+                this.configure(context);
                 this.start();
                 this.context.broadcastEvent(EVENT_APP_SERVICE_REGISTER, () -> this);
                 this.context.sendEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "application.services.ready.time", System.currentTimeMillis() - startTime, Map.of("class", this.getClass().getSimpleName())), result -> {});

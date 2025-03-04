@@ -3,23 +3,23 @@ package org.nanonative.nano.examples;
 import org.junit.jupiter.api.Disabled;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
-import org.nanonative.nano.services.http.HttpService;
+import org.nanonative.nano.services.http.HttpServer;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.util.Date;
 import java.util.Map;
+import java.util.Optional;
 import java.util.logging.Level;
 
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
-import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Disabled
 public class Yuna {
 
     public static void main(final String[] args) {
-
-        final Nano nano = new Nano(new HttpService());
+        final Nano nano = new Nano(new HttpServer());
 
         final Date myConfigValue = nano.context().asDate("unix-timestamp");
         nano.context().info(() -> "Config value converted to date [{}]", myConfigValue);
@@ -33,9 +33,6 @@ public class Yuna {
                 .respond(event))
         );
 
-
-
-
         final Context context = nano.context(Yuna.class);
         context.info(() -> "Hello World 1");
         context.sendEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, Level.OFF));
@@ -46,10 +43,10 @@ public class Yuna {
 //        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, LogLevel.INFO));
 //
 //        // Nano with startup services
-//        final Nano nano = new Nano(new HttpService());
+//        final Nano nano = new Nano(new HttpServer());
 //
 //        // Nano adding "Hello World" API
-//        final Nano nano = new Nano(new HttpService())
+//        final Nano nano = new Nano(new HttpServer())
 //            .subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
 //                .filter(HttpObject::isMethodGet)
 //                .filter(request -> request.pathMatch("/hello"))
@@ -63,7 +60,7 @@ public class Yuna {
 //        final Nano application = new Nano(Map.of(
 //            CONFIG_LOG_LEVEL, LogLevel.INFO,
 //            CONFIG_LOG_FORMATTER, "console"
-//        ), new LogQueue(), new MetricService(), new HttpService());
+//        ), new LogQueue(), new MetricService(), new HttpServer());
 
 
     }

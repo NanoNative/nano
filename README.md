@@ -99,7 +99,7 @@ Simple Nano example with [HttpService](docs/services/httpservice/README.md) _(a 
 
 ```java
 public static void main(final String[] args) {
-    // Start Nano with HttpService
+    // Start Nano with HttpServer
     final Nano app = new Nano(args, new HttpService());
 
     // listen to /hello

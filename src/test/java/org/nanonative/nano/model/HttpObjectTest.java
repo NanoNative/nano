@@ -28,7 +28,7 @@ import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.util.Locale.ENGLISH;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.nanonative.nano.helper.event.model.Event.eventOf;
-import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_JSON;
 import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PDF;
 import static org.nanonative.nano.services.http.model.ContentType.TEXT_PLAIN;

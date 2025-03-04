@@ -7,13 +7,12 @@ import org.nanonative.nano.helper.ExRunnable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.LogRecord;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
-import static java.util.logging.Level.SEVERE;
-import static java.util.logging.Level.WARNING;
+import static java.util.Optional.ofNullable;
 
 /**
  * The abstract base class for {@link Nano} framework providing {@link Service} handling functionalities.
@@ -36,6 +35,17 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
         this.services = new CopyOnWriteArrayList<>();
         subscribeEvent(Context.EVENT_APP_SERVICE_REGISTER, event -> event.payloadOpt(Service.class).map(this::registerService).ifPresent(nano -> event.acknowledge()));
         subscribeEvent(Context.EVENT_APP_SERVICE_UNREGISTER, event -> event.payloadOpt(Service.class).map(service -> unregisterService(event.context(), service)).ifPresent(nano -> event.acknowledge()));
+    }
+
+    /**
+     * Retrieves a {@link Service} of a specified type.
+     *
+     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
+     * @param serviceClass The class of the {@link Service} to retrieve.
+     * @return The first instance of the specified {@link Service}, or null if not found.
+     */
+    public <S extends Service> Optional<S> serviceOpt(final Class<S> serviceClass) {
+        return ofNullable(service(serviceClass));
     }
 
     /**

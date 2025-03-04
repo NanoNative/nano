@@ -4,13 +4,11 @@ import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.Type;
 import berlin.yuna.typemap.model.TypeMapI;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.core.model.Unhandled;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.services.http.logic.HttpClient;
 import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpHeaders;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -19,7 +17,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.http.HttpRequest;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,16 +30,11 @@ import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
 import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
 
-public class HttpService extends Service {
-    protected HttpServer server;
+public class HttpServer extends Service {
+    protected com.sun.net.httpserver.HttpServer server;
 
     // Register configurations
-    public static final String CONFIG_SERVICE_HTTP_PORT = registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpService.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_VERSION = registerConfig("app_service_http_version", "HTTP client version 1 or 2 (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_MAX_RETRIES = registerConfig("app_service_http_max_retries", "Maximum number of retries for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS = registerConfig("app_service_http_con_timeoutMs", "Connection timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS = registerConfig("app_service_http_read_timeoutMs", "Read timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
-    public static final String CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS = registerConfig("app_service_http_follow_redirects", "Follow redirects for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_SERVICE_HTTP_PORT = registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpServer.class.getSimpleName() + ")");
 
     // Register event channels
     public static final int EVENT_HTTP_REQUEST = registerChannelId("HTTP_REQUEST");
@@ -56,7 +48,7 @@ public class HttpService extends Service {
         return server == null ? -1 : server.getAddress().getPort();
     }
 
-    public HttpServer server() {
+    public com.sun.net.httpserver.HttpServer server() {
         return server;
     }
 
@@ -77,7 +69,7 @@ public class HttpService extends Service {
         context.put(CONFIG_SERVICE_HTTP_PORT, port);
         handleHttps(context);
         try {
-            server = HttpServer.create(new InetSocketAddress(port), 0);
+            server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(port), 0);
             server.setExecutor(GLOBAL_THREAD_POOL);
             server.createContext("/", exchange -> {
                 final HttpObject request = new HttpObject(exchange);
@@ -111,12 +103,6 @@ public class HttpService extends Service {
 
     @Override
     public void onEvent(final Event event) {
-        event.ifPresent(EVENT_HTTP_REQUEST, HttpRequest.class, request -> {
-            // Ignore incoming requests
-            if (request instanceof final HttpObject httpObject && httpObject.exchange() != null)
-                return;
-            event.response(((HttpClient) context.computeIfAbsent(HttpObject.CONTEXT_HTTP_CLIENT_KEY, value -> new HttpClient())).send(request));
-        });
     }
 
     @Override

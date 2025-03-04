@@ -39,7 +39,6 @@ import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.model.TestService.TEST_EVENT;
-import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.services.logging.model.LogLevel.INFO;
 

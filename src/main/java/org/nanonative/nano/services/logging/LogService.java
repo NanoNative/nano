@@ -83,7 +83,8 @@ public class LogService extends Service {
         context.run(() -> log(logRecord.get()));
     }
 
-    protected void log(final LogRecord logRecord) {
+    @SuppressWarnings("SameReturnValue")
+    protected boolean log(final LogRecord logRecord) {
         context.run(() -> {
             final String formattedMessage = logFormatter.format(logRecord);
             if (logRecord.getLevel().intValue() < Level.WARNING.intValue()) {
@@ -92,6 +93,7 @@ public class LogService extends Service {
                 System.err.print(formattedMessage);
             }
         });
+        return true;
     }
 
     private boolean isLoggable(final Event event) {
@@ -100,11 +102,6 @@ public class LogService extends Service {
             .map(level -> event.asString("name"))
             .filter(name -> excludePatterns == null || excludePatterns.stream().noneMatch(name::contains))
             .isPresent();
-    }
-
-    private boolean isLoggable(final LogRecord logRecord) {
-        if (logRecord.getLevel().intValue() > level.intValue()) return false;
-        return excludePatterns == null || excludePatterns.stream().noneMatch(exclusion -> logRecord.getLoggerName().contains(exclusion));
     }
 
     @Override
