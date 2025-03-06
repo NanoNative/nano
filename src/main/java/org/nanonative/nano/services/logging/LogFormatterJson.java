@@ -1,4 +1,4 @@
-package org.nanonative.nano.helper.logger.logic;
+package org.nanonative.nano.services.logging;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 
 import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
 import static org.nanonative.nano.helper.NanoUtils.LINE_SEPARATOR;
-import static org.nanonative.nano.helper.logger.model.LogLevel.nanoLogLevelOf;
+import static org.nanonative.nano.services.logging.model.LogLevel.nanoLogLevelOf;
 
 /**
  * A log formatter that outputs log records in JSON format.
@@ -22,7 +22,7 @@ import static org.nanonative.nano.helper.logger.model.LogLevel.nanoLogLevelOf;
  * <p>
  * Usage Example:
  * <pre>
- * logger.info(() -> throwable, "Processed records - success: [{}], failure: [%s], ignored; [{2}]", successCount, failureCount, ignoreCount, Map.of("username", "yuna"));
+ * context.info(() -> throwable, "Processed records - success: [{}], failure: [%s], ignored; [{2}]", successCount, failureCount, ignoreCount, Map.of("username", "yuna"));
  * </pre>
  * In this example, 'successCount' replaces the first '{}' placeholder, 'failureCount' replaces the '%s' placeholder and 'ignoreCount' replaces the last [{2}] placeholder.
  * The formatter will convert the log into a JSON line.

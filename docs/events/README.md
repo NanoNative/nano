@@ -2,7 +2,6 @@
 
  [Context](../context/README.md)
 | [**> Events <**](README.md)
-| [Logger](../logger/README.md)
 | [Schedulers](../schedulers/README.md)
 | [Services](../services/README.md)
 
@@ -42,21 +41,21 @@ and [DefaultEventChannel](../../src/main/java/org/nanonative/nano/helper/event/m
 [Events](../events/README.md) can be sent **synchronous**, **asynchronous**, **single cast** or **broadcast**.
 
 * synchronous (SingleCast)
-  * `context.sendEvent(channelId, MyPayloadObject)`
-  * `sendEventReturn()` will return the Event instead of the Context
+    * `context.newEvent(channelId).payload(MyPayloadObject).send()`
 * asynchronous (SingleCast)
-  * `context.sendEvent(channelId, MyPayloadObject, response -> myListener)`
-  * `sendEventReturn()` will return the Event instead of the Context
+    * `context.newEvent(channelId).payload(MyPayloadObject).async(true).send()`
+* asynchronous with listener (SingleCast)
+    * `context.newEvent(channelId).payload(MyPayloadObject).async(response -> myListener).send()`
 
 * synchronous (BroadCast)
-  * `context.broadcastEvent(channelId, MyPayloadObject)`
-  * `broadcastEventReturn()` will return the Event instead of the Context
-  * _broadcast will not stop at the first responding listeners_
+    * `context.newEvent(channelId).payload(MyPayloadObject).broadcast(true).send()`
+    * _broadcast will not stop at the first responding listener_
 * asynchronous (BroadCast)
-  * `context.broadcastEvent(channelId, MyPayloadObject, response -> myListener)`
-  * `broadcastEventReturn()` will return the Event instead of the Context
-  * _broadcast will not stop at the first responding listeners_
-
+    * `context.newEvent(channelId).payload(MyPayloadObject).broadcast(true).async(true).send()`
+    * _broadcast will not stop at the first responding listener_
+* asynchronous with listener (SingleCast)
+    * `context.newEvent(channelId).payload(MyPayloadObject).broadcast(true).async(true).send()`
+    * _broadcast will not stop at the first responding listener_
 
 # Listening to Events
 
@@ -79,5 +78,5 @@ in method `onEvent`
 | 🔲                 | `EVENT_APP_UNHANDLED`            | `Unhandled`, `HttpObject`,... | `N/A`    | Triggered when an unhandled error happened within the context                                                                                      |
 | 🔲                 | `EVENT_APP_OOM`                  | `Double`                      | `N/A`    | Triggered when the Application reached out of memory. When the event is not handled, the App will shutdown see config `app_oom_shutdown_threshold` |
 | 🔲                 | `EVENT_APP_HEARTBEAT`            | `Nano`                        | `N/A`    | Send every 256ms                                                                                                                                   |
-| 🔳                 | `EVENT_CONFIG_CHANGE`            | `TypeMap`                     | `N/A`    | Used to change configs on the fly                                                                                                                  |
+| 🔳                 | `EVENT_CONFIG_CHANGE`            | `TypeMap`                     | `N/A`    | Used to change configs on the fly for services which supports it                                                                                   |
 

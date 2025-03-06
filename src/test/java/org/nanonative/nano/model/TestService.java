@@ -1,10 +1,10 @@
 package org.nanonative.nano.model;
 
+import berlin.yuna.typemap.model.TypeMapI;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.core.config.TestConfig;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -12,10 +12,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
-import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
+import static java.lang.System.lineSeparator;
 import static java.util.Optional.ofNullable;
+import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_HEARTBEAT;
+import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 
 public class TestService extends Service {
 
@@ -29,10 +32,6 @@ public class TestService extends Service {
     private final AtomicReference<Consumer<Context>> stopConsumer = new AtomicReference<>();
     private long startTime = System.currentTimeMillis();
     public static int TEST_EVENT = EventChannelRegister.registerChannelId("TEST_EVENT");
-
-    public TestService() {
-        super(null, false);
-    }
 
     public TestService resetEvents() {
         events.clear();
@@ -49,7 +48,7 @@ public class TestService extends Service {
     }
 
     public Event getEvent(final int channelId, final Function<Event, Boolean> condition) {
-        return getEvent(channelId, condition, TestConfig.TEST_TIMEOUT);
+        return getEvent(channelId, condition, TEST_TIMEOUT);
     }
 
     public Event getEvent(final int channelId, final long timeoutMs) {
@@ -71,6 +70,11 @@ public class TestService extends Service {
             }
             , timeoutMs
         );
+        if (result.get() == null)
+            throw new AssertionError("Event not found"
+                + " channel [" + EventChannelRegister.eventNameOf(channelId) + "]"
+                + " events [" + lineSeparator() + events.stream().filter(event -> event.channelId() != EVENT_APP_HEARTBEAT).map(Event::toString).collect(Collectors.joining(lineSeparator())) + lineSeparator() + "]"
+            );
         return result.get();
     }
 
@@ -132,18 +136,18 @@ public class TestService extends Service {
 
     // ########## DEFAULT METHODS ##########
     @Override
-    public void start(final Supplier<Context> contextSub) {
-        isReady.set(false, true, state -> startTime = System.currentTimeMillis());
+    public void start() {
+        startTime = System.currentTimeMillis();
         startCount.incrementAndGet();
         if (startConsumer.get() != null)
-            startConsumer.get().accept(contextSub.get());
+            startConsumer.get().accept(context);
     }
 
     @Override
-    public void stop(final Supplier<Context> contextSub) {
+    public void stop() {
         stopCount.incrementAndGet();
         if (stopConsumer.get() != null)
-            stopConsumer.get().accept(contextSub.get());
+            stopConsumer.get().accept(context);
     }
 
     @Override
@@ -157,6 +161,10 @@ public class TestService extends Service {
     public void onEvent(final Event event) {
         events.add(event);
         ofNullable(doOnEvent.get()).ifPresent(consumer -> consumer.accept(event));
-        super.onEvent(event);
+    }
+
+    @Override
+    public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
+
     }
 }

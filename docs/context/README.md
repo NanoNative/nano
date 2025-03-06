@@ -2,7 +2,6 @@
 
 [**> Context <**](README.md)
 | [Events](../events/README.md)
-| [Logger](../logger/README.md)
 | [Schedulers](../schedulers/README.md)
 | [Services](../services/README.md)
 
@@ -10,7 +9,7 @@
 
 The [Context](../context/README.md) object is the main and overwhelming object that is passed around in Nano and accessible at any time.
 It is used to interact with the core
-components: [Logger](../logger/README.md), [Events](../events/README.md) , [Services](../services/README.md), [Schedulers](../schedulers/README.md),
+components: [LogService](../services/logger/README.md), [Events](../events/README.md) , [Services](../services/README.md), [Schedulers](../schedulers/README.md),
 traces and
 [configuration](#configuration).
 There is **no need to create any custom config** class as the [Context](../context/README.md) contains all needed
@@ -19,7 +18,6 @@ information including type conversion.
 ```mermaid
 flowchart TD
     context(((Context))) --> nano[Nano]
-    context --> logger[Logger]
     context --> events[Events]
     context --> services[Services]
     context --> schedulers[Schedulers]
@@ -41,15 +39,15 @@ flowchart TD
 * `context.asMap(String.class, Integer.class, "app_config_key")` - Get a configuration value as a Map of Strings to Integers
 * `context.traceId()` - Get the trace id of the current [Context](../context/README.md)
 * `context.logLevel()` - Get the log level of the current [Context](../context/README.md)
-* `context.logger.info(() -> "Hello {}", "World")` - Log a message with the [Logger](../logger/README.md) at the info
+* `context.info(() -> "Hello {}", "World")` - Log a message with the [LogService](../services/logger/README.md) at the info
   level
 * `context.newContext(MyClass.class)` - Create a new [Context](../context/README.md) with
-  a [Logger](../logger/README.md) for the specific class
+  a [LogService](../services/logger/README.md) for the specific class
 
 #### Events
 
 * `context.registerChannelId("MyEventName")` - Register a new [Event](../events/README.md)  type and get the event id
-* `context.sendEvent(channelId, MyPayloadObject)` - Send an [Event](../events/README.md)  with a payload
+* `context.newEvent(channelId).payload(MyPayloadObject).send()` - Send an [Event](../events/README.md)  with a payload
 * `context.subscribeEvent(channelId, event -> System.out.println(event))` - Subscribe to an [Event](../events/README.md)
   and execute the lambda
   when the event is triggered
@@ -114,7 +112,6 @@ Example: `test.placeholder.value=${placeholder_value:fallback}`
 | app_env_prod                        | Boolean | Enable or disable behaviour e.g. exit codes. This is useful in prod environments specially on error cases. default = `false`                                                      |
 | app_log_formatter                   | String  | Log formatter `console` or `json`                                                                                                                                                 |
 | app_log_level                       | String  | Log level for the application `INFO`, `DEBUG`, `FATAL`, `ERROR`, `WARN`                                                                                                           |
-| app_log_queue_size                  | String  | Log queue size. A full queue means that log messages will start to wait to be executed - only available when using `LogQueue` Service                                             |
 | app_oom_shutdown_threshold          | String  | Sets the threshold for heap in percentage to send an `EVENT_APP_OOM`. default = `98`, disabled = `-1`. If the event is unhandled, tha pp will try to shutdown with last resources |
 | app_params_print                    | Boolean | Prints all configured values                                                                                                                                                      |
 | app_profiles                        | String  | Is config for application profiles                                                                                                                                                |

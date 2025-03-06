@@ -11,7 +11,6 @@ import com.sun.net.httpserver.HttpExchange;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.services.http.logic.HttpClient;
 
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -47,6 +46,7 @@ import static java.util.Collections.emptyList;
 import static java.util.Optional.ofNullable;
 import static java.util.zip.GZIPInputStream.GZIP_MAGIC;
 import static org.nanonative.nano.helper.NanoUtils.hasText;
+import static org.nanonative.nano.services.http.HttpClient.EVENT_SEND_HTTP;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_ENCODING;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_LANGUAGE;
@@ -95,7 +95,6 @@ public class HttpObject extends HttpRequest {
     public static final DateTimeFormatter HTTP_DATE_FORMATTER = DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.ENGLISH);
     public static final String[] USER_AGENT_BROWSERS = {"chrome", "firefox", "safari", "opera", "edge", "ie", "trident", "vivaldi", "browser", "mozilla", "webkit"};
     public static final String[] USER_AGENT_MOBILE = {"mobile", "ios", "ipad", "ipod", "htc", "nokia", "wii", "psp", "windows phone", "blackberry", "webos", "opera mini", "opera mobi", "kindle", "silk", "puffin", "ucbrowser", "ucweb", "baidubrowser", "baiduboxapp", "samsungbrowser", "miuibrowser", "miuib"};
-    public static final String CONTEXT_HTTP_CLIENT_KEY = "app_core_context_http_client";
     public static final List<String> JAVA_MANAGED_HEADERS = List.of(CONTENT_LENGTH, CONNECTION, HOST, TRANSFER_ENCODING);
 
     /**
@@ -1053,10 +1052,14 @@ public class HttpObject extends HttpRequest {
      * @return the response as an {@link HttpObject}
      */
     public HttpObject send(final Context context, final Consumer<HttpObject> callback) {
-        if (context == null) {
+        if (context == null)
             return null;
-        }
-        return ((HttpClient) context.computeIfAbsent(CONTEXT_HTTP_CLIENT_KEY, value -> new HttpClient(context))).send(this, callback);
+
+        return context.newEvent(EVENT_SEND_HTTP)
+            .payload(() -> this)
+            .putR("callback", callback)
+            .send()
+            .response(HttpObject.class);
     }
 
     /**

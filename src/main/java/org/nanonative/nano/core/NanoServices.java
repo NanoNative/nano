@@ -7,10 +7,12 @@ import org.nanonative.nano.helper.ExRunnable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
+import static java.util.Optional.ofNullable;
 
 /**
  * The abstract base class for {@link Nano} framework providing {@link Service} handling functionalities.
@@ -33,6 +35,17 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
         this.services = new CopyOnWriteArrayList<>();
         subscribeEvent(Context.EVENT_APP_SERVICE_REGISTER, event -> event.payloadOpt(Service.class).map(this::registerService).ifPresent(nano -> event.acknowledge()));
         subscribeEvent(Context.EVENT_APP_SERVICE_UNREGISTER, event -> event.payloadOpt(Service.class).map(service -> unregisterService(event.context(), service)).ifPresent(nano -> event.acknowledge()));
+    }
+
+    /**
+     * Retrieves a {@link Service} of a specified type.
+     *
+     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
+     * @param serviceClass The class of the {@link Service} to retrieve.
+     * @return The first instance of the specified {@link Service}, or null if not found.
+     */
+    public <S extends Service> Optional<S> serviceOpt(final Class<S> serviceClass) {
+        return ofNullable(service(serviceClass));
     }
 
     /**
@@ -87,7 +100,7 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
             try {
                 context.runAwait(services.stream().map(service -> (ExRunnable) () -> unregisterService(context, service)).toArray(ExRunnable[]::new));
             } catch (final Exception err) {
-                logger.fatal(err, () -> "Service [{}] shutdown error. Looks like the Death Star blew up again.", Service.class.getSimpleName());
+                context.fatal(err, () -> "Service [{}] shutdown error. Looks like the Death Star blew up again.", Service.class.getSimpleName());
                 Thread.currentThread().interrupt();
             }
         } else {
@@ -121,9 +134,10 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
         if (service != null) {
             services.remove(service);
             try {
-                service.stop(() -> context);
+                if (service.isReadyState().compareAndSet(true, false))
+                    service.stop();
             } catch (final Exception e) {
-                logger.warn(e, () -> "Stop [{}] error. Somebody call the Ghostbusters!", service.name());
+                context.warn(e, () -> "Stop [{}] error. Somebody call the Ghostbusters!", service.name());
             }
         }
         return (T) this;

@@ -94,9 +94,8 @@ public class NanoUtils {
     public static boolean waitForCondition(final BooleanSupplier condition, final long timeout) {
         final long startTime = System.currentTimeMillis();
         while (System.currentTimeMillis() - startTime < timeout) {
-            if (condition.getAsBoolean()) {
+            if (condition.getAsBoolean())
                 return true;
-            }
             try {
                 TimeUnit.MILLISECONDS.sleep(64);
             } catch (final InterruptedException e) {
@@ -313,7 +312,7 @@ public class NanoUtils {
     @SuppressWarnings("java:S106") // Standard outputs used instead of logger
     public static void handleJavaError(final Supplier<Context> context, final Throwable error) {
         if (error instanceof Error) {
-            ofNullable(context).map(Supplier::get).ifPresentOrElse(ctx -> ctx.logger().fatal(error, () -> "It seems like the dark side of the JVM has struck again. Your scenario [{}]. May the garbage collector be with you!", error.getMessage()), () -> System.err.println(error.getMessage()));
+            ofNullable(context).map(Supplier::get).ifPresentOrElse(ctx -> ctx.fatal(error, () -> "It seems like the dark side of the JVM has struck again. Your scenario [{}]. May the garbage collector be with you!", error.getMessage()), () -> System.err.println(error.getMessage()));
             System.exit(1);
         }
     }

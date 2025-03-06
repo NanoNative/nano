@@ -1,16 +1,15 @@
 package org.nanonative.nano.examples;
 
-import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.helper.logger.logic.LogQueue;
-import org.nanonative.nano.helper.logger.model.LogLevel;
-import org.nanonative.nano.services.http.HttpService;
-import org.nanonative.nano.services.metric.logic.MetricService;
 import org.junit.jupiter.api.Disabled;
+import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.services.logging.model.LogLevel;
+import org.nanonative.nano.services.http.HttpServer;
+import org.nanonative.nano.services.metric.logic.MetricService;
 
 import java.util.Map;
 
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_FORMATTER;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_FORMATTER;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Disabled
 public class Kazim {
@@ -21,7 +20,7 @@ public class Kazim {
             CONFIG_LOG_FORMATTER, "console"
 //            CONFIG_METRIC_SERVICE_BASE_PATH, "/metrics",
 //            CONFIG_METRIC_SERVICE_PROMETHEUS_PATH, "/influx"
-        ), new LogQueue(), new MetricService(), new HttpService());
+        ), new MetricService(), new HttpServer());
 
     }
 }

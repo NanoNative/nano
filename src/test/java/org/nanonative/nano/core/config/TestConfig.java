@@ -1,17 +1,14 @@
 package org.nanonative.nano.core.config;
 
-import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.helper.logger.model.LogLevel;
+import org.nanonative.nano.services.logging.model.LogLevel;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-import static org.nanonative.nano.helper.NanoUtils.tryExecute;
-import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.helper.NanoUtils.tryExecute;
 
 public class TestConfig {
 
@@ -35,15 +32,6 @@ public class TestConfig {
      */
     public static final int TEST_REPEAT = 128;
     public static final int TEST_TIMEOUT = 1024 + (int) (Math.sqrt(TEST_REPEAT) * 50);
-
-    public static Nano waitForStartUp(final Nano nano) {
-        return waitForStartUp(nano, 1);
-    }
-
-    public static Nano waitForStartUp(final Nano nano, final int numberOfServices) {
-        assertThat(waitForCondition(() -> nano.services().size() == numberOfServices, TEST_TIMEOUT)).isTrue();
-        return nano;
-    }
 
     public static boolean await(final CountDownLatch latch) throws InterruptedException {
         return latch.await(TEST_TIMEOUT, MILLISECONDS);

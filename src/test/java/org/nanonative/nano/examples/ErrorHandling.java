@@ -15,7 +15,7 @@ public class ErrorHandling {
         // Listen to exceptions
         context.subscribeEvent(EVENT_APP_UNHANDLED, event -> {
             // Print error message
-            event.context().logger().warn(() -> "Caught event [{}] with error [{}] ", event.nameOrg(), event.error().getMessage());
+            event.context().warn(() -> "Caught event [{}] with error [{}] ", event.nameOrg(), event.error().getMessage());
             event.acknowledge(); // Set exception as handled (prevent further processing)
         });
 

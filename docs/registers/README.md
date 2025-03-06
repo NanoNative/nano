@@ -55,7 +55,7 @@ static {
 ### LogFormatRegister
 
 This register is used to register custom log formats. Default formats are `console` and `json`.
-The [Logger](../logger/README.md) is still under construction. The functionality might change in the future.
+The [LogService](../services/logger/README.md) is still under construction. The functionality might change in the future.
 Simply use the default log Formatter interface of java `java.util.logging.Formatter`.
 
 **Usage:**
@@ -74,7 +74,7 @@ static {
 
 The `TypeConversionRegister` is used to register custom type converters. It's the core of Nano.
 These type conversion are used in the [Config/Context](../context/README.md), [Event](../events/README.md)
-Cache, [HttpService](../services/httpservice/README.md) request & responses and everything which
+Cache, [HttpServer](../services/httpserver/README.md) request & responses and everything which
 uses `TypeMap`, `TypeList` or `TypeInfo`. _See [TypeMap](https://github.com/YunaBraska/type-map) for more information._
 
 **Usage:**
