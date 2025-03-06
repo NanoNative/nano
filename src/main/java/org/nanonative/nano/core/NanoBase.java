@@ -1,13 +1,9 @@
 package org.nanonative.nano.core;
 
-import org.nanonative.nano.core.model.Context;
-import org.nanonative.nano.helper.LockedBoolean;
-import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.LogFormatRegister;
-import org.nanonative.nano.helper.logger.logic.NanoLogger;
-import org.nanonative.nano.helper.logger.model.LogLevel;
 import berlin.yuna.typemap.logic.ArgsDecoder;
-import berlin.yuna.typemap.model.TypeMap;
+import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.logging.LogService;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
@@ -17,23 +13,22 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-import java.util.logging.Formatter;
+import java.util.logging.LogRecord;
 import java.util.stream.Collectors;
 
+import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
+import static java.lang.System.lineSeparator;
+import static java.util.Optional.ofNullable;
+import static java.util.logging.Level.INFO;
 import static org.nanonative.nano.core.model.Context.APP_HELP;
 import static org.nanonative.nano.core.model.Context.CONFIG_ENV_PROD;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_FORMATTER;
-import static org.nanonative.nano.core.model.Context.CONFIG_LOG_LEVEL;
-import static org.nanonative.nano.core.model.Context.CONTEXT_LOGGER_KEY;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.addConfig;
 import static org.nanonative.nano.helper.NanoUtils.readConfigFiles;
 import static org.nanonative.nano.helper.NanoUtils.resolvePlaceHolders;
-import static berlin.yuna.typemap.logic.TypeConverter.convertObj;
-import static java.lang.System.lineSeparator;
-import static java.util.Optional.ofNullable;
 
 /**
  * The abstract base class for {@link Nano} framework providing the core functionalities.
@@ -45,9 +40,9 @@ public abstract class NanoBase<T extends NanoBase<T>> {
 
     protected final Context context;
     protected final long createdAtMs;
-    protected final NanoLogger logger;
+    protected final LogService logService;
     protected final Map<Integer, Set<Consumer<Event>>> listeners = new ConcurrentHashMap<>();
-    protected final LockedBoolean isReady = new LockedBoolean(true);
+    protected final AtomicBoolean isReady = new AtomicBoolean(true);
     protected final AtomicInteger eventCount = new AtomicInteger(0);
     @SuppressWarnings("java:S2386")
     public static final Map<Integer, String> EVENT_TYPES = new ConcurrentHashMap<>();
@@ -64,15 +59,18 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         this.createdAtMs = System.currentTimeMillis();
         this.context = readConfigs(args);
         if (configs != null)
-            configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(convertObj(value, String.class)).orElse("")));
-        this.logger = new NanoLogger(this).level(context.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).orElse(LogLevel.DEBUG)).formatter(context.asOpt(Formatter.class, CONFIG_LOG_FORMATTER).orElseGet(() -> LogFormatRegister.getLogFormatter("console")));
-        context.put(CONTEXT_LOGGER_KEY, logger);
+            configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(value).orElse("")));
+        this.logService = new LogService();
+        this.logService.context(context);
+        this.logService.configure(context, context);
+        this.logService.start();
+        this.logService.isReadyState().set(true);
         displayHelpMenu();
-        subscribeEvent(EVENT_CONFIG_CHANGE, event -> event.payloadOpt(TypeMap.class).map(this::putAll).ifPresent(nano -> event.acknowledge()));
+        subscribeEvent(EVENT_CONFIG_CHANGE, event -> event.payloadOpt(Map.class).map(this::putAll).ifPresent(nano -> event.acknowledge()));
     }
 
     /**
-     * Creates a {@link Context} with {@link NanoLogger} for the specified class.
+     * Creates a {@link Context} for the specified class.
      *
      * @param clazz The class for which the {@link Context} is to be created.
      * @return A new {@link Context} instance associated with the given class.
@@ -81,33 +79,23 @@ public abstract class NanoBase<T extends NanoBase<T>> {
 
     /**
      * Sends an event to {@link Nano#listeners} and {@link Nano#services}.
-     * Used {@link Context#sendEvent(int, Object)} from {@link Nano#context(Class)} instead of the core method.
      *
-     * @param type             The integer representing the type of the event. This typically corresponds to a specific kind of event.
-     * @param context          The {@link Context} in which the event is created and processed. It provides environmental data and configurations.
-     * @param payload          The data or object that is associated with this event. This can be any relevant information that needs to be passed along with the event.
-     * @param responseListener A consumer that handles the response of the event processing. It can be used to execute actions based on the event's outcome or data.
-     * @param broadcast        Whether to send the event only to the first listener or service that response.
+     * @param event The {@link Event} object that encapsulates the event's context, type, and payload. use {@link Event#eventOf(Context, int)} or {@link Event#asyncEventOf(Context, int)}  to create an instance.
      * @return Self for chaining
      */
-    abstract T sendEvent(final int type, final Context context, final Object payload, final Consumer<Object> responseListener, final boolean broadcast);
+    abstract T sendEvent(final Event event);
 
     /**
      * Processes an event with the given parameters and decides on the execution path based on the presence of a response listener and the broadcast flag.
      * If a response listener is provided, the event is processed asynchronously; otherwise, it is processed in the current thread. This method creates an {@link Event} instance and triggers the appropriate event handling logic.
      *
-     * @param type             The integer representing the type of the event, identifying the nature or action of the event.
-     * @param context          The {@link Context} associated with the event, encapsulating environment and configuration details.
-     * @param payload          The payload of the event, containing data relevant to the event's context and purpose.
-     * @param responseListener A consumer for handling the event's response. If provided, the event is handled asynchronously; if null, the handling is synchronous.
-     * @param broadCast        Determines the event's distribution: if true, the event is made available to all listeners; if false, it targets specific listeners based on the implementation logic.
+     * @param event The {@link Event} object that encapsulates the event's context, type, and payload. use {@link Event#eventOf(Context, int)} or {@link Event#asyncEventOf(Context, int)}  to create an instance.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    abstract Event sendEventReturn(final int type, final Context context, final Object payload, final Consumer<Object> responseListener, final boolean broadCast);
+    abstract Event sendEventR(final Event event);
 
-    public NanoBase<T> putAll(final TypeMap map) {
+    public NanoBase<T> putAll(final Map<?, ?> map) {
         context.putAll(map);
-        logger.configure(map);
         return this;
     }
 
@@ -126,15 +114,6 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @return The current instance of {@link Nano} for method chaining.
      */
     public abstract T stop(final Context context);
-
-    /**
-     * Retrieves the logger associated with this instance.
-     *
-     * @return The {@link NanoLogger} for this instance.
-     */
-    public NanoLogger logger() {
-        return logger;
-    }
 
     /**
      * Retrieves the registered event listeners.
@@ -228,7 +207,11 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     protected void displayHelpMenu() {
         if (context.asBooleanOpt(APP_HELP).filter(helpCalled -> helpCalled).isPresent()) {
             final int keyLength = CONFIG_KEYS.keySet().stream().mapToInt(String::length).max().orElse(0);
-            logger.info(() -> "Available configs keys: " + lineSeparator() + CONFIG_KEYS.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(conf -> String.format("%-" + keyLength + "s  %s", conf.getKey(), conf.getValue())).collect(Collectors.joining(lineSeparator())));
+            logService.log(() -> {
+                final LogRecord logRecord = new LogRecord(INFO, "Available configs keys: " + lineSeparator() + CONFIG_KEYS.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(conf -> String.format("%-" + keyLength + "s  %s", conf.getKey(), conf.getValue())).collect(Collectors.joining(lineSeparator())));
+                logRecord.setLoggerName(this.getClass().getCanonicalName());
+                return logRecord;
+            });
             if (context.asBooleanOpt(CONFIG_ENV_PROD).orElse(false))
                 System.exit(0);
         }
@@ -247,20 +230,6 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         if (args != null)
             ArgsDecoder.argsOf(String.join(" ", args)).forEach((key, value) -> addConfig(result, key, value));
         return resolvePlaceHolders(result);
-    }
-
-    /**
-     * Sets the logging level for the NanoBase instance.
-     *
-     * @param level The logging level to be set.
-     * @return True if the level was successfully set.
-     */
-    @SuppressWarnings("unchecked")
-    protected T setLogLevel(final LogLevel level) {
-        logger.level(level);
-        context.put(CONFIG_LOG_LEVEL, level);
-        logger.trace(() -> "New {} [{}]", LogLevel.class.getSimpleName(), level);
-        return (T) this;
     }
 
     /**

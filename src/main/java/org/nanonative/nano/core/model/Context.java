@@ -1,7 +1,7 @@
 package org.nanonative.nano.core.model;
 
 import berlin.yuna.typemap.model.ConcurrentTypeMap;
-import berlin.yuna.typemap.model.TypeMap;
+import berlin.yuna.typemap.model.LinkedTypeMap;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.NanoServices;
 import org.nanonative.nano.core.NanoThreads;
@@ -10,25 +10,24 @@ import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.config.ConfigRegister;
 import org.nanonative.nano.helper.event.EventChannelRegister;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.helper.logger.LogFormatRegister;
-import org.nanonative.nano.helper.logger.logic.LogQueue;
-import org.nanonative.nano.helper.logger.logic.NanoLogger;
-import org.nanonative.nano.helper.logger.model.LogLevel;
 import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpMethod;
+import org.nanonative.nano.services.logging.LogFormatRegister;
+import org.nanonative.nano.services.logging.model.LogLevel;
 
 import java.time.DayOfWeek;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.logging.Formatter;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.stream.Stream;
 
 import static berlin.yuna.typemap.config.TypeConversionRegister.registerTypeConvert;
@@ -36,13 +35,15 @@ import static java.net.http.HttpClient.Version.HTTP_1_1;
 import static java.net.http.HttpClient.Version.HTTP_2;
 import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.model.Service.threadsOf;
+import static org.nanonative.nano.helper.event.model.Event.eventOf;
+import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
+import static org.nanonative.nano.services.logging.LogService.MAX_LOG_NAME_LENGTH;
 
 @SuppressWarnings({"unused", "UnusedReturnValue", "java:S2160"})
 public class Context extends ConcurrentTypeMap {
 
     // Context keys
     public static final String CONTEXT_TRACE_ID_KEY = "app_core_context_trace_id";
-    public static final String CONTEXT_LOGGER_KEY = "app_core_context_logger";
     public static final String CONTEXT_PARENT_KEY = "app_core_context_parent";
     public static final String CONTEXT_CLASS_KEY = "app_core_context_class";
     public static final String CONTEXT_NANO_KEY = "app_core_context_nano";
@@ -52,9 +53,6 @@ public class Context extends ConcurrentTypeMap {
     public static final String APP_HELP = ConfigRegister.registerConfig("help", "Lists available config keys");
     public static final String APP_PARAMS = ConfigRegister.registerConfig("app_params_print", "Pints all config values");
     public static final String CONFIG_PROFILES = ConfigRegister.registerConfig("app_profiles", "Active config profiles for the application");
-    public static final String CONFIG_LOG_LEVEL = ConfigRegister.registerConfig("app_log_level", "Log level for the application (see " + LogLevel.class.getSimpleName() + ")");
-    public static final String CONFIG_LOG_FORMATTER = ConfigRegister.registerConfig("app_log_formatter", "Log formatter (see " + LogFormatRegister.class.getSimpleName() + ")");
-    public static final String CONFIG_LOG_QUEUE_SIZE = ConfigRegister.registerConfig("app_log_queue_size", "Log queue size. A full queue means that log messages will start to wait to be executed (see " + LogQueue.class.getSimpleName() + ")");
     public static final String CONFIG_THREAD_POOL_TIMEOUT_MS = ConfigRegister.registerConfig("app_thread_pool_shutdown_timeout_ms", "Timeout for thread pool shutdown in milliseconds (see " + NanoThreads.class.getSimpleName() + ")");
     public static final String CONFIG_PARALLEL_SHUTDOWN = ConfigRegister.registerConfig("app_service_shutdown_parallel", "Enable or disable parallel service shutdown (see " + NanoServices.class.getSimpleName() + "). Enabled = Can increase the shutdown performance on`true`");
     public static final String CONFIG_OOM_SHUTDOWN_THRESHOLD = ConfigRegister.registerConfig("app_oom_shutdown_threshold", "Sets the threshold for heap in percentage to send an `EVENT_APP_OOM`. default = `98`, disabled = `-1`. If the event is unhandled, tha pp will try to shutdown with last resources");
@@ -78,9 +76,12 @@ public class Context extends ConcurrentTypeMap {
         registerTypeConvert(String.class, Formatter.class, LogFormatRegister::getLogFormatter);
         registerTypeConvert(String.class, LogLevel.class, LogLevel::nanoLogLevelOf);
         registerTypeConvert(LogLevel.class, String.class, Enum::name);
+        registerTypeConvert(Level.class, String.class, Level::toString);
+        registerTypeConvert(String.class, Level.class, level -> LogLevel.nanoLogLevelOf(level).toJavaLogLevel());
         registerTypeConvert(ContentType.class, String.class, ContentType::name);
         registerTypeConvert(String.class, ContentType.class, ContentType::fromValue);
         registerTypeConvert(HttpMethod.class, String.class, HttpMethod::name);
+        registerTypeConvert(LogRecord.class, String.class, logRecord -> new LinkedTypeMap().putR("message", logRecord.getMessage()).putR("level", LogLevel.nanoLogLevelOf(logRecord.getLevel()).name()).putR("logger", ofNullable(logRecord.getLoggerName()).map(s -> s.contains(".") ? s.substring(s.indexOf(".")) : s)).putR("thrown", ofNullable(logRecord.getThrown()).map(Throwable::getClass).map(Class::getSimpleName).orElse("false")).toJson());
         registerTypeConvert(String.class, HttpMethod.class, HttpMethod::valueOf);
         registerTypeConvert(String.class, java.net.http.HttpClient.Version.class, string -> {
             if ("1".equals(string) || HTTP_1_1.toString().equals(string)) {
@@ -141,7 +142,7 @@ public class Context extends ConcurrentTypeMap {
      * @return The trace ID at the specified index, or the last trace ID if the index is out of bounds.
      */
     public String traceId(final int index) {
-        return index < 1 ? traceId() : Stream.iterate(Optional.of(this), opt -> opt.flatMap(ctx -> Optional.ofNullable(ctx.parent())))
+        return index < 1 ? traceId() : Stream.iterate(Optional.of(this), opt -> opt.flatMap(ctx -> ofNullable(ctx.parent())))
             .limit(index + 1L)
             .reduce((first, second) -> second)
             .flatMap(ctx -> ctx.map(Context::traceId))
@@ -154,20 +155,186 @@ public class Context extends ConcurrentTypeMap {
      * @return A list of all trace IDs associated with this context.
      */
     public List<String> traceIds() {
-        return Stream.iterate(Optional.of(this), Optional::isPresent, opt -> opt.flatMap(ctx -> Optional.ofNullable(ctx.parent())))
-            .map(opt -> opt.flatMap(ctx -> Optional.ofNullable(ctx.traceId())))
+        return Stream.iterate(Optional.of(this), Optional::isPresent, opt -> opt.flatMap(ctx -> ofNullable(ctx.parent())))
+            .map(opt -> opt.flatMap(ctx -> ofNullable(ctx.traceId())))
             .flatMap(Optional::stream)
             .toList();
     }
 
+    //########## LOGGING ##########
+
     /**
-     * Retrieves the logger associated with this context.
+     * Logs a message with the specified log level.
      *
-     * @return The logger associated with this context.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
      */
-    public NanoLogger logger() {
-        final NanoLogger logger = get(NanoLogger.class, CONTEXT_LOGGER_KEY);
-        return logger != null ? logger : initLogger();
+    public Context fatal(final Supplier<String> message, final Object... params) {
+        return log(LogLevel.FATAL, null, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param thrown  The exception to log.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context fatal(final Throwable thrown, final Supplier<String> message, final Object... params) {
+        return log(LogLevel.FATAL, thrown, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context error(final Supplier<String> message, final Object... params) {
+        return log(LogLevel.ERROR, null, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param thrown  The exception to log.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context error(final Throwable thrown, final Supplier<String> message, final Object... params) {
+        return log(LogLevel.ERROR, thrown, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context warn(final Supplier<String> message, final Object... params) {
+        return log(LogLevel.WARN, null, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param thrown  The exception to log.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context warn(final Throwable thrown, final Supplier<String> message, final Object... params) {
+        return log(LogLevel.WARN, thrown, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context info(final Supplier<String> message, final Object... params) {
+        return log(LogLevel.INFO, null, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param thrown  The exception to log.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context info(final Throwable thrown, final Supplier<String> message, final Object... params) {
+        return log(LogLevel.INFO, thrown, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context debug(final Supplier<String> message, final Object... params) {
+        return log(LogLevel.DEBUG, null, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param thrown  The exception to log.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context debug(final Throwable thrown, final Supplier<String> message, final Object... params) {
+        return log(LogLevel.DEBUG, thrown, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context trace(final Supplier<String> message, final Object... params) {
+        return log(LogLevel.TRACE, null, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param thrown  The exception to log.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context trace(final Throwable thrown, final Supplier<String> message, final Object... params) {
+        return log(LogLevel.TRACE, thrown, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param level   The log level to use.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context log(final LogLevel level, final Supplier<String> message, final Object... params) {
+        return log(level, null, message, params);
+    }
+
+    /**
+     * Logs a message with the specified log level.
+     *
+     * @param level   The log level to use.
+     * @param thrown  The exception to log.
+     * @param message The message to log.
+     * @param params  The parameters to replace in the message.
+     * @return self for chaining
+     */
+    public Context log(final LogLevel level, final Throwable thrown, final Supplier<String> message, final Object... params) {
+        newEvent(EVENT_LOGGING).async(true).broadcast(false).payload(
+                () -> {
+                    final LogRecord logRecord = new LogRecord(level.toJavaLogLevel(), message.get());
+                    logRecord.setParameters(params);
+                    logRecord.setThrown(thrown);
+                    logRecord.setLoggerName(clazz().getCanonicalName());
+                    return logRecord;
+                }
+            ).putR("level", level)
+            .putR("name", clazz().getCanonicalName())
+            .send();
+        return this;
     }
 
     /**
@@ -190,23 +357,7 @@ public class Context extends ConcurrentTypeMap {
         return new Context(this, clazz, true);
     }
 
-    /**
-     * Retrieves the log level of the context logger.
-     *
-     * @return The log level of the context logger.
-     */
-    public LogLevel logLevel() {
-        return logger().level();
-    }
-
     //########## CHAINING HELPERS ##########
-
-    @Override
-    public void putAll(final Map<?, ?> map) {
-        super.putAll(map);
-        // Auto change logger
-        asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).ifPresent(logger -> logger.configure(map instanceof final TypeMap typeMap ? typeMap : new TypeMap(map)));
-    }
 
     /**
      * Puts a key-value pair into the context.
@@ -219,8 +370,6 @@ public class Context extends ConcurrentTypeMap {
     public Context put(final Object key, final Object value) {
         // ConcurrentHashMap does not allow null keys or values.
         super.put(key, value != null ? value : "");
-        // Auto change logger
-        asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).ifPresent(logger -> logger.configure(new TypeMap().putR(key, value)));
         return this;
     }
 
@@ -342,26 +491,6 @@ public class Context extends ConcurrentTypeMap {
         return this;
     }
 
-    //########## LOGGING HELPERS ##########
-
-    /**
-     * Sets the logger name for the context logger.
-     *
-     * @return The created {@link NanoLogger}
-     */
-    protected NanoLogger initLogger() {
-        final NanoLogger logger = new NanoLogger(clazz());
-        ofNullable(parent()).ifPresentOrElse(p -> logger
-                .level(p.logger().level())
-                .logQueue(p.logger().logQueue())
-                .formatter(p.logger().formatter()),
-            () -> logger
-                .level(asOpt(LogLevel.class, CONFIG_LOG_LEVEL).orElse(LogLevel.INFO))
-                .formatter(asOpt(Formatter.class, CONFIG_LOG_FORMATTER).orElseGet(() -> LogFormatRegister.getLogFormatter("console"))));
-        put(CONTEXT_LOGGER_KEY, logger);
-        return logger;
-    }
-
     //########## ASYNC HELPERS ##########
 
     /**
@@ -371,7 +500,7 @@ public class Context extends ConcurrentTypeMap {
      * @return The {@link Context} object for chaining further operations.
      */
     public final Context run(final ExRunnable... runnable) {
-        runReturn(runnable);
+        runR(runnable);
         return this;
     }
 
@@ -394,7 +523,7 @@ public class Context extends ConcurrentTypeMap {
      * @return The {@link Context} object for chaining further operations.
      */
     public Context run(final Service... services) {
-        runReturn(services);
+        runR(services);
         return this;
     }
 
@@ -406,12 +535,8 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable function to execute.
      * @return {@link NanoThread}s
      */
-    public final NanoThread[] runReturn(final ExRunnable... runnable) {
-        return Arrays.stream(runnable).map(task -> new NanoThread(this).run(
-            this.nano() == null ? null : nano().threadPool(),
-            () -> this.nano() == null ? null : nano().contextEmpty(clazz()),
-            task
-        )).toArray(NanoThread[]::new);
+    public final NanoThread[] runR(final ExRunnable... runnable) {
+        return Arrays.stream(runnable).map(task -> new NanoThread().run(() -> this, task)).toArray(NanoThread[]::new);
     }
 
     /**
@@ -422,15 +547,11 @@ public class Context extends ConcurrentTypeMap {
      * @return {@link NanoThread}s
      */
     public final NanoThread[] runReturnHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
-        return Arrays.stream(runnable).map(task -> new NanoThread(this)
+        return Arrays.stream(runnable).map(task -> new NanoThread()
             .onComplete((thread, error) -> {
                 if (error != null)
                     onFailure.accept(new Unhandled(this, thread, error));
-            }).run(
-                nano() == null ? null : nano().threadPool(),
-                () -> this.nano() == null ? null : nano().contextEmpty(clazz()),
-                task
-            )
+            }).run(() -> this, task)
         ).toArray(NanoThread[]::new);
     }
 
@@ -440,7 +561,7 @@ public class Context extends ConcurrentTypeMap {
      * @param services The {@link Service} to be appended.
      * @return {@link NanoThread}s
      */
-    public NanoThread[] runReturn(final Service... services) {
+    public NanoThread[] runR(final Service... services) {
         try {
             return threadsOf(this, services);
         } catch (final Exception exception) {
@@ -459,7 +580,7 @@ public class Context extends ConcurrentTypeMap {
      * @return The {@link Context} object for chaining further operations.
      */
     public final Context runAwait(final ExRunnable... runnable) {
-        NanoThread.waitFor(runReturn(runnable));
+        NanoThread.waitFor(runR(runnable));
         return this;
     }
 
@@ -481,7 +602,7 @@ public class Context extends ConcurrentTypeMap {
      * @return The {@link Context} object for chaining further operations.
      */
     public Context runAwait(final Service... services) {
-        runAwaitReturn(services);
+        runAwaitR(services);
         return this;
     }
 
@@ -493,8 +614,8 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable function to execute.
      * @return {@link NanoThread}s
      */
-    public final NanoThread[] runAwaitReturn(final ExRunnable... runnable) {
-        return NanoThread.waitFor(runReturn(runnable));
+    public final NanoThread[] runAwaitR(final ExRunnable... runnable) {
+        return NanoThread.waitFor(runR(runnable));
     }
 
     /**
@@ -504,7 +625,7 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable  function to execute.
      * @return {@link NanoThread}s
      */
-    public final NanoThread[] runAwaitReturnHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
+    public final NanoThread[] runAwaitRHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
         return NanoThread.waitFor(runReturnHandled(onFailure, runnable));
     }
 
@@ -513,8 +634,8 @@ public class Context extends ConcurrentTypeMap {
      *
      * @return {@link NanoThread}s
      */
-    public NanoThread[] runAwaitReturn(final Service... services) {
-        return NanoThread.waitFor(runReturn(services));
+    public NanoThread[] runAwaitR(final Service... services) {
+        return NanoThread.waitFor(runR(services));
     }
 
     //########## EVENT HELPER ##########
@@ -528,13 +649,14 @@ public class Context extends ConcurrentTypeMap {
      */
     public Context sendEventError(final Object payload, final Throwable throwable) {
         // prevent loops
-        final Event event = payload instanceof final Event evt ? evt : new Event(EVENT_APP_ERROR, this, payload, null);
+        final Event event = payload instanceof final Event evt ? evt : eventOf(this, EVENT_APP_ERROR).payload(() -> payload);
         if (event.channelId() != EVENT_APP_UNHANDLED) {
-            nano().sendEventSameThread(event.cache(Event.EVENT_ORIGINAL_CHANNEL_ID, event.channelId()).channelId(EVENT_APP_UNHANDLED).error(throwable), false);
+            event.remove("send");
+            nano().sendEventSameThread(event.putR(Event.EVENT_ORIGINAL_CHANNEL_ID, event.channelId()).channelId(EVENT_APP_UNHANDLED).error(throwable));
             if (!event.isAcknowledged())
-                logger().error(throwable, () -> "Event [{}] went rogue.", event.nameOrg());
+                error(throwable, () -> "Event [{}] went rogue.", event.nameOrg());
         } else {
-            logger().error(throwable, () -> "Event [{}] went rogue.", event.nameOrg());
+            error(throwable, () -> "Event [{}] went rogue.", event.nameOrg());
         }
         return this;
     }
@@ -550,7 +672,7 @@ public class Context extends ConcurrentTypeMap {
     public Context sendEventError(final Event event, final Service service, final Throwable throwable) {
         // loop prevention
         if (event.channelId() == EVENT_APP_UNHANDLED)
-            event.context().logger().error(throwable, () -> "Unhandled event [{}] service [{}]", event.nameOrg(), service.name());
+            event.context().error(throwable, () -> "Unhandled event [{}] service [{}]", event.nameOrg(), service.name());
         if (service.onFailure(event.error(throwable)) == null) {
             event.context().sendEventError(event, throwable);
         }
@@ -565,9 +687,8 @@ public class Context extends ConcurrentTypeMap {
      * @param payload   The payload of the event, containing data relevant to the event's context and purpose.
      * @return The current {@link Context} instance, allowing for method chaining and further configuration.
      */
-    public Context sendEvent(final int channelId, final Object payload) {
-        nano().sendEvent(channelId, this, payload, null, false);
-        return this;
+    public Context sendEvent(final int channelId, final Supplier<Object> payload) {
+        return sendEvent(channelId, payload, null);
     }
 
     /**
@@ -579,8 +700,8 @@ public class Context extends ConcurrentTypeMap {
      * @param responseListener A consumer that processes the response of the event. This allows for asynchronous event handling and response processing.
      * @return The current {@link Context} instance, facilitating method chaining and further actions.
      */
-    public Context sendEvent(final int channelId, final Object payload, final Consumer<Object> responseListener) {
-        nano().sendEvent(channelId, this, payload, responseListener, false);
+    public Context sendEvent(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
+        sendEventR(channelId, payload, responseListener);
         return this;
     }
 
@@ -592,9 +713,8 @@ public class Context extends ConcurrentTypeMap {
      * @param payload   The payload of the event, containing information relevant to the broadcast.
      * @return The current {@link Context} instance, enabling method chaining and additional configurations.
      */
-    public Context broadcastEvent(final int channelId, final Object payload) {
-        broadcastEvent(channelId, payload, null);
-        return this;
+    public Context broadcastEvent(final int channelId, final Supplier<Object> payload) {
+        return broadcastEvent(channelId, payload, null);
     }
 
     /**
@@ -606,8 +726,8 @@ public class Context extends ConcurrentTypeMap {
      * @param responseListener A consumer that handles the response of the event, enabling asynchronous processing and response handling across multiple listeners.
      * @return The current {@link Context} instance, allowing for method chaining and further actions.
      */
-    public Context broadcastEvent(final int channelId, final Object payload, final Consumer<Object> responseListener) {
-        nano().sendEvent(channelId, this, payload, responseListener, true);
+    public Context broadcastEvent(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
+        broadcastEventR(channelId, payload, responseListener);
         return this;
     }
 
@@ -621,8 +741,8 @@ public class Context extends ConcurrentTypeMap {
      * @param payload   The payload of the event, containing data relevant to the event's context and purpose.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    public Event sendEventReturn(final int channelId, final Object payload) {
-        return sendEventReturn(channelId, payload, null);
+    public Event sendEventR(final int channelId, final Supplier<Object> payload) {
+        return sendEventR(channelId, payload, null);
     }
 
     /**
@@ -634,8 +754,8 @@ public class Context extends ConcurrentTypeMap {
      * @param responseListener A consumer that processes the response of the event. This allows for asynchronous event handling and response processing.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    public Event sendEventReturn(final int channelId, final Object payload, final Consumer<Object> responseListener) {
-        return nano().sendEventReturn(channelId, this, payload, responseListener, false);
+    public Event sendEventR(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
+        return newEvent(channelId).payload(payload).async(responseListener).send();
     }
 
     /**
@@ -646,8 +766,8 @@ public class Context extends ConcurrentTypeMap {
      * @param payload   The payload of the event, containing information relevant to the broadcast.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    public Event broadcastEventReturn(final int channelId, final Object payload) {
-        return broadcastEventReturn(channelId, payload, null);
+    public Event broadcastEventR(final int channelId, final Supplier<Object> payload) {
+        return broadcastEventR(channelId, payload, null);
     }
 
     /**
@@ -659,8 +779,18 @@ public class Context extends ConcurrentTypeMap {
      * @param responseListener A consumer that handles the response of the event, enabling asynchronous processing and response handling across multiple listeners.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    public Event broadcastEventReturn(final int channelId, final Object payload, final Consumer<Object> responseListener) {
-        return nano().sendEventReturn(channelId, this, payload, responseListener, true);
+    public Event broadcastEventR(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
+        return newEvent(channelId).payload(payload).async(responseListener).send();
+    }
+
+    /**
+     * Creates a new {@link Event} instance with the specified event type.
+     *
+     * @param channelId The integer representing the type of the event.
+     * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
+     */
+    public Event newEvent(final int channelId) {
+        return eventOf(this, channelId);
     }
 
     /**
@@ -676,28 +806,6 @@ public class Context extends ConcurrentTypeMap {
     }
 
     /**
-     * Retrieves the name of an event type given its ID.
-     *
-     * @param channelId The ID of the event type.
-     * @return The name of the event type associated with the given ID, or null if not found.
-     */
-    public String eventNameOf(final int channelId) {
-        return EventChannelRegister.eventNameOf(channelId);
-    }
-
-    /**
-     * Attempts to find the ID of an event type based on its name.
-     * This method is primarily used for debugging purposes or startup and is not optimized for performance.
-     *
-     * @param channelName The name of the event type.
-     * @return An {@link Optional} containing the ID of the event type if found, or empty if not found
-     * or if the input is null or empty.
-     */
-    public Optional<Integer> channelIdOf(final String channelName) {
-        return EventChannelRegister.eventIdOf(channelName);
-    }
-
-    /**
      * Retrieves a {@link Service} of a specified type.
      *
      * @param <S>          The type of the service to retrieve, which extends {@link Service}.
@@ -706,30 +814,6 @@ public class Context extends ConcurrentTypeMap {
      */
     public <S extends Service> S service(final Class<S> serviceClass) {
         return nano().service(serviceClass);
-    }
-
-    /**
-     * Waits for a {@link Service} of a specified type to be available within the given timeout.
-     *
-     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
-     * @param serviceClass The class of the {@link Service} to retrieve.
-     * @param timeoutMs    The maximum time to wait, in milliseconds.
-     * @return The first instance of the specified {@link Service}, or null if not found within the timeout.
-     */
-    public <S extends Service> S service(final Class<S> serviceClass, final long timeoutMs) {
-        final long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < timeoutMs) {
-            final S service = service(serviceClass);
-            if (service != null)
-                return service;
-            try {
-                Thread.sleep(16);
-            } catch (final InterruptedException ignored) {
-                Thread.currentThread().interrupt();
-                return null;
-            }
-        }
-        return null;
     }
 
     /**
@@ -770,6 +854,7 @@ public class Context extends ConcurrentTypeMap {
         this.put(CONTEXT_TRACE_ID_KEY, (resolvedClass.getSimpleName()) + "/" + UUID.randomUUID().toString().replace("-", ""));
         if (parent != null)
             this.put(CONTEXT_PARENT_KEY, parent);
+        MAX_LOG_NAME_LENGTH.updateAndGet(length -> Math.max(length, resolvedClass.getSimpleName().length()));
     }
 
     private Class<?> clazz() {
@@ -786,10 +871,9 @@ public class Context extends ConcurrentTypeMap {
 
     @Override
     public String toString() {
-        return "Context{" +
-            "size=" + size() +
-            ", loglevel=" + asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::level).orElse(null) +
-            ", logQueue=" + asOpt(NanoLogger.class, CONTEXT_LOGGER_KEY).map(NanoLogger::logQueue).isPresent() +
-            '}';
+        return new LinkedTypeMap()
+            .putR("size", size())
+            .putR("class", ofNullable(clazz()).map(Class::getSimpleName).orElse(null))
+            .toJson();
     }
 }

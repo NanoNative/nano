@@ -51,7 +51,7 @@ Nano’s [Event](../../events/README.md) system enables decoupling of functions,
 creation ([Services](../../services/README.md)), and function interception.
 For example, you can globally control and respond to every error that occurs, similar to a global `Controller Advice`.
 With that its also easy to change configurations on the fly.
-This modular design allows services, such as the built-in [HttpService](../../services/httpservice/README.md) and
+This modular design allows services, such as the built-in [HttpServer](../../services/httpserver/README.md) and
 [MetricService](../../services/metricservice/README.md), to operate independently while still being able to interact
 when started.
 

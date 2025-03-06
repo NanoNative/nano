@@ -1,5 +1,7 @@
 package org.nanonative.nano.core.model;
 
+import berlin.yuna.typemap.model.LinkedTypeMap;
+
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -22,8 +24,8 @@ public class Scheduler extends ScheduledThreadPoolExecutor {
 
     @Override
     public String toString() {
-        return "Scheduler{" +
-            "id='" + id + '\'' +
-            '}';
+        return new LinkedTypeMap()
+            .putR("id", id)
+            .toJson();
     }
 }

@@ -46,21 +46,18 @@ Nano provides full access to all internal components, resulting in very few priv
 **All you need to know are few classes:**
 [Context](docs/context/README.md),
 [Events](docs/events/README.md),
-[Logger](docs/logger/README.md),
 [Schedulers](docs/schedulers/README.md),
 [Services](docs/services/README.md)
 
 ```mermaid
 flowchart LR
     nano(((Nano))) --> context[Context]
-    context --> logger[Logger]
-    logger --> events[Events]
+    context --> events[Events]
     events --> services[Services]
     services --> schedulers[Schedulers]
     
     style nano fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style context fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
-    style logger fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style events fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style services fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style schedulers fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
@@ -95,12 +92,12 @@ dependencies {
 }
 ```
 
-Simple Nano example with [HttpService](docs/services/httpservice/README.md) _(a default service)_
+Simple Nano example with [HttpServer](docs/services/httpserver/README.md) _(a default service)_
 
 ```java
 public static void main(final String[] args) {
-    // Start Nano with HttpService
-    final Nano app = new Nano(args, new HttpService());
+    // Start Nano with HttpServer
+    final Nano app = new Nano(args, new HttpServer());
 
     // listen to /hello
     app.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)

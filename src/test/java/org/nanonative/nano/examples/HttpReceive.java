@@ -1,21 +1,21 @@
 package org.nanonative.nano.examples;
 
+import org.junit.jupiter.api.Disabled;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.helper.event.model.Event;
-import org.nanonative.nano.services.http.HttpService;
+import org.nanonative.nano.services.http.HttpServer;
 import org.nanonative.nano.services.http.model.HttpObject;
-import org.junit.jupiter.api.Disabled;
 
 import java.util.Map;
 
 import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
-import static org.nanonative.nano.services.http.HttpService.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 
 @Disabled
 public class HttpReceive {
 
     public static void main(final String[] args) {
-        final Nano app = new Nano(args, new HttpService());
+        final Nano app = new Nano(args, new HttpServer());
 
         // Authorization
         app.subscribeEvent(EVENT_HTTP_REQUEST, HttpReceive::authorize);
@@ -29,13 +29,6 @@ public class HttpReceive {
         // CORS
         app.subscribeEvent(EVENT_HTTP_REQUEST, HttpReceive::cors);
     }
-
-
-
-
-
-
-
 
     private static void cors(final Event event) {
         event.payloadOpt(HttpObject.class)

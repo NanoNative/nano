@@ -18,29 +18,17 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
-import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 import static java.util.Optional.ofNullable;
+import static org.nanonative.nano.core.NanoThreads.runAsync;
+import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 
 public class NanoThread {
 
     protected final List<BiConsumer<NanoThread, Throwable>> onCompleteCallbacks = new CopyOnWriteArrayList<>();
-    protected final Context context;
     protected final LockedBoolean isComplete = new LockedBoolean();
 
-    public static final ExecutorService VIRTUAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
+    public static final ExecutorService GLOBAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
     protected static final AtomicLong activeNanoThreadCount = new AtomicLong(0);
-
-    public NanoThread() {
-        this.context = null;
-    }
-
-    public NanoThread(final Context context) {
-        this.context = context;
-    }
-
-    public Context context() {
-        return context;
-    }
 
     public boolean isComplete() {
         return isComplete.get();
@@ -66,8 +54,8 @@ public class NanoThread {
     }
 
     @SuppressWarnings("java:S1181") // Throwable is caught
-    public NanoThread run(final ExecutorService executor, final Supplier<Context> context, final ExRunnable task) {
-        (executor != null ? executor : VIRTUAL_THREAD_POOL).submit(() -> {
+    public NanoThread run(final Supplier<Context> context, final ExRunnable task) {
+        runAsync(() -> {
             try {
                 activeNanoThreadCount.incrementAndGet();
                 task.run();
@@ -158,7 +146,6 @@ public class NanoThread {
     public String toString() {
         return this.getClass().getSimpleName() + "{" +
             "onCompleteCallbacks=" + onCompleteCallbacks.size() +
-            ", context=" + (context != null) +
             ", isComplete=" + isComplete() +
             '}';
     }
