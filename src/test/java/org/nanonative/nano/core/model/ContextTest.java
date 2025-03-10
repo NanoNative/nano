@@ -12,7 +12,6 @@ import org.nanonative.nano.model.TestService;
 import java.time.LocalTime;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -159,8 +158,8 @@ class ContextTest {
         final AtomicInteger counter = new AtomicInteger(0);
         final CountDownLatch latch = new CountDownLatch(2);
         context.subscribeEvent(TEST_CHANNEL_ID, event -> latch.countDown()); // MATCH
-        context.subscribeEvent(TEST_CHANNEL_ID, TestService.class,(event, testService) -> counter.incrementAndGet()); // NO MATCH
-        context.subscribeEvent(TEST_CHANNEL_ID, Integer.class,(event, testService) -> latch.countDown()); // MACH
+        context.subscribeEvent(TEST_CHANNEL_ID, TestService.class, (event, testService) -> counter.incrementAndGet()); // NO MATCH
+        context.subscribeEvent(TEST_CHANNEL_ID, Integer.class, (event, testService) -> latch.countDown()); // MACH
         context.newEvent(TEST_CHANNEL_ID).payload(() -> 200888).send();
         assertThat(counter.get()).isZero();
         assertThat(latch.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();

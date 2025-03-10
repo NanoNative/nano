@@ -12,14 +12,12 @@ import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.model.TestService;
 import org.nanonative.nano.services.logging.model.LogLevel;
 
-import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -266,7 +264,8 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(32) // custom repeats as they are time heavy tests
+    @RepeatedTest(32)
+        // custom repeats as they are time heavy tests
     void runSchedulers() throws InterruptedException {
         final long timer = 64;
         final CountDownLatch scheduler1Triggered = new CountDownLatch(1);
@@ -281,7 +280,8 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(32) // custom repeats as they are time heavy tests
+    @RepeatedTest(32)
+        // custom repeats as they are time heavy tests
     void schedulerRunDayOfWeek() throws InterruptedException {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
 
