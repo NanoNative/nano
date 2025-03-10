@@ -91,6 +91,13 @@ public class HttpClientTest {
         assertWorkingHttpClient(client);
         server.stop(server.context(this.getClass()));
 
+        server = new Nano(Map.of(CONFIG_HTTP_CLIENT_VERSION, 0), new HttpClient());
+        client = server.service(HttpClient.class);
+        assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_VERSION, 0));
+        assertThat(client.version()).isEqualTo(HTTP_1_1);
+        assertWorkingHttpClient(client);
+        server.stop(server.context(this.getClass()));
+
         server = new Nano(Map.of(CONFIG_HTTP_CLIENT_VERSION, 2), new HttpClient());
         client = server.service(HttpClient.class);
         assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_VERSION, 2));

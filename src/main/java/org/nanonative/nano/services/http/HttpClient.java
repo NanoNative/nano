@@ -57,7 +57,6 @@ public class HttpClient extends Service {
     @Override
     @SuppressWarnings("unchecked")
     public void onEvent(final Event event) {
-        event.ifPresentAck(EVENT_SEND_HTTP, HttpObject.class, httpObject -> send(httpObject, event.as(Consumer.class, "callback")));
         event.ifPresentAck(EVENT_SEND_HTTP, HttpRequest.class, httpRequest -> send(httpRequest, event.as(Consumer.class, "callback")));
     }
 

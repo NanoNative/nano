@@ -42,7 +42,7 @@
         <type-map.version>2025.0.8</type-map.version>
 
         <!-- TEST -->
-        <junit-jupiter-api.version>5.12.0</junit-jupiter-api.version>
+        <junit.version>5.12.0</junit.version>
         <assertj-core.version>3.27.3</assertj-core.version>
 
         <!-- BUILD -->
@@ -54,6 +54,7 @@
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
         <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
         <central-publishing-maven-plugin.version>0.5.0</central-publishing-maven-plugin.version>
+        <junit-launcher.version>1.12.0</junit-launcher.version>
     </properties>
 
     <dependencies>
@@ -68,7 +69,19 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit-jupiter-api.version}</version>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <version>${junit-launcher.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
