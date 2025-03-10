@@ -1,10 +1,8 @@
 package org.nanonative.nano.services.http;
 
 import berlin.yuna.typemap.model.LinkedTypeMap;
-import berlin.yuna.typemap.model.Type;
 import berlin.yuna.typemap.model.TypeMapI;
 import com.sun.net.httpserver.HttpExchange;
-import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.core.model.Unhandled;
 import org.nanonative.nano.helper.NanoUtils;
@@ -29,6 +27,7 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
 import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
+import static org.nanonative.nano.services.http.HttpsHelper.createHttpServer;
 
 public class HttpServer extends Service {
     protected com.sun.net.httpserver.HttpServer server;
@@ -36,6 +35,8 @@ public class HttpServer extends Service {
     // Register configurations
     public static final String CONFIG_SERVICE_HTTP_PORT = registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpServer.class.getSimpleName() + ")");
     public static final String CONFIG_SERVICE_HTTP_CLIENT = registerConfig("app_service_http_client", "Boolean if " + HttpClient.class.getSimpleName() + " should start as well");
+    public static final String CONFIG_SERVICE_HTTPS_CERTS = registerConfig("app_service_https_certs", "Comma-separated paths to SSL certificates, private keys, or keystores. Can be files or directories.");
+    public static final String CONFIG_SERVICE_HTTPS_PASSWORD = registerConfig("app_service_https_password", "Optional password for SSL keystores/private keys");
 
     // Register event channels
     public static final int EVENT_HTTP_REQUEST = registerChannelId("HTTP_REQUEST");
@@ -58,19 +59,17 @@ public class HttpServer extends Service {
 
     @Override
     public void stop() {
-        server.stop(0);
-        context.info(() -> "[{}] port [{}] stopped", name(), (server == null ? null : server.getAddress().getPort()));
-        server = null;
+        if (server != null) {
+            server.stop(0);
+            context.info(() -> "[{}] port [{}] stopped", name(), server.getAddress().getPort());
+            server = null;
+        }
     }
 
     @Override
     public void start() {
-        STARTUP_LOCK.lock();
-        final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
-        context.put(CONFIG_SERVICE_HTTP_PORT, port);
-        handleHttps(context);
         try {
-            server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(port), 0);
+            server = createHttpServer(context);
             server.setExecutor(GLOBAL_THREAD_POOL);
             server.createContext("/", exchange -> {
                 final HttpObject request = new HttpObject(exchange);
@@ -94,12 +93,10 @@ public class HttpServer extends Service {
                 }
             });
             server.start();
-            context.info(() -> "[{}] starting on port [{}]", name(), port);
+            context.info(() -> "[{}] starting on port [{}]", name(), context.get(CONFIG_SERVICE_HTTP_PORT));
             context.asBooleanOpt(CONFIG_SERVICE_HTTP_CLIENT).ifPresent(start -> context.runAwait(new HttpClient()));
         } catch (final IOException e) {
-            context.error(e, () -> "[{}] failed to start with port [{}]", name(), port);
-        } finally {
-            STARTUP_LOCK.unlock();
+            context.error(e, () -> "[{}] failed to start with port [{}]", name(), context.get(CONFIG_SERVICE_HTTP_PORT));
         }
     }
 
@@ -110,41 +107,6 @@ public class HttpServer extends Service {
     @Override
     public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
 
-    }
-
-    private static void handleHttps(final Context context) {
-        //TODO: add option for HTTPS
-        //TODO: handle certificates
-        final Type<String> crt = context.asStringOpt(String.class, "app.https.crt.path");
-        final Type<String> key = context.asStringOpt(String.class, "app.https.key.path");
-        if (crt.isPresent() && key.isPresent()) {
-//            // Load the certificate
-//            CertificateFactory cf = CertificateFactory.getInstance("X.509");
-//            X509Certificate cert = (X509Certificate) cf.generateCertificate(new FileInputStream(crtFilePath));
-//
-//            // Load the private key
-//            final byte[] keyBytes = Files.readAllBytes(Paths.get(keyFilePath));
-//            final PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
-//            KeyFactory kf = KeyFactory.getInstance("RSA"); // TODO: TRY & ERROR loop for all Algorithm
-//            final PrivateKey privateKey = kf.generatePrivate(spec);
-//
-//            // Create a keystore
-//            final KeyStore keyStore = KeyStore.getInstance("JKS");
-//            keyStore.load(null);
-//            keyStore.setCertificateEntry("cert", cert);
-//            keyStore.setKeyEntry("key", privateKey, "password".toCharArray(), new Certificate[]{cert});
-//
-//            // Initialize the SSL context
-//            final KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-//            kmf.init(keyStore, "password".toCharArray());
-//            final SSLContext sslContext = SSLContext.getInstance("TLS");
-//            sslContext.init(kmf.getKeyManagers(), null, null);
-//
-//            // Set up the HTTPS server
-//            HttpsServer httpsServer = HttpsServer.create(new InetSocketAddress(port), 0);
-//            httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext));
-//            this.server = httpsServer;
-        }
     }
 
     @Override
