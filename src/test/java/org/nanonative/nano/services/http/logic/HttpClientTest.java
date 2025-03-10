@@ -51,8 +51,6 @@ import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 @Execution(ExecutionMode.CONCURRENT)
 public class HttpClientTest {
 
-    //TODO: event testing instead of direct method calls
-
     protected static String serverUrl;
     protected static Nano nano;
 
@@ -64,7 +62,7 @@ public class HttpClientTest {
             TEST_LOG_LEVEL, CONFIG_HTTP_CLIENT_MAX_RETRIES, 1,
             CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS, 128,
             CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS, 128
-            ), server, new HttpClient()).subscribeEvent(EVENT_HTTP_REQUEST, HttpClientTest::mimicRequest);
+        ), server, new HttpClient()).subscribeEvent(EVENT_HTTP_REQUEST, HttpClientTest::mimicRequest);
         serverUrl = "http://localhost:" + server.port();
     }
 
@@ -87,6 +85,13 @@ public class HttpClientTest {
         server = new Nano(Map.of(CONFIG_HTTP_CLIENT_VERSION, HTTP_1_1), new HttpClient());
         client = server.service(HttpClient.class);
         assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_VERSION, HTTP_1_1));
+        assertThat(client.version()).isEqualTo(HTTP_1_1);
+        assertWorkingHttpClient(client);
+        server.stop(server.context(this.getClass()));
+
+        server = new Nano(Map.of(CONFIG_HTTP_CLIENT_VERSION, 0), new HttpClient());
+        client = server.service(HttpClient.class);
+        assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_VERSION, 0));
         assertThat(client.version()).isEqualTo(HTTP_1_1);
         assertWorkingHttpClient(client);
         server.stop(server.context(this.getClass()));
