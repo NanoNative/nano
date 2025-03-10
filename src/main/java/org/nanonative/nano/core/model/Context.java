@@ -19,10 +19,10 @@ import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -397,6 +397,27 @@ public class Context extends ConcurrentTypeMap {
      */
     public Context subscribeEvent(final int channelId, final Consumer<Event> listener) {
         nano().subscribeEvent(channelId, listener);
+        return this;
+    }
+
+    /**
+     * Registers an event listener with a specific payload type.
+     * This method provides type-safe event handling by ensuring the payload matches the expected type.
+     * The listener will only be called if the event payload can be cast to the specified type.
+     *
+     * @param <T>         The type of the event payload
+     * @param channelId   The event channel to subscribe to
+     * @param payloadType The expected class type of the event payload
+     * @param listener    Consumer that receives both the event and the typed payload
+     * @return Self for chaining
+     */
+    public <T> Context subscribeEvent(final int channelId, final Class<T> payloadType, final BiConsumer<Event, T> listener) {
+        subscribeEvent(channelId, event ->
+            event.payloadOpt()
+                .filter(payloadType::isInstance)
+                .map(payloadType::cast)
+                .ifPresent(payload -> listener.accept(event, payload))
+        );
         return this;
     }
 

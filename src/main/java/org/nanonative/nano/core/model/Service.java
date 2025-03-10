@@ -7,6 +7,7 @@ import org.nanonative.nano.services.metric.model.MetricUpdate;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 
 import static java.util.Arrays.stream;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SERVICE_REGISTER;

@@ -12,12 +12,15 @@ import org.nanonative.nano.model.TestService;
 import java.time.LocalTime;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static java.time.temporal.ChronoUnit.MILLIS;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.nanonative.nano.core.config.TestConfig.TEST_REPEAT;
 import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
 import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
@@ -32,7 +35,7 @@ class ContextTest {
 
     private static final int TEST_CHANNEL_ID = EventChannelRegister.registerChannelId("TEST_EVENT");
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void testNewContext_withNano() throws InterruptedException {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TestConfig.TEST_LOG_LEVEL));
         final Context context = new Context(null, nano.getClass()).put(CONTEXT_NANO_KEY, nano);
@@ -94,7 +97,7 @@ class ContextTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void testNewContext_withoutNano() {
         final Context context = Context.createRootContext(ContextTest.class);
         final Consumer<Event> myListener = event -> {};
@@ -103,7 +106,7 @@ class ContextTest {
         assertThatThrownBy(() -> context.unsubscribeEvent(EVENT_APP_HEARTBEAT, myListener)).isInstanceOf(NullPointerException.class);
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void testNewEmptyContext_withoutClass_willCreateRootContext() {
         final Context context = Context.createRootContext(ContextTest.class);
         assertContextBehaviour(context);
@@ -111,7 +114,7 @@ class ContextTest {
         assertThat(subContext.traceId()).startsWith(ContextTest.class.getSimpleName() + "/");
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void testRunHandled_withException() throws InterruptedException {
         final Context context = Context.createRootContext(ContextTest.class);
         final CountDownLatch latch = new CountDownLatch(2);
@@ -127,7 +130,7 @@ class ContextTest {
     }
 
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void testRunAwaitHandled_withException() throws InterruptedException {
         final Context context = Context.createRootContext(ContextTest.class);
         final CountDownLatch latch = new CountDownLatch(1);
@@ -139,7 +142,7 @@ class ContextTest {
         assertThat(latch.getCount()).isZero();
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void testRunAwait_withException() {
         final Context context = Context.createRootContext(ContextTest.class);
         assertContextBehaviour(context);
@@ -147,6 +150,21 @@ class ContextTest {
             throw new RuntimeException("Nothing to see here, just a test exception");
         });
         //TODO: create an unhandled element and check if the error was unhandled
+    }
+
+    @RepeatedTest(TEST_REPEAT)
+    void testEventSubscription() throws InterruptedException {
+        final Nano app = new Nano();
+        final Context context = app.context(this.getClass());
+        final AtomicInteger counter = new AtomicInteger(0);
+        final CountDownLatch latch = new CountDownLatch(2);
+        context.subscribeEvent(TEST_CHANNEL_ID, event -> latch.countDown()); // MATCH
+        context.subscribeEvent(TEST_CHANNEL_ID, TestService.class,(event, testService) -> counter.incrementAndGet()); // NO MATCH
+        context.subscribeEvent(TEST_CHANNEL_ID, Integer.class,(event, testService) -> latch.countDown()); // MACH
+        context.newEvent(TEST_CHANNEL_ID).payload(() -> 200888).send();
+        assertThat(counter.get()).isZero();
+        assertThat(latch.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
+        assertThat(app.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
     private void assertContextBehaviour(final Context context) {
@@ -180,11 +198,10 @@ class ContextTest {
         assertThat(subContext.traceIds()).containsExactlyInAnyOrder(context.traceId(), subContext.traceId());
     }
 
-    @RepeatedTest(TestConfig.TEST_REPEAT)
+    @RepeatedTest(TEST_REPEAT)
     void testToString() {
         final Context context = Context.createRootContext(ContextTest.class);
         assertThat(context).hasToString("{\"size\":" + context.size() + ",\"class\":\"" + this.getClass().getSimpleName() + "\"}");
-
     }
 
 }

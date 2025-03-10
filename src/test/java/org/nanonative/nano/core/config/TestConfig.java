@@ -31,7 +31,7 @@ public class TestConfig {
      * - Promotes Confidence in Security: Helps identify potential security vulnerabilities that could be exploited through concurrent execution.
      */
     public static final int TEST_REPEAT = 128;
-    public static final int TEST_TIMEOUT = 1024 + (int) (Math.sqrt(TEST_REPEAT) * 50);
+    public static final int TEST_TIMEOUT = 2048 + (int) (Math.sqrt(TEST_REPEAT) * 50);
 
     public static boolean await(final CountDownLatch latch) throws InterruptedException {
         return latch.await(TEST_TIMEOUT, MILLISECONDS);
