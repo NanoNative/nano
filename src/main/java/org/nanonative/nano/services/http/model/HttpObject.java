@@ -11,6 +11,7 @@ import com.sun.net.httpserver.HttpExchange;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.http.HttpClient;
 
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -110,6 +111,7 @@ public class HttpObject extends HttpRequest {
             path(exchange.getRequestURI().getPath());
             methodType(exchange.getRequestMethod());
             headerMap(exchange.getRequestHeaders());
+            queryParamsOf(exchange.getRequestURI().getQuery());
         }
     }
 
@@ -1055,11 +1057,15 @@ public class HttpObject extends HttpRequest {
         if (context == null)
             return null;
 
-        return context.newEvent(EVENT_SEND_HTTP)
+        final HttpObject response = context.newEvent(EVENT_SEND_HTTP)
             .payload(() -> this)
             .putR("callback", callback)
             .send()
             .response(HttpObject.class);
+
+        if (callback == null && response == null)
+            return response().path(this.path()).statusCode(-99).body("Failed to send HTTP request - maybe no [" + HttpClient.class.getSimpleName() + "] was configured?");
+        return response;
     }
 
     /**

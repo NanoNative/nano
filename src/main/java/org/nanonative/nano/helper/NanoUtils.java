@@ -14,6 +14,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -24,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -331,6 +334,18 @@ public class NanoUtils {
             }
         }
     }
+
+    public static Stream<Path> listFiles(final Path path) {
+        if (Files.isDirectory(path)) {
+            try {
+                return Files.list(path);
+            } catch (final IOException ignored) {
+                // ignored
+            }
+        }
+        return Stream.of(path);
+    }
+
 
     private NanoUtils() {
         // static util class

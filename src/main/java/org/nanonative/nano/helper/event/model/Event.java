@@ -5,11 +5,11 @@ import berlin.yuna.typemap.model.Type;
 import berlin.yuna.typemap.model.TypeMap;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.helper.ExFunction;
 
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
@@ -135,13 +135,6 @@ public class Event extends TypeMap {
         return this;
     }
 
-    public Event ifPresentAck(final int channelId, final Consumer<Event> consumer) {
-        if (this.channelId == channelId) {
-            consumer.accept(this);
-            acknowledge();
-        }
-        return this;
-    }
 
     public <T> Event ifPresent(final int channelId, final Class<T> clazz, final Consumer<T> consumer) {
         if (this.channelId == channelId) {
@@ -152,12 +145,17 @@ public class Event extends TypeMap {
         return this;
     }
 
-    public <T> Event ifPresentAck(final int channelId, final Class<T> clazz, final Function<T, Object> consumer) {
+    public Event ifPresentResp(final int channelId, final ExFunction<Event, Object> consumer) {
+        if (this.channelId == channelId)
+            response(consumer.apply(this, e -> context.sendEventError(this, e)));
+        return this;
+    }
+
+    public <T> Event ifPresentResp(final int channelId, final Class<T> clazz, final ExFunction<T, Object> consumer) {
         if (this.channelId == channelId) {
             final T payloadObj = payload(clazz);
-            if (payloadObj != null) {
-                response(consumer.apply(payloadObj));
-            }
+            if (payloadObj != null)
+                response(consumer.apply(payloadObj, e -> context.sendEventError(this, e)));
         }
         return this;
     }

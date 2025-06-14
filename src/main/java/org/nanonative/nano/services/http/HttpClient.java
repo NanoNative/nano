@@ -6,9 +6,14 @@ import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpObject;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
+import java.net.http.HttpClient.Builder;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.function.Consumer;
 
@@ -26,6 +31,7 @@ public class HttpClient extends Service {
     public static final String CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS = registerConfig("app_service_http_con_timeoutMs", "Connection timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
     public static final String CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS = registerConfig("app_service_http_read_timeoutMs", "Read timeout in milliseconds for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
     public static final String CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS = registerConfig("app_service_http_follow_redirects", "Follow redirects for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
+    public static final String CONFIG_HTTP_CLIENT_TRUST_ALL = registerConfig("app_service_http_trust_all", "Trust all certificates for the HTTP client (see " + HttpClient.class.getSimpleName() + ")");
 
     public static final int EVENT_SEND_HTTP = registerChannelId("SEND_HTTP");
 
@@ -35,12 +41,15 @@ public class HttpClient extends Service {
 
     @Override
     public void start() {
-        client = java.net.http.HttpClient.newBuilder()
+        final Builder config = java.net.http.HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(context.asLongOpt(CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS).orElse(5000L)))
             .followRedirects(context.asBooleanOpt(CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS).orElse(true) ? ALWAYS : NEVER)
             .version(context.asOpt(java.net.http.HttpClient.Version.class, CONFIG_HTTP_CLIENT_VERSION).orElse(HTTP_2))
-            .executor(GLOBAL_THREAD_POOL)
-            .build();
+            .executor(GLOBAL_THREAD_POOL);
+        if( context.asBooleanOpt(CONFIG_HTTP_CLIENT_TRUST_ALL).orElse(false)) {
+            config.sslContext(createTrustedSslContext());
+        }
+        client = config.build();
     }
 
     @Override
@@ -57,7 +66,7 @@ public class HttpClient extends Service {
     @Override
     @SuppressWarnings("unchecked")
     public void onEvent(final Event event) {
-        event.ifPresentAck(EVENT_SEND_HTTP, HttpRequest.class, httpRequest -> send(httpRequest, event.as(Consumer.class, "callback")));
+        event.ifPresentResp(EVENT_SEND_HTTP, HttpRequest.class, httpRequest -> send(httpRequest, event.as(Consumer.class, "callback")));
     }
 
     @Override
@@ -202,6 +211,23 @@ public class HttpClient extends Service {
             }
         }
         return response.path(request.uri().toString()).failure(-1, throwable);
+    }
+
+    protected static SSLContext createTrustedSslContext() {
+        try {
+            final TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() { return new java.security.cert.X509Certificate[0]; }
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                }
+            };
+            final SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, trustAllCerts, new SecureRandom());
+            return sc;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build trust-all HttpClient", e);
+        }
     }
 
 }

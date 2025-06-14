@@ -50,7 +50,7 @@ public class LogService extends Service {
     @Override
     public void onEvent(final Event event) {
         event.filter(this::isLoggable).ifPresent(
-            event1 -> context.run(() -> event1.ifPresentAck(EVENT_LOGGING, LogRecord.class, this::log))
+            event1 -> context.run(() -> event1.ifPresentResp(EVENT_LOGGING, LogRecord.class, this::log))
         );
     }
 

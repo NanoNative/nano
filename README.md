@@ -69,7 +69,7 @@ flowchart LR
 * [Registers](docs/registers/README.md) _(ConfigRegister, TypeConversionRegister, LogFormatRegister,
   EventChannelRegister)_
 * [Integrations](docs/integrations/README.md) _(🌱 Spring Boot, 🧑‍🚀 Micronaut, 🐸 Quarkus)_
-* [Code Examples](src/test/java/berlin/yuna/nano/examples)
+* [Code Examples](src/test/java/org/nanonative/nano/examples)
 
 ## 📚 Getting Started
 

@@ -81,8 +81,8 @@ public class MetricService extends Service {
     @Override
     public void onEvent(final Event event) {
         event
-            .ifPresentAck(Context.EVENT_APP_HEARTBEAT, Nano.class, this::updateMetrics)
-            .ifPresentAck(EVENT_METRIC_UPDATE, MetricUpdate.class, this::updateMetric)
+            .ifPresentResp(Context.EVENT_APP_HEARTBEAT, Nano.class, this::updateMetrics)
+            .ifPresentResp(EVENT_METRIC_UPDATE, MetricUpdate.class, this::updateMetric)
             .ifPresent(Context.EVENT_CONFIG_CHANGE, TypeMap.class, map -> map.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).ifPresent(level -> metrics.gaugeSet("logger", 1, Map.of("level", level.name()))));
         addMetricsEndpoint(event);
 

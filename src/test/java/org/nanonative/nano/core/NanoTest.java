@@ -198,7 +198,7 @@ class NanoTest {
 
     @RepeatedTest(TEST_REPEAT)
     void sendEvent_Sync() throws InterruptedException {
-        final TestService service = new TestService().doOnEvent(event -> event.ifPresentAck(TEST_EVENT, evt -> {}));
+        final TestService service = new TestService().doOnEvent(event -> event.ifPresentResp(TEST_EVENT, _ -> true));
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), service);
 
         // send to first service
@@ -333,7 +333,7 @@ class NanoTest {
 
     @RepeatedTest(TEST_REPEAT)
     void errorHandlerTest() {
-        final TestService service = new TestService().doOnEvent(event -> event.ifPresentAck(TEST_EVENT, evt -> {}));
+        final TestService service = new TestService().doOnEvent(event -> event.ifPresentResp(TEST_EVENT, _ -> true));
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), service);
 
         // Execution with error

@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpPrincipal;
 import org.junit.jupiter.api.Test;
+import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpHeaders;
@@ -696,6 +697,16 @@ class HttpObjectTest {
         // General
         assertThat(new HttpObject().acceptEncodings()).isEmpty();
         assertThat(new HttpObject().acceptEncoding()).isNull();
+    }
+
+    @Test
+    void testSendWithoutConsumer() {
+        final Nano nano = new Nano();
+        final HttpObject response = new HttpObject().send(nano.context());
+        assertThat(response).isNotNull();
+        assertThat(response.statusCode()).isEqualTo(-99);
+        assertThat(response.bodyAsString()).isEqualTo("Failed to send HTTP request - maybe no [HttpClient] was configured?");
+        nano.stop(this.getClass()).waitForStop();
     }
 
     @Test

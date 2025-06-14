@@ -3,184 +3,195 @@ package org.nanonative.nano.services.http;
 import com.sun.net.httpserver.HttpsConfigurator;
 import com.sun.net.httpserver.HttpsServer;
 import org.nanonative.nano.core.model.Context;
-import org.nanonative.nano.helper.NanoUtils;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.KeyFactory;
 import java.security.KeyStore;
-import java.security.KeyStoreException;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.Enumeration;
 import java.util.List;
 
-import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_CERTS;
+import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_CERT;
+import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_KEY;
+import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_KTS;
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_PASSWORD;
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTP_PORT;
-import static org.nanonative.nano.services.http.HttpServer.nextFreePort;
 
 @SuppressWarnings("java:S112")
 public class HttpsHelper {
 
-    public static synchronized com.sun.net.httpserver.HttpServer createHttpServer(final Context context) throws IOException {
-        final String certPaths = context.asStringOpt(CONFIG_SERVICE_HTTPS_CERTS).orElse(null);
-        if (certPaths == null)
-            return createDefaultServer(context);
-        try {
-            final List<Path> validPaths = Arrays.stream(certPaths.split(",")).map(String::trim).filter(NanoUtils::hasText).map(Paths::get).filter(Files::exists).toList();
-            if (validPaths.isEmpty()) {
-                context.error(() -> "No valid certificate paths [{}]", certPaths);
-                createDefaultServer(context);
-            }
-            return initializeSSLContext(context, validPaths, context.asStringOpt(CONFIG_SERVICE_HTTPS_PASSWORD).orElse(""));
-        } catch (Exception e) {
-            context.error(e, () -> "Failed to initialize HTTPS configuration");
-            return createDefaultServer(context);
-        }
-    }
-
-    private static HttpsServer initializeSSLContext(final Context context, final List<Path> paths, final String password) throws Exception {
-        final KeyStore keyStore = loadKeyStore(context, paths, password);
-
-        final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-        kmf.init(keyStore, password.toCharArray());
-
-        final SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(kmf.getKeyManagers(), null, null);
-
-        // Create HTTPS server with the SSL context
-        final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8443));
-        context.put(CONFIG_SERVICE_HTTP_PORT, port);
-        final HttpsServer httpsServer = HttpsServer.create(new InetSocketAddress(port), 0);
-        httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext));
-        context.info(() -> "HTTPS server configured with [{}]", paths);
-        return httpsServer;
-    }
-
     public static com.sun.net.httpserver.HttpServer createDefaultServer(final Context context) throws IOException {
-        final int port = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).filter(p -> p > 0).orElseGet(() -> nextFreePort(8080));
-        context.put(CONFIG_SERVICE_HTTP_PORT, port);
-        return com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(port), 0);
+        final int preferredPort = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).orElse(8080);
+        return bindHttpServer(context, preferredPort);
     }
 
-    public static KeyStore loadKeyStore(final Context context, final List<Path> paths, final String password) throws Exception {
-        final KeyStore keyStore = KeyStore.getInstance("PKCS12");
-        keyStore.load(null, null);
-
-        for (final Path path : paths) {
-            if (Files.isDirectory(path)) {
-                // Handle directory of certificates
-                try (final DirectoryStream<Path> stream = Files.newDirectoryStream(path, "*.{crt,pem,pfx,jks,key}")) {
-                    for (Path file : stream)
-                        loadCertificateOrKeyFile(context, keyStore, file, password);
-                }
-            } else {
-                // Handle single file
-                loadCertificateOrKeyFile(context, keyStore, path, password);
-            }
-        }
-        return keyStore;
+    public static com.sun.net.httpserver.HttpServer createHttpsServer(final Context context) throws IOException {
+        final int preferredPort = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).orElse(8443);
+        return bindHttpsServer(context, preferredPort);
     }
 
-    public static void loadCertificateOrKeyFile(final Context context, final KeyStore keyStore, final Path file, String password) throws Exception {
-        final String fileName = file.getFileName().toString().toLowerCase();
-        final String alias = file.getFileName().toString();
-
-        if (fileName.endsWith(".jks")) {
-            loadJksStore(context, keyStore, file, password);
-        } else if (fileName.endsWith(".pfx") || fileName.endsWith(".p12")) {
-            loadPkcs12Store(context, keyStore, file, password);
-        } else if (fileName.endsWith(".key")) {
-            final Certificate[] chain = keyStore.getCertificateChain(alias.replace(".key", ""));
-            if (chain != null)
-                keyStore.setKeyEntry(alias, loadPrivateKey(context, file), password.toCharArray(), chain);
-        } else {
-            // Assume PEM/CRT format certificate
-            loadPemCertificate(context, keyStore, file, alias);
-        }
-    }
-
-    private static void loadJksStore(final Context context, final KeyStore targetStore, final Path jksFile, final String password) throws KeyStoreException {
-        final KeyStore jksStore = KeyStore.getInstance("JKS");
-        try (final InputStream is = Files.newInputStream(jksFile)) {
-            jksStore.load(is, password.toCharArray());
-            for (final String alias : Collections.list(jksStore.aliases())) {
-                if (jksStore.isKeyEntry(alias)) {
-                    targetStore.setKeyEntry(alias,
-                        jksStore.getKey(alias, password.toCharArray()),
-                        password.toCharArray(),
-                        jksStore.getCertificateChain(alias)
-                    );
-                } else {
-                    targetStore.setCertificateEntry(alias, jksStore.getCertificate(alias));
-                }
-            }
-        } catch (final Exception e) {
-            context.error(e, () -> "Failed to load JKS [" + jksFile + "]");
-        }
-    }
-
-    private static void loadPkcs12Store(final Context context, final KeyStore targetStore, final Path pkcs12File, final String password) throws KeyStoreException {
-        KeyStore pkcs12Store = KeyStore.getInstance("PKCS12");
-        try (InputStream is = Files.newInputStream(pkcs12File)) {
-            pkcs12Store.load(is, password.toCharArray());
-            // Copy all entries
-            for (String alias : Collections.list(pkcs12Store.aliases())) {
-                if (pkcs12Store.isKeyEntry(alias)) {
-                    targetStore.setKeyEntry(alias,
-                        pkcs12Store.getKey(alias, password.toCharArray()),
-                        password.toCharArray(),
-                        pkcs12Store.getCertificateChain(alias));
-                } else {
-                    targetStore.setCertificateEntry(alias, pkcs12Store.getCertificate(alias));
-                }
-            }
-        } catch (final Exception e) {
-            context.error(e, () -> "Failed to load PKCS12 [" + pkcs12File + "]");
-        }
-    }
-
-    private static void loadPemCertificate(final Context context, final KeyStore keyStore, final Path certFile, final String alias) throws Exception {
-        CertificateFactory cf = CertificateFactory.getInstance("X.509");
-        try (InputStream is = Files.newInputStream(certFile)) {
-            X509Certificate cert = (X509Certificate) cf.generateCertificate(is);
-            keyStore.setCertificateEntry(alias, cert);
-        } catch (final Exception e) {
-            context.error(e, () -> "Failed to load X.509 [" + certFile + "]");
-        }
-    }
-
-    private static PrivateKey loadPrivateKey(final Context context, final Path keyPath) throws Exception {
-        byte[] keyBytes = Files.readAllBytes(keyPath);
-
-        // Try PKCS8 format first
+    private static com.sun.net.httpserver.HttpServer bindHttpServer(final Context context, final int preferredPort) throws IOException {
         try {
-            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
-            return KeyFactory.getInstance("RSA").generatePrivate(spec);
-        } catch (Exception e) {
-            // If PKCS8 fails, try other common formats
-            for (String algorithm : new String[]{"RSA", "EC", "DSA"}) {
-                try {
-                    return KeyFactory.getInstance(algorithm).generatePrivate(new PKCS8EncodedKeySpec(keyBytes));
-                } catch (Exception ignored) {
-                    // Continue trying next algorithm
+            final com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(preferredPort), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, server.getAddress().getPort());
+            return server;
+        } catch (IOException ignored) {
+            final com.sun.net.httpserver.HttpServer fallback = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(0), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, fallback.getAddress().getPort());
+            return fallback;
+        }
+    }
+
+    private static com.sun.net.httpserver.HttpsServer bindHttpsServer(final Context context, final int preferredPort) throws IOException {
+        try {
+            final com.sun.net.httpserver.HttpsServer server = com.sun.net.httpserver.HttpsServer.create(new InetSocketAddress(preferredPort), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, server.getAddress().getPort());
+            return server;
+        } catch (IOException e) {
+            final com.sun.net.httpserver.HttpsServer fallback = com.sun.net.httpserver.HttpsServer.create(new InetSocketAddress(0), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, fallback.getAddress().getPort());
+            return fallback;
+        }
+    }
+
+    public static void configureHttps(final Context context, final com.sun.net.httpserver.HttpServer server) {
+        if (server instanceof final HttpsServer httpsServer) {
+            char[] password = context.asStringOpt(CONFIG_SERVICE_HTTPS_PASSWORD).map(String::toCharArray).orElse(null);
+            try {
+                final KeyStore keyStore = KeyStore.getInstance("PKCS12");
+                keyStore.load(null, password);
+                final Certificate cert = readCertificate(context, keyStore);
+                readKey(context, keyStore, password, cert);
+                readKts(context, password, keyStore);
+                final KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+                kmf.init(keyStore, password);
+                final SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(kmf.getKeyManagers(), null, null);
+                httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext));
+            } catch (Exception e) {
+                context.error(() -> "Failed to configure HTTPS", e);
+            }
+            context.info(() -> "HTTPS configured on port [" + context.asInt(CONFIG_SERVICE_HTTP_PORT) + "]");
+        }
+    }
+
+    public static void readKey(final Context context, final KeyStore keyStore, final char[] password, final Certificate cert) {
+        context.asPathOpt(CONFIG_SERVICE_HTTPS_KEY).ifPresent(file -> {
+            Path keyFile = file;
+            Path tempFile = null;
+            try {
+                if (isConversionNeeded(file)) {
+                    tempFile = convertKeyToPkcs8(context, file, password != null ? new String(password) : null);
+                    keyFile = tempFile;
+                }
+
+                byte[] keyBytes = Files.readAllBytes(keyFile);
+                byte[] decodedKey = java.util.Base64.getDecoder().decode(new String(keyBytes).replaceAll("-----.*?-----", "").replace("\n", "").replace("\r", "").trim());
+                final PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(decodedKey);
+                final KeyFactory kf = KeyFactory.getInstance("RSA");
+                final PrivateKey privateKey = kf.generatePrivate(spec);
+                keyStore.setKeyEntry(file.getFileName().toString(), privateKey, password, new Certificate[]{cert});
+
+                if (tempFile != null) Files.deleteIfExists(tempFile);
+            } catch (final InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            } catch (final Exception e) {
+                context.error(e, () -> "Failed to load private key [" + file + "]");
+            } finally {
+                if (tempFile != null) {
+                    try {
+                        Files.deleteIfExists(tempFile);
+                    } catch (IOException ignored) {
+                        // ignored
+                    }
                 }
             }
-            context.error(e, () -> "Failed to load KEY [" + keyPath + "] - unsupported format");
-            return null;
+        }).orElse(null);
+    }
+
+    public static Certificate readCertificate(final Context context, final KeyStore keyStore) {
+        return context.asPathOpt(CONFIG_SERVICE_HTTPS_CERT).map(file -> {
+            try (final InputStream is = Files.newInputStream(file)) {
+                final Certificate certificate = CertificateFactory.getInstance("X.509").generateCertificate(is);
+                keyStore.setCertificateEntry(file.getFileName().toString(), certificate);
+                return certificate;
+            } catch (final Exception e) {
+                context.error(e, () -> "Failed to load X.509 [" + file + "]");
+                return null;
+            }
+        }).orElse(null);
+    }
+
+    public static void readKts(final Context context, final char[] password, final KeyStore keyStore) {
+        context.asPathOpt(CONFIG_SERVICE_HTTPS_KTS).ifPresent(file -> {
+            try (final InputStream is = Files.newInputStream(file)) {
+                final KeyStore pkcs12Store = KeyStore.getInstance("PKCS12");
+                pkcs12Store.load(is, password);
+                final Enumeration<String> aliases = pkcs12Store.aliases();
+                while (aliases.hasMoreElements()) {
+                    final String alias = aliases.nextElement();
+                    final PrivateKey key = (PrivateKey) pkcs12Store.getKey(alias, password);
+                    final Certificate[] chain = pkcs12Store.getCertificateChain(alias);
+                    if (key != null && chain != null) {
+                        keyStore.setKeyEntry(alias, key, password, chain);
+                    }
+                }
+            } catch (final Exception e) {
+                context.error(e, () -> "Failed to load PKCS12 [" + file + "]");
+            }
+        });
+    }
+
+    private static boolean isConversionNeeded(Path file) {
+        try {
+            final String content = Files.readString(file);
+            return content.contains("-----BEGIN RSA PRIVATE KEY-----") ||
+                content.contains("-----BEGIN ENCRYPTED PRIVATE KEY-----");
+        } catch (IOException e) {
+            return false;
         }
+    }
+
+    private static Path convertKeyToPkcs8(Context context, Path originalKeyPath, String password) throws IOException, InterruptedException {
+        final Path tempPkcs8 = Files.createTempFile("converted", ".key");
+        final ProcessBuilder pb = new ProcessBuilder(
+            "openssl", "pkcs8",
+            "-topk8",
+            "-inform", "PEM",
+            "-in", originalKeyPath.toAbsolutePath().toString(),
+            "-out", tempPkcs8.toAbsolutePath().toString(),
+            "-nocrypt"
+        );
+        if (password != null) {
+            pb.command().add("-passin");
+            pb.command().add("pass:" + password);
+        }
+        pb.redirectErrorStream(true);
+        final Process process = pb.start();
+        final StringBuilder output = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append(System.lineSeparator());
+            }
+        }
+        final int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IllegalStateException("OpenSSL key conversion failed, exit code: " + exitCode + "\nOutput:\n" + output + "\nCommand: " + String.join(" ", pb.command()));
+        }
+        context.info(() -> "Converted key to PKCS#8: " + tempPkcs8);
+        return tempPkcs8;
     }
 
     private HttpsHelper() {
