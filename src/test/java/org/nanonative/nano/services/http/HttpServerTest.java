@@ -1,5 +1,6 @@
 package org.nanonative.nano.services.http;
 
+import berlin.yuna.typemap.model.TypeMap;
 import org.junit.jupiter.api.Test;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -15,103 +16,66 @@ import static org.nanonative.nano.services.http.HttpServer.*;
 
 class HttpServerTest {
 
-    // openssl req -x509 -sha512 -nodes -days 99999 -newkey rsa:2048 -keyout server_simple.key -out server_simple.crt -subj "/CN=localhost"
+    // openssl req -x509 -newkey rsa:2048 -sha512 -nodes -days 9999 -subj "/CN=localhost" -keyout server_simple.key -out server_simple.crt
     static final Path SIMPLE_CERT = getResourcePath("HttpServer/server_simple.crt");
     static final Path SIMPLE_KEY = getResourcePath("HttpServer/server_simple.key");
-    // openssl req -x509 -sha512 -nodes -days 99999 -newkey rsa:2048 -keyout server_simple.key -out server_simple.crt -subj "/CN=localhost"
+
+    // openssl genrsa -aes256 -passout pass:testpassword -out server_pw.key 2048
+    // openssl req -new -x509 -sha512 -days 9999 -key server_pw.key -passin pass:testpassword -out server_pw.crt -subj "/CN=localhost"
     static final Path PASSWORD_CERT = getResourcePath("HttpServer/server_pw.crt");
     static final Path PASSWORD_KEY = getResourcePath("HttpServer/server_pw.key");
-    // openssl pkcs12 -export -out server_keystore.p12 -inkey server_simple.key -in server_simple.crt -passout pass:testpassword
+
+    // openssl pkcs12 -export -inkey server_simple.key -in server_simple.crt -out server_keystore.p12 -passout pass:testpassword
     static final Path PKCS12_STORE = getResourcePath("HttpServer/server_keystore.p12");
+
     // cat server_simple.crt server_simple.crt > chained.crt
     static final Path CHAINED_CERT = getResourcePath("HttpServer/chained.crt");
 
+    // cp server_simple.crt server.pem && cp server_simple.key server.key
+    static final Path PEM_CERT = getResourcePath("HttpServer/server.pem");
+    static final Path PEM_KEY = getResourcePath("HttpServer/server.key");
+
+    // keytool -genkeypair -alias testkey -keyalg RSA -keysize 2048 -keystore server.jks -storepass testpassword -keypass testpassword -validity 9999 -dname "CN=localhost"
+    static final Path JKS_STORE = getResourcePath("HttpServer/server.jks");
+
+    // keytool -genkeypair -alias testkey -keyalg RSA -keysize 2048 -keystore server.jceks -storetype JCEKS -storepass testpassword -keypass testpassword -validity 9999 -dname "CN=localhost"
+    static final Path JCEKS_STORE = getResourcePath("HttpServer/server.jceks");
+
     @Test
     void testSimpleCertAndKey() {
-        final HttpServer server = new HttpServer();
-        final Nano nano = new Nano(Map.of(
-            CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
-            CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
-        ), server);
-
-        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
-            .filter(req -> req.pathMatch("/test"))
-            .ifPresent(req -> req.response().body("ok").respond(event)));
-
-        final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.bodyAsString()).isEqualTo("ok");
-
-        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+        testHttpsServer(SIMPLE_CERT, SIMPLE_KEY, null);
     }
 
     @Test
     void testPkcs12Keystore() {
-        final HttpServer server = new HttpServer();
-        final Nano nano = new Nano(Map.of(
-            CONFIG_SERVICE_HTTPS_KTS, PKCS12_STORE,
-            CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
-        ), server);
+        testHttpsServerWithKeystore(PKCS12_STORE);
+    }
 
-        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
-            .filter(req -> req.pathMatch("/test"))
-            .ifPresent(req -> req.response().body("ok").respond(event)));
+    @Test
+    void testJksKeystore() {
+        testHttpsServerWithKeystore(JKS_STORE);
+    }
 
-        final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
-        assertThat(response.bodyAsString()).isEqualTo("ok");
-        assertThat(response.statusCode()).isEqualTo(200);
-
-        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    @Test
+    void testJceksKeystore() {
+        testHttpsServerWithKeystore(JCEKS_STORE);
     }
 
     @Test
     void testPasswordProtectedCertAndKey() {
-        final HttpServer server = new HttpServer();
-        final Nano nano = new Nano(Map.of(
-            CONFIG_SERVICE_HTTPS_CERT, PASSWORD_CERT,
-            CONFIG_SERVICE_HTTPS_KEY, PASSWORD_KEY,
-            CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
-        ), server);
-
-        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
-            .filter(req -> req.pathMatch("/test"))
-            .ifPresent(req -> req.response().body("ok").respond(event)));
-
-        final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
-        assertThat(response.bodyAsString()).isEqualTo("ok");
-        assertThat(response.statusCode()).isEqualTo(200);
-
-        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+        testHttpsServer(PASSWORD_CERT, PASSWORD_KEY, "testpassword");
     }
 
     @Test
     void testChainedCertWithSimpleKey() {
-        final HttpServer server = new HttpServer();
-        final Nano nano = new Nano(Map.of(
-            CONFIG_SERVICE_HTTPS_CERT, CHAINED_CERT,
-            CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
-        ), server);
-
-        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
-            .filter(req -> req.pathMatch("/test"))
-            .ifPresent(req -> req.response().body("ok").respond(event)));
-
-        final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
-        assertThat(response.statusCode()).isEqualTo(200);
-        assertThat(response.bodyAsString()).isEqualTo("ok");
-
-        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+        testHttpsServer(CHAINED_CERT, SIMPLE_KEY, null);
     }
 
-    // TODO: if response is null, means no client running - should this be as error message returned?
+    @Test
+    void testPemCertAndKey() {
+        testHttpsServer(PEM_CERT, PEM_KEY, null);
+    }
+
     @Test
     void testEmptyContextDefaultsToHttp() {
         final HttpServer server = new HttpServer();
@@ -124,6 +88,47 @@ class HttpServerTest {
         final HttpObject response = new HttpObject().path("http://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.bodyAsString()).isEqualTo("ok");
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    private static void testHttpsServer(Path cert, Path key, String password) {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+            CONFIG_SERVICE_HTTPS_CERT, cert,
+            CONFIG_SERVICE_HTTPS_KEY, key,
+            CONFIG_SERVICE_HTTPS_PASSWORD, password,
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
+            .filter(req -> req.pathMatch("/test"))
+            .ifPresent(req -> req.response().body("ok").respond(event)));
+
+        final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
+        assertThat(response.bodyAsString()).isEqualTo("ok");
+        assertThat(response.statusCode()).isEqualTo(200);
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    private static void testHttpsServerWithKeystore(Path kts) {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+            CONFIG_SERVICE_HTTPS_KTS, kts,
+            CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
+            .filter(req -> req.pathMatch("/test"))
+            .ifPresent(req -> req.response().body("ok").respond(event)));
+
+        final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
+        assertThat(response.bodyAsString()).isEqualTo("ok");
+        assertThat(response.statusCode()).isEqualTo(200);
 
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
     }
