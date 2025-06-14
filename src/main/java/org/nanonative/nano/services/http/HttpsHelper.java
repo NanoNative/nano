@@ -48,7 +48,15 @@ public class HttpsHelper {
      */
     public static com.sun.net.httpserver.HttpServer createDefaultServer(final Context context) throws IOException {
         final int preferredPort = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).orElse(8080);
-        return bindHttpServer(context, preferredPort);
+        try {
+            final com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(preferredPort), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, server.getAddress().getPort());
+            return server;
+        } catch (IOException ignored) {
+            final com.sun.net.httpserver.HttpServer fallback = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(0), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, fallback.getAddress().getPort());
+            return fallback;
+        }
     }
 
     /**
@@ -61,7 +69,15 @@ public class HttpsHelper {
      */
     public static com.sun.net.httpserver.HttpServer createHttpsServer(final Context context) throws IOException {
         final int preferredPort = context.asIntOpt(CONFIG_SERVICE_HTTP_PORT).orElse(8443);
-        return bindHttpsServer(context, preferredPort);
+        try {
+            final com.sun.net.httpserver.HttpsServer server = com.sun.net.httpserver.HttpsServer.create(new InetSocketAddress(preferredPort), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, server.getAddress().getPort());
+            return server;
+        } catch (IOException ignored) {
+            final com.sun.net.httpserver.HttpsServer fallback = com.sun.net.httpserver.HttpsServer.create(new InetSocketAddress(0), 0);
+            context.put(CONFIG_SERVICE_HTTP_PORT, fallback.getAddress().getPort());
+            return fallback;
+        }
     }
 
     /**
@@ -132,6 +148,7 @@ public class HttpsHelper {
                 Thread.currentThread().interrupt();
             } catch (final Exception e) {
                 context.error(e, () -> "Failed to load private key [" + file + "]");
+                throw new IllegalArgumentException("Failed to load private key [" + file + "]", e);
             } finally {
                 if (tempFile != null) {
                     try {
@@ -193,56 +210,13 @@ public class HttpsHelper {
         });
     }
 
-
-    /**
-     * Creates and binds a basic HTTP server to the specified port.
-     * Falls back to a random port if binding fails.
-     *
-     * @param context       configuration context
-     * @param preferredPort desired HTTP port
-     * @return bound HTTP server instance
-     * @throws IOException if server creation fails
-     */
-    private static com.sun.net.httpserver.HttpServer bindHttpServer(final Context context, final int preferredPort) throws IOException {
-        try {
-            final com.sun.net.httpserver.HttpServer server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(preferredPort), 0);
-            context.put(CONFIG_SERVICE_HTTP_PORT, server.getAddress().getPort());
-            return server;
-        } catch (IOException ignored) {
-            final com.sun.net.httpserver.HttpServer fallback = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(0), 0);
-            context.put(CONFIG_SERVICE_HTTP_PORT, fallback.getAddress().getPort());
-            return fallback;
-        }
-    }
-
-    /**
-     * Creates and binds an HTTPS server to the specified port.
-     * Falls back to a random port if binding fails.
-     *
-     * @param context       configuration context
-     * @param preferredPort desired HTTPS port
-     * @return bound HTTPS server instance
-     * @throws IOException if server creation fails
-     */
-    private static com.sun.net.httpserver.HttpsServer bindHttpsServer(final Context context, final int preferredPort) throws IOException {
-        try {
-            final com.sun.net.httpserver.HttpsServer server = com.sun.net.httpserver.HttpsServer.create(new InetSocketAddress(preferredPort), 0);
-            context.put(CONFIG_SERVICE_HTTP_PORT, server.getAddress().getPort());
-            return server;
-        } catch (IOException ignored) {
-            final com.sun.net.httpserver.HttpsServer fallback = com.sun.net.httpserver.HttpsServer.create(new InetSocketAddress(0), 0);
-            context.put(CONFIG_SERVICE_HTTP_PORT, fallback.getAddress().getPort());
-            return fallback;
-        }
-    }
-
     /**
      * Determines if a key file needs conversion from legacy PEM formats to PKCS#8.
      *
      * @param file key file path
      * @return true if conversion is required, false otherwise
      */
-    private static boolean isConversionNeeded(Path file) {
+    private static boolean isConversionNeeded(final Path file) {
         try {
             final String content = Files.readString(file);
             return content.contains("-----BEGIN RSA PRIVATE KEY-----") ||

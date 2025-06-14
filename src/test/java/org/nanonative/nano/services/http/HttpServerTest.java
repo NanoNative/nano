@@ -92,6 +92,95 @@ class HttpServerTest {
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
     }
 
+    @Test
+    void testInvalidCertPath() {
+        final Path invalidCert = Paths.get("nonexistent.crt");
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+            CONFIG_SERVICE_HTTPS_CERT, invalidCert,
+            CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(response.statusCode()).isNotEqualTo(200);
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void testInvalidKeyPath() {
+        final Path invalidKey = Paths.get("nonexistent.key");
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+            CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+            CONFIG_SERVICE_HTTPS_KEY, invalidKey,
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(response.statusCode()).isNotEqualTo(200);
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void testWrongPasswordForKey() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+            CONFIG_SERVICE_HTTPS_CERT, PASSWORD_CERT,
+            CONFIG_SERVICE_HTTPS_KEY, PASSWORD_KEY,
+            CONFIG_SERVICE_HTTPS_PASSWORD, "wrongpassword",
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(response.statusCode()).isNotEqualTo(200);
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void testInvalidKeystorePath() {
+        final Path invalidStore = Paths.get("nonexistent.p12");
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+            CONFIG_SERVICE_HTTPS_KTS, invalidStore,
+            CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(response.statusCode()).isNotEqualTo(200);
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void testInvalidKeystorePassword() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+            CONFIG_SERVICE_HTTPS_KTS, PKCS12_STORE,
+            CONFIG_SERVICE_HTTPS_PASSWORD, "wrongpassword",
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(response.statusCode()).isNotEqualTo(200);
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
     private static void testHttpsServer(Path cert, Path key, String password) {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
