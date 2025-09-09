@@ -26,6 +26,7 @@ public class Scheduler extends ScheduledThreadPoolExecutor {
     public String toString() {
         return new LinkedTypeMap()
             .putR("id", id)
+            .putR("class", this.getClass().getSimpleName())
             .toJson();
     }
 }

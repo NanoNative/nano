@@ -4,11 +4,10 @@ import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMapI;
 import com.sun.net.httpserver.HttpExchange;
 import org.nanonative.nano.core.model.Service;
-import org.nanonative.nano.core.model.Unhandled;
 import org.nanonative.nano.helper.NanoUtils;
+import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.file.FileWatcher;
-import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpHeaders;
 import org.nanonative.nano.services.http.model.HttpObject;
 
@@ -27,13 +26,14 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import static berlin.yuna.typemap.logic.TypeConverter.collectionOf;
-import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
-import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
+import static org.nanonative.nano.helper.event.model.Channel.registerChannelId;
 import static org.nanonative.nano.services.http.HttpsHelper.configureHttps;
 import static org.nanonative.nano.services.http.HttpsHelper.createDefaultServer;
 import static org.nanonative.nano.services.http.HttpsHelper.createHttpsServer;
+import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PROBLEM_JSON;
 
 public class HttpServer extends Service {
     protected com.sun.net.httpserver.HttpServer server;
@@ -49,8 +49,8 @@ public class HttpServer extends Service {
     public static final String CONFIG_SERVICE_HTTPS_PASSWORD = registerConfig("app_service_https_password", "Optional password for SSL keystores/private keys");
 
     // Register event channels
-    public static final int EVENT_HTTP_REQUEST = registerChannelId("HTTP_REQUEST");
-    public static final int EVENT_HTTP_REQUEST_UNHANDLED = registerChannelId("HTTP_REQUEST_UNHANDLED");
+    public static final Channel<HttpObject, HttpObject> EVENT_HTTP_REQUEST = registerChannelId("HTTP_REQUEST", HttpObject.class, HttpObject.class);
+    public static final Channel<HttpObject, HttpObject> EVENT_HTTP_REQUEST_UNHANDLED = registerChannelId("HTTP_REQUEST_UNHANDLED", HttpObject.class, HttpObject.class);
 
 
     // important for port finding when using multiple HttpServers
@@ -83,22 +83,24 @@ public class HttpServer extends Service {
             server.setExecutor(GLOBAL_THREAD_POOL);
             server.createContext("/", exchange -> {
                 final HttpObject request = new HttpObject(exchange);
+                final Event<HttpObject, HttpObject> event = context.newEvent(EVENT_HTTP_REQUEST, () -> request);
                 try {
                     final AtomicBoolean internalError = new AtomicBoolean(false);
-                    context.sendEventR(EVENT_HTTP_REQUEST, () -> request).peek(setError(internalError)).responseOpt(HttpObject.class).ifPresentOrElse(
+                    event.send().peek(setError(internalError)).responseOpt().ifPresentOrElse(
                         response -> sendResponse(exchange, request, response),
-                        () -> context.sendEventR(EVENT_HTTP_REQUEST_UNHANDLED, () -> request).responseOpt(HttpObject.class).ifPresentOrElse(
+                        () -> context.newEvent(EVENT_HTTP_REQUEST_UNHANDLED, () -> request).send().responseOpt().ifPresentOrElse(
                             response -> sendResponse(exchange, request, response),
                             () -> sendResponse(exchange, request, new HttpObject()
                                 .statusCode(internalError.get() ? 500 : 404)
                                 .bodyT(new LinkedTypeMap().putR("message", internalError.get() ? "Internal Server Error" : "Not Found").putR("timestamp", System.currentTimeMillis()))
-                                .contentType(ContentType.APPLICATION_PROBLEM_JSON))
+                                .contentType(APPLICATION_PROBLEM_JSON))
                         )
                     );
                 } catch (final Exception e) {
-                    context.sendEventR(EVENT_APP_UNHANDLED, () -> new Unhandled(context, request, e)).responseOpt(HttpObject.class).ifPresentOrElse(
+                    context.newEvent(EVENT_APP_ERROR).payload(() -> event).error(e).containsEvent(true).send();
+                    event.payloadOpt().ifPresentOrElse(
                         response -> sendResponse(exchange, request, response),
-                        () -> new HttpObject().statusCode(500).body("Internal Server Error".getBytes()).contentType(ContentType.APPLICATION_PROBLEM_JSON)
+                        () -> new HttpObject().statusCode(500).body("Internal Server Error".getBytes()).contentType(APPLICATION_PROBLEM_JSON)
                     );
                 }
             });
@@ -123,7 +125,7 @@ public class HttpServer extends Service {
 
 
     @Override
-    public void onEvent(final Event event) {
+    public void onEvent(final Event<?, ?> event) {
     }
 
     @Override
@@ -163,7 +165,7 @@ public class HttpServer extends Service {
 
 
     @Override
-    public Object onFailure(final Event error) {
+    public Object onFailure(final Event<?, ?> error) {
         return null;
     }
 
@@ -196,12 +198,20 @@ public class HttpServer extends Service {
         return body;
     }
 
-    public static Consumer<Event> setError(final AtomicBoolean internalError) {
+    public static Consumer<Event<HttpObject, HttpObject>> setError(final AtomicBoolean internalError) {
         return event -> {
             if (event.error() != null) {
                 internalError.set(true);
             }
         };
+    }
+
+    @Override
+    public String toString() {
+        return new LinkedTypeMap()
+            .putR("name", port())
+            .putR("class", this.getClass().getSimpleName())
+            .toJson();
     }
 }
 

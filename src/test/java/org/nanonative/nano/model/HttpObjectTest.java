@@ -82,25 +82,25 @@ class HttpObjectTest {
     }
 
     @Test
-    void testRespondResponse() {
-        final Event event = eventOf(Context.createRootContext(HttpObjectTest.class), EVENT_HTTP_REQUEST).payload(() -> new HttpObject().methodType(HttpMethod.GET).path("/create"));
+    void testRespondCreateCreateResponse() {
+        final Event<HttpObject, HttpObject> event = eventOf(Context.createRootContext(HttpObjectTest.class), EVENT_HTTP_REQUEST).payload(() -> new HttpObject().methodType(HttpMethod.GET).path("/create"));
 
-        event.payloadOpt(HttpObject.class)
+        event.payloadOpt()
             .filter(HttpObject::isMethodGet)
             .filter(request -> request.pathMatch("/create"))
-            .ifPresent(request -> request.response().statusCode(201).body("success").respond(event));
+            .ifPresent(request -> request.createResponse().statusCode(201).body("success").respond(event));
 
-        assertThat(event.responseOpt(HttpObject.class)).isPresent();
-        assertThat(event.response(HttpObject.class).statusCode()).isEqualTo(201);
-        assertThat(event.response(HttpObject.class).bodyAsString()).isEqualTo("success");
+        assertThat(event.responseOpt()).isPresent();
+        assertThat(event.response().statusCode()).isEqualTo(201);
+        assertThat(event.response().bodyAsString()).isEqualTo("success");
     }
 
     @Test
-    void testCorsResponse() {
+    void testCorsCreateCreateResponse() {
         final HttpObject request = new HttpObject().header("origin", "aa.bb.cc");
 
         // DEFAULT
-        assertThat(new HttpObject().response(true).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(new HttpObject().createResponse(true).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
@@ -109,7 +109,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(new HttpObject().corsResponse().headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(new HttpObject().createCorsResponse().headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
@@ -118,7 +118,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(new HttpObject().header("host", "aa.bb.cc").response(true).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(new HttpObject().header("host", "aa.bb.cc").createResponse(true).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
@@ -127,7 +127,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.response(true).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createResponse(true).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
@@ -137,7 +137,7 @@ class HttpObjectTest {
         ));
 
         // CUSTOM
-        assertThat(request.corsResponse("*").headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("*").headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
@@ -146,7 +146,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc").headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("aa.bb.cc").headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "GET",
@@ -155,7 +155,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF").headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF").headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -164,7 +164,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II").headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II").headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -173,7 +173,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", -99).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", -99).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -182,7 +182,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -191,7 +191,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -200,7 +200,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -209,7 +209,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("*", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("*", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -218,7 +218,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("*", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("*", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -227,7 +227,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
@@ -236,7 +236,7 @@ class HttpObjectTest {
             VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+        assertThat(request.createCorsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
             ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
             ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
             ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",

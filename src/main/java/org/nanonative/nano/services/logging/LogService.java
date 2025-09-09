@@ -3,6 +3,7 @@ package org.nanonative.nano.services.logging;
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMapI;
 import org.nanonative.nano.core.model.Service;
+import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.logging.model.LogLevel;
 
@@ -15,7 +16,7 @@ import java.util.logging.Level;
 import java.util.logging.LogRecord;
 
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
-import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
+import static org.nanonative.nano.helper.event.model.Channel.registerChannelId;
 
 public class LogService extends Service {
 
@@ -25,7 +26,7 @@ public class LogService extends Service {
     public static final String CONFIG_LOG_EXCLUDE_PATTERNS = registerConfig("app_log_excludes", "Exclude patterns for logger names");
 
     // CHANNEL
-    public static final int EVENT_LOGGING = registerChannelId("EVENT_LOGGING");
+    public static final Channel<LogRecord, Void> EVENT_LOGGING = registerChannelId("EVENT_LOGGING", LogRecord.class);
 
     public static final AtomicInteger MAX_LOG_NAME_LENGTH = new AtomicInteger(10);
     protected List<String> excludePatterns;
@@ -43,15 +44,13 @@ public class LogService extends Service {
     }
 
     @Override
-    public Object onFailure(final Event error) {
+    public Object onFailure(final Event<?, ?> error) {
         return null;
     }
 
     @Override
-    public void onEvent(final Event event) {
-        event.filter(this::isLoggable).ifPresent(
-            event1 -> context.run(() -> event1.ifPresentResp(EVENT_LOGGING, LogRecord.class, this::log))
-        );
+    public void onEvent(final Event<?, ?> event) {
+        event.channel(EVENT_LOGGING).filter(this::isLoggable).ifPresent(e -> e.payloadAckAsync(this::log));
     }
 
     @Override
@@ -96,10 +95,10 @@ public class LogService extends Service {
         return true;
     }
 
-    private boolean isLoggable(final Event event) {
-        return event.channelId() == EVENT_LOGGING && event.asOpt(Level.class, "level")
-            .filter(level -> level.intValue() > this.level.intValue())
-            .map(level -> event.asString("name"))
+    private <C, R> boolean isLoggable(final Event<C, R> event) {
+        return event.asOpt(Level.class, "level")
+            .filter(lvl -> lvl.intValue() > this.level.intValue())
+            .map(lvl -> event.asString("name"))
             .filter(name -> excludePatterns == null || excludePatterns.stream().noneMatch(name::contains))
             .map(name -> event.acknowledge())
             .isPresent();
@@ -115,6 +114,7 @@ public class LogService extends Service {
             .putR("excludePatterns", excludePatterns != null ? excludePatterns.size() : 0)
             .putR("logFormatter", logFormatter.getClass().getSimpleName())
             .putR("MAX_LOG_NAME_LENGTH", MAX_LOG_NAME_LENGTH.get())
+            .putR("class", this.getClass().getSimpleName())
             .toJson();
     }
 }

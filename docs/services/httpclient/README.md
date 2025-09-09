@@ -8,7 +8,13 @@
 
 # Http Client
 
-Is a default [Services](../../services/README.md) of Nano which is responsible for sending basic HTTP requests.
+Is a default [Services](../../services/README.md) of Nano which is responsible for sending HTTP requests with built-in
+support for:
+
+* Automatic retry
+* Timeout handling
+* Redirects
+* TLS/SSL Trust customization
 
 ## Usage
 
@@ -26,13 +32,13 @@ This makes it possible to define change data before sending the HTTP request.
 ```java
 public static void main(final String[] args) {
     final Nano app = new Nano(args, new HttpClient());
-    
-    app.context(MyClass.class).newEvent(EVENT_SEND_HTTP, () -> new Httpobject().methodType(GET).path("http://localhost:8080/hello").body("Hello World")).send();
 
-    // Add Token to request
-    app.subscribeEvent(EVENT_HTTP_REQUEST, event -> 
-        event.payloadOpt(HttpObject.class).ifPresent(request -> request.header("Authorization", "myCustomToken"))
+    // Intercept and add Token to request
+    app.subscribeEvent(EVENT_HTTP_REQUEST, event ->
+        event.payloadOpt().ifPresent(request -> request.header("Authorization", "myCustomToken"))
     );
+
+    app.context(MyClass.class).newEvent(EVENT_SEND_HTTP, () -> new Httpobject().methodType(GET).path("http://localhost:8080/hello").body("Hello World")).send();
 }
 ```
 
@@ -45,11 +51,11 @@ public static void main(final String[] args) {
     final Context context = new Nano(args, new HttpClient()).context(MyClass.class);
 
     // send request via event
-    final HttpObject response1 = context.sendEventR(EVENT_SEND_HTTP, () -> new HttpObject()
+    final HttpObject response1 = context.event(EVENT_SEND_HTTP, () -> new HttpObject()
         .methodType(GET)
         .path("http://localhost:8080/hello")
         .body("Hello World")
-    ).response(HttpObject.class);
+    ).send().response();
 
     // send request via context
     final HttpObject response2 = new HttpObject()
@@ -69,13 +75,15 @@ public static void main(final String[] args) {
 
 ## Configuration
 
-| [Config](../../context/README.md#configuration) | Type      | Default                       | Description                                         |
-|-------------------------------------------------|-----------|-------------------------------|-----------------------------------------------------|
-| `app_service_http_version`                      | `Integer` | `2`                           | (HttpClient) Http Version 1 or 2                    |
-| `app_service_http_max_retries`                  | `Integer` | `3`                           | (HttpClient) Maximum number of retries              |
-| `app_service_http_con_timeoutMs`                | `Integer` | `5000`                        | (HttpClient) Connection timeout in milliseconds     |
-| `app_service_http_read_timeoutMs`               | `Integer` | `10000`                       | (HttpClient) Read timeout in milliseconds           |
-| `app_service_http_follow_redirects`             | `Boolean` | `true`                        | (HttpClient) Follow redirects                       |
+| [Config](../../context/README.md#configuration) | Type      | Default | Description                                                                                                                                                               |
+|-------------------------------------------------|-----------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `app_service_http_version`                      | `Integer` | `2`     | Use HTTP/1 or HTTP/2 protocol                                                                                                                                             |
+| `app_service_http_max_retries`                  | `Integer` | `3`     | Max automatic retries on failure                                                                                                                                          |
+| `app_service_http_con_timeout_ms`               | `Integer` | `5000`  | Connection timeout in milliseconds                                                                                                                                        |
+| `app_service_http_read_timeout_ms`              | `Integer` | `10000` | Read timeout in milliseconds                                                                                                                                              |
+| `app_service_http_follow_redirects`             | `Boolean` | `true`  | Automatically follow redirects (3xx)                                                                                                                                      |
+| `app_service_http_trust_all`                    | `Boolean` | `false` | Trust all SSL certificates (unsafe, but useful for dev environments)                                                                                                      |
+| `app_service_http_trusted_ca`                   | `String`  | `null`  | Path to trusted CA certificate file or folder. If "default", uses OS & Java-level CA trust bundles (/etc/ssl/certs, /etc/pki/..., and ${JAVA_HOME}/lib/security/cacerts). |
 
 ## Events
 

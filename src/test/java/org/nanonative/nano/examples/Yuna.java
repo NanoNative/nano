@@ -6,9 +6,11 @@ import org.nanonative.nano.services.http.HttpServer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_CERTS;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 
 @Disabled
 public class Yuna {
@@ -22,6 +24,10 @@ public class Yuna {
         // CRT, KEY
         // CRT, CA, KEY
         // PEM
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, (event, request) -> request.createCorsResponse().respond(event));
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadAck().createResponse().respond(event));
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadAck().respond(event, httpObject -> httpObject.statusCode(200)));
 
 
 //        System.exit(0);
@@ -55,6 +61,7 @@ public class Yuna {
 //            .subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
 //                .filter(HttpObject::isMethodGet)
 //                .filter(request -> request.pathMatch("/hello"))
+
 //                .ifPresent(request -> request.response().body(System.getProperty("user.name")).send(event))
 //            );
 

@@ -1,15 +1,14 @@
 package org.nanonative.nano.services.metric.logic;
 
-import berlin.yuna.typemap.model.TypeMap;
 import berlin.yuna.typemap.model.TypeMapI;
 import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.NanoThread;
 import org.nanonative.nano.core.model.Service;
+import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpHeaders;
-import org.nanonative.nano.services.http.model.HttpObject;
 import org.nanonative.nano.services.logging.model.LogLevel;
 import org.nanonative.nano.services.metric.model.MetricCache;
 import org.nanonative.nano.services.metric.model.MetricUpdate;
@@ -36,9 +35,11 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static java.util.Optional.ofNullable;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_HEARTBEAT;
 import static org.nanonative.nano.helper.NanoUtils.tryExecute;
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
-import static org.nanonative.nano.helper.event.EventChannelRegister.registerChannelId;
+import static org.nanonative.nano.helper.event.model.Channel.registerChannelId;
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
@@ -59,7 +60,7 @@ public class MetricService extends Service {
     public static final String CONFIG_METRIC_SERVICE_DYNAMO_PATH = registerConfig("app_service_dynamo_metrics_url", "Dynamo path for the metric service");
 
     // Register event channels
-    public static final int EVENT_METRIC_UPDATE = registerChannelId("EVENT_METRIC_UPDATE");
+    public static final Channel<MetricUpdate, Void> EVENT_METRIC_UPDATE = registerChannelId("EVENT_METRIC_UPDATE", MetricUpdate.class);
 
     @Override
     public void start() {
@@ -74,16 +75,17 @@ public class MetricService extends Service {
     }
 
     @Override
-    public Object onFailure(final Event error) {
+    public Object onFailure(final Event<?, ?> error) {
         return null;
     }
 
     @Override
-    public void onEvent(final Event event) {
-        event
-            .ifPresentResp(Context.EVENT_APP_HEARTBEAT, Nano.class, this::updateMetrics)
-            .ifPresentResp(EVENT_METRIC_UPDATE, MetricUpdate.class, this::updateMetric)
-            .ifPresent(Context.EVENT_CONFIG_CHANGE, TypeMap.class, map -> map.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).ifPresent(level -> metrics.gaugeSet("logger", 1, Map.of("level", level.name()))));
+    public void onEvent(final Event<?, ?> event) {
+        event.channel(EVENT_APP_HEARTBEAT).ifPresent(e -> {
+            e.acknowledge();
+            updateMetrics(context.nano());
+        });
+        event.channel(EVENT_METRIC_UPDATE).map(Event::payloadAck).map(this::updateMetric);
         addMetricsEndpoint(event);
 
     }
@@ -96,58 +98,58 @@ public class MetricService extends Service {
         dynamoPath = merged.asStringOpt(CONFIG_METRIC_SERVICE_DYNAMO_PATH).orElseGet(() -> basePath.map(base -> base + "/dynamo").orElse(null));
         influx = merged.asStringOpt(CONFIG_METRIC_SERVICE_INFLUX_PATH).orElseGet(() -> basePath.map(base -> base + "/influx").orElse(null));
         wavefront = merged.asStringOpt(CONFIG_METRIC_SERVICE_WAVEFRONT_PATH).orElseGet(() -> basePath.map(base -> base + "/wavefront").orElse(null));
+        configs.asOpt(LogLevel.class, CONFIG_LOG_LEVEL).ifPresent(level -> metrics.gaugeSet("logger", 1, Map.of("level", level.name())));
     }
 
-    protected void addMetricsEndpoint(final Event event) {
-        event
-            .ifPresent(EVENT_HTTP_REQUEST, HttpObject.class, request ->
-                Optional.ofNullable(prometheusPath)
-                    .filter(request::pathMatch)
-                    .filter(path -> request.isMethodGet())
-                    .ifPresent(path ->
-                        request.response()
-                            .statusCode(200)
-                            .body(metrics.prometheus())
-                            .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                            .respond(event)
-                    )
-            )
-            .ifPresent(EVENT_HTTP_REQUEST, HttpObject.class, request ->
-                Optional.ofNullable(dynamoPath)
-                    .filter(request::pathMatch)
-                    .filter(path -> request.isMethodGet())
-                    .ifPresent(path ->
-                        request.response()
-                            .statusCode(200)
-                            .body(metrics.dynatrace())
-                            .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                            .respond(event)
-                    )
-            )
-            .ifPresent(EVENT_HTTP_REQUEST, HttpObject.class, request ->
-                Optional.ofNullable(influx)
-                    .filter(request::pathMatch)
-                    .filter(path -> request.isMethodGet())
-                    .ifPresent(path ->
-                        request.response()
-                            .statusCode(200)
-                            .body(metrics.influx())
-                            .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                            .respond(event)
-                    )
-            )
-            .ifPresent(EVENT_HTTP_REQUEST, HttpObject.class, request ->
-                Optional.ofNullable(wavefront)
-                    .filter(request::pathMatch)
-                    .filter(path -> request.isMethodGet())
-                    .ifPresent(path ->
-                        request.response()
-                            .statusCode(200)
-                            .body(metrics.wavefront())
-                            .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                            .respond(event)
-                    )
-            );
+    protected void addMetricsEndpoint(final Event<?, ?> event) {
+        event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
+            ofNullable(prometheusPath)
+                .filter(request::pathMatch)
+                .filter(path -> request.isMethodGet())
+                .ifPresent(path ->
+                    request.createResponse()
+                        .statusCode(200)
+                        .body(metrics.prometheus())
+                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                        .respond(event)
+                )
+        );
+        event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
+            ofNullable(dynamoPath)
+                .filter(request::pathMatch)
+                .filter(path -> request.isMethodGet())
+                .ifPresent(path ->
+                    request.createResponse()
+                        .statusCode(200)
+                        .body(metrics.dynatrace())
+                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                        .respond(event)
+                )
+        );
+        event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
+            ofNullable(influx)
+                .filter(request::pathMatch)
+                .filter(path -> request.isMethodGet())
+                .ifPresent(path ->
+                    request.createResponse()
+                        .statusCode(200)
+                        .body(metrics.influx())
+                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                        .respond(event)
+                )
+        );
+        event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
+            ofNullable(wavefront)
+                .filter(request::pathMatch)
+                .filter(path -> request.isMethodGet())
+                .ifPresent(path ->
+                    request.createResponse()
+                        .statusCode(200)
+                        .body(metrics.wavefront())
+                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                        .respond(event)
+                )
+        );
     }
 
     @SuppressWarnings("SameReturnValue")
@@ -302,7 +304,7 @@ public class MetricService extends Service {
             final List<String> unix = List.of("linux", "mac", "aix", "irix", "hp-ux", "freebsd", "openbsd", "netbsd", "solaris", "sunos");
 
             final String finalOsName = osName;
-            metrics.gaugeSet("system.type", IntStream.range(0, osPrefixes.size()).filter(i -> finalOsName.startsWith(osPrefixes.get(i))).findFirst().orElse(-1) + 1d);
+            metrics.gaugeSet("system.payload", IntStream.range(0, osPrefixes.size()).filter(i -> finalOsName.startsWith(osPrefixes.get(i))).findFirst().orElse(-1) + 1d);
             metrics.gaugeSet("system.unix", unix.stream().anyMatch(finalOsName::startsWith) ? 1 : 0);
         });
     }

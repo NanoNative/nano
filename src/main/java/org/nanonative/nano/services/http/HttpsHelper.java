@@ -6,6 +6,9 @@ import org.nanonative.nano.core.model.Context;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,13 +16,20 @@ import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.KeyFactory;
 import java.security.KeyStore;
 import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Enumeration;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_CERT;
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_KEY;
@@ -38,6 +48,7 @@ public class HttpsHelper {
     public static final String TYPE_JCEKS = "JCEKS";
     public static final String TYPE_JKS = "JKS";
     public static final String TYPE_TLS = "TLS";
+    public static final String TYPE_X_509 = "X.509";
 
     /**
      * Creates a default HTTP server using the configured or fallback port.
@@ -112,7 +123,7 @@ public class HttpsHelper {
                 final SSLContext sslContext = SSLContext.getInstance(TYPE_TLS);
                 sslContext.init(kmf.getKeyManagers(), null, null);
                 httpsServer.setHttpsConfigurator(new HttpsConfigurator(sslContext));
-                context.info(() -> "HTTPS configured on port [" + context.asInt(CONFIG_SERVICE_HTTP_PORT) + "] with keystore [" + ktsType + "]");
+                context.info(() -> "HTTPS configured on port [%s] with keystore [%s]", context.asInt(CONFIG_SERVICE_HTTP_PORT), ktsType);
             } catch (Exception e) {
                 context.error(() -> "Failed to configure HTTPS", e);
             }
@@ -147,7 +158,7 @@ public class HttpsHelper {
             } catch (final InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             } catch (final Exception e) {
-                context.error(e, () -> "Failed to load private key [" + file + "]");
+                context.error(e, () -> "Failed to load private key [%s]", file);
                 throw new IllegalArgumentException("Failed to load private key [" + file + "]", e);
             } finally {
                 if (tempFile != null) {
@@ -171,11 +182,11 @@ public class HttpsHelper {
     public static Certificate readCertificate(final Context context, final KeyStore keyStore) {
         return context.asPathOpt(CONFIG_SERVICE_HTTPS_CERT).map(file -> {
             try (final InputStream is = Files.newInputStream(file)) {
-                final Certificate certificate = CertificateFactory.getInstance("X.509").generateCertificate(is);
+                final Certificate certificate = CertificateFactory.getInstance(TYPE_X_509).generateCertificate(is);
                 keyStore.setCertificateEntry(file.getFileName().toString(), certificate);
                 return certificate;
             } catch (final Exception e) {
-                context.error(e, () -> "Failed to load X.509 [" + file + "]");
+                context.error(e, () -> "Failed to load X.509 file [%s]", file);
                 return null;
             }
         }).orElse(null);
@@ -188,7 +199,7 @@ public class HttpsHelper {
      * @param context  configuration context
      * @param password keystore password
      * @param keyStore target key store
-     * @param ktsType  keystore type (e.g., JKS, JCEKS, PKCS12)
+     * @param ktsType  keystore payload (e.g., JKS, JCEKS, PKCS12)
      */
     public static void readKts(final Context context, final char[] password, final KeyStore keyStore, final String ktsType) {
         context.asPathOpt(CONFIG_SERVICE_HTTPS_KTS).ifPresent(file -> {
@@ -205,9 +216,97 @@ public class HttpsHelper {
                     }
                 }
             } catch (final Exception e) {
-                context.error(e, () -> "Failed to load keystore [" + file + "]");
+                context.error(e, () -> "Failed to load keystore file [%s]", file);
             }
         });
+    }
+
+    public static List<Path> findDefaultLinuxCaBundle() {
+        final List<String> candidates = List.of(
+            "/etc/ssl/certs/ca-certificates.crt",
+            "/etc/pki/tls/certs/ca-bundle.crt",
+            "/etc/ssl/ca-bundle.pem",
+            System.getProperty("java.home") + "/lib/security/cacerts"
+        );
+        return candidates.stream()
+            .map(Paths::get)
+            .filter(Files::exists)
+            .toList();
+    }
+
+    public static SSLContext createTrustedSslContext() {
+        try {
+            final TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {return new java.security.cert.X509Certificate[0];}
+
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                }
+            };
+            final SSLContext sc = SSLContext.getInstance(TYPE_TLS);
+            sc.init(null, trustAllCerts, new SecureRandom());
+            return sc;
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to build trust-all HttpClient", e);
+        }
+    }
+
+    public static SSLContext createCustomTrustedSslContext(final Context context, final List<Path> paths) {
+        try {
+            final KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
+            trustStore.load(null);
+            final CertificateFactory cf = CertificateFactory.getInstance(TYPE_X_509);
+            final AtomicInteger loadedCerts = new AtomicInteger(0);
+            paths.stream()
+                .filter(Objects::nonNull)
+                .flatMap(HttpsHelper::toFiles)
+                .filter(Files::exists)
+                .filter(p -> {
+                    final String name = p.getFileName().toString().toLowerCase();
+                    return name.endsWith(".crt") || name.endsWith(".pem") || name.endsWith(".cer") || name.endsWith(".der");
+                })
+                .forEach(certPath -> {
+                    try (final InputStream in = Files.newInputStream(certPath)) {
+                        cf.generateCertificates(in).forEach(cert -> {
+                            try {
+                                trustStore.setCertificateEntry("cert-" + (loadedCerts.getAndIncrement()), cert);
+                            } catch (Exception e) {
+                                context.error(() -> "Skipping invalid cert file [%s] message [%s]", certPath, e.getMessage());
+                            }
+                        });
+                    } catch (final Exception ignored) {
+                        context.debug(() -> "Skipping invalid cert file {" + certPath + "]");
+                    }
+                });
+
+            if (loadedCerts.get() == 0) {
+                throw new IllegalArgumentException("No valid certificates found in " + paths);
+            }
+
+            final TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init(trustStore);
+
+            final SSLContext sslContext = SSLContext.getInstance(TYPE_TLS);
+            sslContext.init(null, tmf.getTrustManagers(), new SecureRandom());
+
+            return sslContext;
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to create SSLContext from trusted certs " + paths, e);
+        }
+    }
+
+    private static Stream<Path> toFiles(final Path path) {
+        if (Files.isDirectory(path)) {
+            try (final Stream<Path> walk = Files.walk(path)) {
+                return walk.filter(Files::isRegularFile).toList().stream();
+            } catch (IOException ignored) {
+                return Stream.empty();
+            }
+        } else {
+            return Stream.of(path).filter(Files::isRegularFile);
+        }
     }
 
     /**

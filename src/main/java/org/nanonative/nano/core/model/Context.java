@@ -8,7 +8,7 @@ import org.nanonative.nano.core.NanoThreads;
 import org.nanonative.nano.helper.ExRunnable;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.config.ConfigRegister;
-import org.nanonative.nano.helper.event.EventChannelRegister;
+import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.ContentType;
 import org.nanonative.nano.services.http.model.HttpMethod;
@@ -19,12 +19,14 @@ import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.logging.Formatter;
 import java.util.logging.Level;
@@ -36,6 +38,7 @@ import static java.net.http.HttpClient.Version.HTTP_1_1;
 import static java.net.http.HttpClient.Version.HTTP_2;
 import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.model.Service.threadsOf;
+import static org.nanonative.nano.helper.NanoUtils.reduceSte;
 import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
 import static org.nanonative.nano.services.logging.LogService.MAX_LOG_NAME_LENGTH;
@@ -60,20 +63,19 @@ public class Context extends ConcurrentTypeMap {
     public static final String CONFIG_ENV_PROD = ConfigRegister.registerConfig("app_env_prod", "Enable or disable behaviour e.g. exit codes. This is useful in prod environments specially on error cases. default = `false`");
 
     // Register event channels
-    public static final int EVENT_APP_START = EventChannelRegister.registerChannelId("APP_START");
-    public static final int EVENT_APP_SHUTDOWN = EventChannelRegister.registerChannelId("APP_SHUTDOWN");
-    public static final int EVENT_APP_SERVICE_REGISTER = EventChannelRegister.registerChannelId("APP_SERVICE_REGISTER");
-    public static final int EVENT_APP_SERVICE_UNREGISTER = EventChannelRegister.registerChannelId("APP_SERVICE_UNREGISTER");
-    public static final int EVENT_APP_SCHEDULER_REGISTER = EventChannelRegister.registerChannelId("APP_SCHEDULER_REGISTER");
-    public static final int EVENT_APP_SCHEDULER_UNREGISTER = EventChannelRegister.registerChannelId("APP_SCHEDULER_UNREGISTER");
-    public static final int EVENT_APP_UNHANDLED = EventChannelRegister.registerChannelId("EVENT_APP_UNHANDLED");
-    public static final int EVENT_APP_ERROR = EventChannelRegister.registerChannelId("EVENT_APP_ERROR");
-    public static final int EVENT_APP_OOM = EventChannelRegister.registerChannelId("EVENT_APP_OOM");
-    public static final int EVENT_APP_HEARTBEAT = EventChannelRegister.registerChannelId("EVENT_HEARTBEAT");
-    public static final int EVENT_CONFIG_CHANGE = EventChannelRegister.registerChannelId("EVENT_CONFIG_CHANGE");
+    public static final Channel<Void, Void> EVENT_APP_START = Channel.registerChannelId("APP_START", Void.class);
+    public static final Channel<Void, Void> EVENT_APP_SHUTDOWN = Channel.registerChannelId("APP_SHUTDOWN", Void.class);
+    public static final Channel<Service, Void> EVENT_APP_SERVICE_REGISTER = Channel.registerChannelId("APP_SERVICE_REGISTER", Service.class);
+    public static final Channel<Service, Void> EVENT_APP_SERVICE_UNREGISTER = Channel.registerChannelId("APP_SERVICE_UNREGISTER", Service.class);
+    public static final Channel<Scheduler, Void> EVENT_APP_SCHEDULER_REGISTER = Channel.registerChannelId("APP_SCHEDULER_REGISTER", Scheduler.class);
+    public static final Channel<Scheduler, Void> EVENT_APP_SCHEDULER_UNREGISTER = Channel.registerChannelId("APP_SCHEDULER_UNREGISTER", Scheduler.class);
+    public static final Channel<Object, Void> EVENT_APP_ERROR = Channel.registerChannelId("EVENT_EVENT_APP_ERROR", Object.class);
+    public static final Channel<Double, Void> EVENT_APP_OOM = Channel.registerChannelId("EVENT_APP_OOM", Double.class);
+    public static final Channel<Void, Void> EVENT_APP_HEARTBEAT = Channel.registerChannelId("EVENT_HEARTBEAT", Void.class);
+    public static final Channel<Map, Void> EVENT_CONFIG_CHANGE = Channel.registerChannelId("EVENT_CONFIG_CHANGE", Map.class);
 
     static {
-        // Register type converters
+        // Register payload converters
         registerTypeConvert(String.class, Formatter.class, LogFormatRegister::getLogFormatter);
         registerTypeConvert(String.class, LogLevel.class, LogLevel::nanoLogLevelOf);
         registerTypeConvert(LogLevel.class, String.class, Enum::name);
@@ -114,6 +116,9 @@ public class Context extends ConcurrentTypeMap {
     public Nano nano() {
         if (nano == null) {
             nano = get(Nano.class, CONTEXT_NANO_KEY);
+            if (nano == null) {
+                throw new IllegalArgumentException("Nano is not running");
+            }
         }
         return nano;
     }
@@ -328,7 +333,7 @@ public class Context extends ConcurrentTypeMap {
                 () -> {
                     final LogRecord logRecord = new LogRecord(level.toJavaLogLevel(), message.get());
                     logRecord.setParameters(params);
-                    logRecord.setThrown(thrown);
+                    logRecord.setThrown(reduceSte(thrown));
                     logRecord.setLoggerName(clazz().getCanonicalName());
                     return logRecord;
                 }
@@ -388,50 +393,147 @@ public class Context extends ConcurrentTypeMap {
         return this;
     }
 
+//    /**
+//     * Registers an event listener for a specific event payload.
+//     *
+//     * @param channelId The integer identifier of the event payload.
+//     * @param listener  The consumer function that processes the {@link Event}.
+//     * @return Self for chaining
+//     */
+//    public Context subscribeEvent(final int channelId, final Consumer<Event> listener) {
+//        nano().subscribeEvent(channelId, listener);
+//        return this;
+//    }
+
     /**
-     * Registers an event listener for a specific event type.
+     * Registers an event listener with a typed payload.
      *
-     * @param channelId The integer identifier of the event type.
-     * @param listener  The consumer function that processes the {@link Event}.
+     * @param channel  The channel to be subscribed.
+     * @param listener The bi-consumer to receive the {@link Event} and its payload.
+     * @param <C>      The payload
+     * @param <R>      The return payload
      * @return Self for chaining
      */
-    public Context subscribeEvent(final int channelId, final Consumer<Event> listener) {
-        nano().subscribeEvent(channelId, listener);
+    public <C, R> Context subscribeEvent(final Channel<C, R> channel, final Consumer<Event<C, R>> listener) {
+        nano().subscribeEvent(channel, listener);
         return this;
     }
 
     /**
-     * Registers an event listener with a specific payload type.
-     * This method provides type-safe event handling by ensuring the payload matches the expected type.
-     * The listener will only be called if the event payload can be cast to the specified type.
+     * Registers an event listener with a typed payload.
      *
-     * @param <T>         The type of the event payload
-     * @param channelId   The event channel to subscribe to
-     * @param payloadType The expected class type of the event payload
-     * @param listener    Consumer that receives both the event and the typed payload
-     * @return Self for chaining
+     * @param channel  The channel to be subscribed.
+     * @param filter   A predicate to filter events before passing them to the listener.
+     * @param listener The bi-consumer to receive the {@link Event} and its payload.
+     * @param <C>      The payload
+     * @param <R>      The return payload
+     * @return A consumer function that can be used to unsubscribe the listener later.
      */
-    public <T> Context subscribeEvent(final int channelId, final Class<T> payloadType, final BiConsumer<Event, T> listener) {
-        subscribeEvent(channelId, event ->
-            event.payloadOpt()
-                .filter(payloadType::isInstance)
-                .map(payloadType::cast)
-                .ifPresent(payload -> listener.accept(event, payload))
-        );
-        return this;
+    public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final Predicate<Event<C, R>> filter, final Consumer<Event<C, R>> listener) {
+        final Consumer<Event<C, R>> wrapped = event -> ofNullable(event).filter(filter).ifPresent(listener);
+        nano().subscribeEvent(channel, wrapped);
+        return wrapped;
     }
 
     /**
-     * Removes a registered event listener for a specific event type.
+     * Registers an event listener with a typed payload.
      *
-     * @param channelId The integer identifier of the event type.
+     * @param channel  The channel to be subscribed.
+     * @param listener The bi-consumer to receive the {@link Event} and its payload.
+     * @param <C>      The payload
+     * @param <R>      The return payload
+     * @return A consumer function that can be used to unsubscribe the listener later.
+     */
+    public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<Event<C, R>, C> listener) {
+        return nano().subscribeEvent(channel, listener);
+    }
+
+    /**
+     * Registers for global error handling.
+     *
+     * @param channel  The channel which should be handled on error.
+     * @param listener The bi-consumer to receive the {@link Event} and its payload.
+     * @param <C>      The payload
+     * @param <R>      The return payload
+     * @return A consumer function that can be used to unsubscribe the listener later.
+     */
+    public <C, R> Consumer<Event<Object, Void>> subscribeError(final Channel<C, R> channel, final Consumer<Event<C, R>> listener) {
+        return nano().subscribeError(channel, listener);
+    }
+
+    /**
+     * Registers for global error handling.
+     *
+     * @param listener The consumer to receive the {@link Event} and its payload.
+     * @return A consumer function that can be used to unsubscribe the listener later.
+     */
+    public <C, R> Consumer<Event<Object, Void>> subscribeError(final Consumer<Event<Object, Void>> listener) {
+        return nano().subscribeError(listener);
+    }
+
+    /**
+     * Removes a registered event listener for a specific event payload.
+     *
+     * @param channel  The channel to be unsubscribed
+     * @param listener The consumer function to be removed.
+     * @return Self for chaining
+     */
+    public <C, R> Context unsubscribeEvent(final Channel<C, R> channel, final Consumer<Event<C, R>> listener) {
+        return this.unsubscribeEvent(channel.id(), listener);
+    }
+
+    /**
+     * Removes a registered event listener for a specific event payload.
+     *
+     * @param channelId The channel id to be unsubscribed
      * @param listener  The consumer function to be removed.
      * @return Self for chaining
      */
-    public Context unsubscribeEvent(final int channelId, final Consumer<Event> listener) {
+    public <C, R> Context unsubscribeEvent(final int channelId, final Consumer<Event<C, R>> listener) {
         nano().unsubscribeEvent(channelId, listener);
         return this;
     }
+
+//
+//    /**
+//     * Registers an event listener with a typed payload.
+//     *
+//     * @param channelId The integer identifier of the event payload.
+//     * @param listener  The bi-consumer to receive the {@link Event} and its payload.
+//     * @return Self for chaining
+//     */
+//    @SuppressWarnings({"unchecked"})
+//    public T subscribeEvent(final int channelId, final Consumer<Event> listener) {
+//        listeners.computeIfAbsent(channelId, value -> new LinkedHashSet<>()).add(listener);
+//        return (T) this;
+//    }
+//    /**
+//     * Registers an event listener with a specific payload payload.
+//     * This method provides payload-safe event handling by ensuring the payload matches the expected payload.
+//     * The listener will only be called if the event payload can be cast to the specified payload.
+//     *
+//     * @param <T>         The payload of the event payload
+//     * @param channelId   The event channel to subscribe to
+//     * @param payloadType The expected class payload of the event payload
+//     * @param listener    Consumer that receives both the event and the typed payload
+//     * @return Self for chaining
+//     */
+//    public <T> Context subscribeEvent(final int channelId, final Class<T> payloadType, final BiConsumer<Event, T> listener) {
+//        subscribeEvent(channelId, event -> event.payloadOpt().filter(payloadType::isInstance).map(payloadType::cast).ifPresent(payload -> listener.accept(event, payload)));
+//        return this;
+//    }
+//
+//    /**
+//     * Removes a registered event listener for a specific event payload.
+//     *
+//     * @param channelId The integer identifier of the event payload.
+//     * @param listener  The consumer function to be removed.
+//     * @return Self for chaining
+//     */
+//    public Context unsubscribeEvent(final int channelId, final Consumer<Event> listener) {
+//        nano().unsubscribeEvent(channelId, listener);
+//        return this;
+//    }
 
     /**
      * Executes a task asynchronously after a specified delay.
@@ -533,7 +635,7 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable  function to execute.
      * @return The {@link Context} object for chaining further operations.
      */
-    public final Context runHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
+    public final Context runHandled(final Consumer<Event<Object, Void>> onFailure, final ExRunnable... runnable) {
         runReturnHandled(onFailure, runnable);
         return this;
     }
@@ -568,11 +670,11 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable  function to execute.
      * @return {@link NanoThread}s
      */
-    public final NanoThread[] runReturnHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
+    public final NanoThread[] runReturnHandled(final Consumer<Event<Object, Void>> onFailure, final ExRunnable... runnable) {
         return Arrays.stream(runnable).map(task -> new NanoThread()
             .onComplete((thread, error) -> {
                 if (error != null)
-                    onFailure.accept(new Unhandled(this, thread, error));
+                    onFailure.accept(newEvent(EVENT_APP_ERROR).error(error).payload(() -> thread));
             }).run(() -> this, task)
         ).toArray(NanoThread[]::new);
     }
@@ -613,7 +715,7 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable  function to execute.
      * @return The {@link Context} object for chaining further operations.
      */
-    public final Context runAwaitHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
+    public final Context runAwaitHandled(final Consumer<Event<Object, Void>> onFailure, final ExRunnable... runnable) {
         NanoThread.waitFor(runReturnHandled(onFailure, runnable));
         return this;
     }
@@ -647,7 +749,7 @@ public class Context extends ConcurrentTypeMap {
      * @param runnable  function to execute.
      * @return {@link NanoThread}s
      */
-    public final NanoThread[] runAwaitRHandled(final Consumer<Unhandled> onFailure, final ExRunnable... runnable) {
+    public final NanoThread[] runAwaitRHandled(final Consumer<Event<Object, Void>> onFailure, final ExRunnable... runnable) {
         return NanoThread.waitFor(runReturnHandled(onFailure, runnable));
     }
 
@@ -665,20 +767,18 @@ public class Context extends ConcurrentTypeMap {
     /**
      * Sends an unhandled event with the provided, nullable payload and exception. If the event is not acknowledged, the error message is logged.
      *
-     * @param payload   The payload of the unhandled event, containing data relevant to the event's context and purpose.
-     * @param throwable The exception that occurred during the event processing.
+     * @param payloadOrEvent The payload of the unhandled event or object, containing data relevant to the event's context and purpose.
+     * @param throwable      The exception that occurred during the event processing.
      * @return self for chaining
      */
-    public Context sendEventError(final Object payload, final Throwable throwable) {
-        // prevent loops
-        final Event event = payload instanceof final Event evt ? evt : eventOf(this, EVENT_APP_ERROR).payload(() -> payload);
-        if (event.channelId() != EVENT_APP_UNHANDLED) {
-            event.remove("send");
-            nano().sendEventSameThread(event.putR(Event.EVENT_ORIGINAL_CHANNEL_ID, event.channelId()).channelId(EVENT_APP_UNHANDLED).error(throwable));
-            if (!event.isAcknowledged())
-                error(throwable, () -> "Event [{}] went rogue.", event.nameOrg());
-        } else {
-            error(throwable, () -> "Event [{}] went rogue.", event.nameOrg());
+    public Context sendEventError(final Object payloadOrEvent, final Throwable throwable) {
+        if (payloadOrEvent instanceof final Event<?, ?> evt) {
+            if (evt.channel() == EVENT_APP_ERROR)
+                return error(throwable, () -> "Event [{}] looped.", evt.channel().name());
+            if (!newEvent(EVENT_APP_ERROR).payload(() -> evt).error(throwable).containsEvent(true).send().isAcknowledged())
+                return log(evt.asOpt(LogLevel.class, "level").orElse(LogLevel.ERROR), throwable, () -> "Event [{}] went rogue.", evt.channel().name());
+        } else if (!newEvent(EVENT_APP_ERROR).payload(() -> payloadOrEvent).error(throwable).send().isAcknowledged()) {
+            return error(throwable, () -> "Event [{}] went rogue.", EVENT_APP_ERROR.name());
         }
         return this;
     }
@@ -691,10 +791,10 @@ public class Context extends ConcurrentTypeMap {
      * @param throwable The exception that occurred during the event processing.
      * @return self for chaining
      */
-    public Context sendEventError(final Event event, final Service service, final Throwable throwable) {
+    public Context sendEventError(final Event<?, ?> event, final Service service, final Throwable throwable) {
         // loop prevention
-        if (event.channelId() == EVENT_APP_UNHANDLED)
-            event.context().error(throwable, () -> "Unhandled event [{}] service [{}]", event.nameOrg(), service.name());
+        if (event.channel() == EVENT_APP_ERROR)
+            event.context().error(throwable, () -> "Unhandled event [{}] service [{}]", event.channel().name(), service.name());
         if (service.onFailure(event.error(throwable)) == null) {
             event.context().sendEventError(event, throwable);
         }
@@ -702,135 +802,55 @@ public class Context extends ConcurrentTypeMap {
     }
 
     /**
-     * Sends an event of the specified type with the provided payload within this context without expecting a response.
-     * This method is used for sending targeted events that do not require asynchronous processing or response handling.
+     * Creates a new {@link Event} instance with the specified event payload.
      *
-     * @param channelId The integer representing the type of the event, identifying the nature or action of the event.
-     * @param payload   The payload of the event, containing data relevant to the event's context and purpose.
-     * @return The current {@link Context} instance, allowing for method chaining and further configuration.
-     */
-    public Context sendEvent(final int channelId, final Supplier<Object> payload) {
-        return sendEvent(channelId, payload, null);
-    }
-
-    /**
-     * Sends an event of the specified type with the provided payload within this context, expecting a response that is handled by the provided responseListener.
-     * This method allows for asynchronous event processing and response handling through the specified consumer.
-     *
-     * @param channelId        The integer representing the type of the event.
-     * @param payload          The payload of the event, containing the data to be communicated.
-     * @param responseListener A consumer that processes the response of the event. This allows for asynchronous event handling and response processing.
-     * @return The current {@link Context} instance, facilitating method chaining and further actions.
-     */
-    public Context sendEvent(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
-        sendEventR(channelId, payload, responseListener);
-        return this;
-    }
-
-    /**
-     * Broadcasts an event of the specified type with the provided payload to all listeners within this context without expecting a response.
-     * This method is ideal for notifying all interested parties of a particular event where no direct response is required.
-     *
-     * @param channelId The integer representing the type of the event, used to notify all listeners interested in this type of event.
-     * @param payload   The payload of the event, containing information relevant to the broadcast.
-     * @return The current {@link Context} instance, enabling method chaining and additional configurations.
-     */
-    public Context broadcastEvent(final int channelId, final Supplier<Object> payload) {
-        return broadcastEvent(channelId, payload, null);
-    }
-
-    /**
-     * Broadcasts an event of the specified type with the provided payload to all listeners within this context, expecting a response that is handled by the provided responseListener.
-     * This method allows for the broad dissemination of an event while also facilitating asynchronous response processing.
-     *
-     * @param channelId        The integer representing the type of the event.
-     * @param payload          The payload associated with the event, intended for widespread distribution.
-     * @param responseListener A consumer that handles the response of the event, enabling asynchronous processing and response handling across multiple listeners.
-     * @return The current {@link Context} instance, allowing for method chaining and further actions.
-     */
-    public Context broadcastEvent(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
-        broadcastEventR(channelId, payload, responseListener);
-        return this;
-    }
-
-    //########## EVENT RETURN HELPER ##########
-
-    /**
-     * Sends an event of the specified type with the provided payload within this context without expecting a response.
-     * This method is used for sending targeted events that do not require asynchronous processing or response handling.
-     *
-     * @param channelId The integer representing the type of the event, identifying the nature or action of the event.
-     * @param payload   The payload of the event, containing data relevant to the event's context and purpose.
+     * @param channel The {@link Channel} for the event.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    public Event sendEventR(final int channelId, final Supplier<Object> payload) {
-        return sendEventR(channelId, payload, null);
+    public <C, R> Event<C, R> newEvent(final Channel<C, R> channel) {
+        return eventOf(this, channel);
     }
 
     /**
-     * Sends an event of the specified type with the provided payload within this context, expecting a response that is handled by the provided responseListener.
-     * This method allows for asynchronous event processing and response handling through the specified consumer.
+     * Creates a new {@link Event} instance with the specified event payload.
      *
-     * @param channelId        The integer representing the type of the event.
-     * @param payload          The payload of the event, containing the data to be communicated.
-     * @param responseListener A consumer that processes the response of the event. This allows for asynchronous event handling and response processing.
+     * @param channel The {@link Channel} for the event.
+     * @param payload A supplier that provides the payload for the event. This allows for lazy evaluation of the payload, which can be useful for performance or when the payload is not immediately available.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    public Event sendEventR(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
-        return newEvent(channelId).payload(payload).async(responseListener).send();
+    public <C, R> Event<C, R> newEvent(final Channel<C, R> channel, final Supplier<C> payload) {
+        return eventOf(this, channel).payload(payload);
     }
 
     /**
-     * Broadcasts an event of the specified type with the provided payload to all listeners within this context without expecting a response.
-     * This method is ideal for notifying all interested parties of a particular event where no direct response is required.
+     * Registers a new {@link Channel} with a given name if it does not already exist.
+     * If the {@link Channel} payload already exists, it returns the existing {@link Channel}.
      *
-     * @param channelId The integer representing the type of the event, used to notify all listeners interested in this type of event.
-     * @param payload   The payload of the event, containing information relevant to the broadcast.
-     * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
+     * @param name    The name of the {@link Channel} payload to register.
+     * @param payload The class type of the payload for the {@link Channel}.
+     * @return The {@link Channel}  of the newly registered event payload, or the {@link Channel}  of the existing event payload if it already exists. Returns null if the input is null or empty.
      */
-    public Event broadcastEventR(final int channelId, final Supplier<Object> payload) {
-        return broadcastEventR(channelId, payload, null);
+    public <C> Channel<C, Void> registerChannelId(final String name, final Class<C> payload) {
+        return Channel.registerChannelId(name, payload);
     }
 
     /**
-     * Broadcasts an event of the specified type with the provided payload to all listeners within this context, expecting a response that is handled by the provided responseListener.
-     * This method allows for the broad dissemination of an event while also facilitating asynchronous response processing.
+     * Registers a new {@link Channel} with a given name if it does not already exist.
+     * If the {@link Channel} payload already exists, it returns the existing {@link Channel}.
      *
-     * @param channelId        The integer representing the type of the event.
-     * @param payload          The payload associated with the event, intended for widespread distribution.
-     * @param responseListener A consumer that handles the response of the event, enabling asynchronous processing and response handling across multiple listeners.
-     * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
+     * @param name     The name of the {@link Channel} payload to register.
+     * @param payload  The class type of the payload for the {@link Channel}.
+     * @param response The class type of the response for the {@link Channel}.
+     * @return The {@link Channel}  of the newly registered event payload, or the {@link Channel}  of the existing event payload if it already exists. Returns null if the input is null or empty.
      */
-    public Event broadcastEventR(final int channelId, final Supplier<Object> payload, final Consumer<Object> responseListener) {
-        return newEvent(channelId).payload(payload).async(responseListener).send();
+    public <C, R> Channel<C, R> registerChannelId(final String name, final Class<C> payload, final Class<R> response) {
+        return Channel.registerChannelId(name, payload, response);
     }
 
     /**
-     * Creates a new {@link Event} instance with the specified event type.
+     * Retrieves a {@link Service} of a specified payload.
      *
-     * @param channelId The integer representing the type of the event.
-     * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
-     */
-    public Event newEvent(final int channelId) {
-        return eventOf(this, channelId);
-    }
-
-    /**
-     * Registers a new event type with a given name if it does not already exist.
-     * If the event type already exists, it returns the existing event type's ID.
-     *
-     * @param channelName The name of the event type to register.
-     * @return The ID of the newly registered event type, or the ID of the existing event type
-     * if it already exists. Returns -1 if the input is null or empty.
-     */
-    public int registerChannelId(final String channelName) {
-        return EventChannelRegister.registerChannelId(channelName);
-    }
-
-    /**
-     * Retrieves a {@link Service} of a specified type.
-     *
-     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
+     * @param <S>          The payload of the service to retrieve, which extends {@link Service}.
      * @param serviceClass The class of the {@link Service} to retrieve.
      * @return The first instance of the specified {@link Service}, or null if not found.
      */
@@ -839,11 +859,11 @@ public class Context extends ConcurrentTypeMap {
     }
 
     /**
-     * Retrieves a list of services of a specified type.
+     * Retrieves a list of services of a specified payload.
      *
-     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
+     * @param <S>          The payload of the service to retrieve, which extends {@link Service}.
      * @param serviceClass The class of the service to retrieve.
-     * @return A list of services of the specified type. If no services of this type are found,
+     * @return A list of services of the specified payload. If no services of this payload are found,
      * an empty list is returned.
      */
     public <S extends Service> List<S> services(final Class<S> serviceClass) {
@@ -895,7 +915,8 @@ public class Context extends ConcurrentTypeMap {
     public String toString() {
         return new LinkedTypeMap()
             .putR("size", size())
-            .putR("class", ofNullable(clazz()).map(Class::getSimpleName).orElse(null))
+            .putR("logger", ofNullable(clazz()).map(Class::getSimpleName).orElse(null))
+            .putR("class", this.getClass().getSimpleName())
             .toJson();
     }
 }

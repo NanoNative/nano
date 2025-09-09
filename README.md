@@ -100,14 +100,13 @@ public static void main(final String[] args) {
     final Nano app = new Nano(args, new HttpServer());
 
     // listen to /hello
-    app.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
+    app.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
         .filter(HttpObject::isMethodGet)
         .filter(request -> request.pathMatch("/hello"))
         .ifPresent(request -> request.response().body(Map.of("Hello", System.getProperty("user.name"))).respond(event)));
 
     // Override error handling for HTTP requests
-    app.subscribeEvent(EVENT_APP_UNHANDLED, event -> event.payloadOpt(HttpObject.class).ifPresent(request ->
-        request.response().body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500).respond(event)));
+    app.subscribeError(EVENT_HTTP_REQUEST, event -> event.payloadAck().createResponse().body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500).respond(event));
 }
 ```
 

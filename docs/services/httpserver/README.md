@@ -11,9 +11,13 @@
 
 # Http Service
 
-Is a default [Services](../../services/README.md) of Nano which is responsible for handling basic HTTP requests.
-Each request is processed in its own Thread.
-Support for Https/SSL is coming soon.
+The `HttpServer` is a built-in [Service](../../services/README.md) of Nano responsible for handling HTTP and HTTPS
+requests.  
+Each request is processed concurrently using a thread pool.
+
+Full support for **SSL/TLS** is included.  
+Use PEM, CRT, PKCS#12, JKS, or JCEKS formats—individually or mixed. Certificates can be **hot-loaded from files or
+directories**.
 
 ## Usage
 
@@ -42,32 +46,38 @@ public static void main(final String[] args) {
     app.subscribeEvent(EVENT_APP_UNHANDLED, RestEndpoint::controllerAdvice);
 }
 
-private static void helloWorldController(final Event event) {
-    event.payloadOpt(HttpObject.class)
+private static void helloWorldController(final Event<HttpObject, HttpObject> event) {
+    event.payloadOpt()
         .filter(HttpObject::isMethodGet)
         .filter(request -> request.pathMatch("/hello"))
-        .ifPresent(request -> request.response().body(Map.of("Hello", System.getProperty("user.name"))).respond(event));
+        .ifPresent(request -> request.respond(event, response -> response.body(Map.of("Hello", System.getProperty("user.name")))));
 }
 
-private static void authorize(final Event event) {
-    event.payloadOpt(HttpObject.class)
+private static void authorize(final Event<HttpObject, HttpObject> event) {
+    event.payloadOpt()
         .filter(request -> request.pathMatch("/hello/**"))
         .filter(request -> !"mySecretToken".equals(request.authToken()))
-        .ifPresent(request -> request.response().body(Map.of("message", "You are unauthorized")).statusCode(401).respond(event));
+        .ifPresent(request -> request.respond(event, response -> response.body(Map.of("message", "You are unauthorized")).statusCode(401)));
 }
 
-private static void controllerAdvice(final Event event) {
-    event.payloadOpt(HttpObject.class).ifPresent(request ->
-        request.response().body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500).respond(event));
+private static void controllerAdvice(final Event<HttpObject, HttpObject> event) {
+    event.payloadOpt().ifPresent(request ->
+        request.respond(event, response -> response.body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500)));
 }
 ```
 
 ## Configuration
 
-| [Config](../../context/README.md#configuration) | Type      | Default                       | Description                                         |
-|-------------------------------------------------|-----------|-------------------------------|-----------------------------------------------------|
-| `app_service_http_port `                        | `Integer` | `8080`, `8081`, ... (dynamic) | (HttpServer) Port                                   |
-| `app_service_http_client`                       | `Boolean` | `false`                       | (HttpClient) If the HttpClient should start as well |
+| [Config](../../context/README.md#configuration) | Type      | Default                       | Description                                                 |
+|-------------------------------------------------|-----------|-------------------------------|-------------------------------------------------------------|
+| `app_service_http_port`                         | `Integer` | `8080`, `8081`, ... (dynamic) | The HTTP/HTTPS port to bind                                 |
+| `app_service_http_client`                       | `Boolean` | `false`                       | If HttpClient should start with HttpServer                  |
+| `app_service_https_cert`                        | `String`  | `null`                        | Path to the server certificate (PEM/CRT)                    |
+| `app_service_https_key`                         | `String`  | `null`                        | Path to the private key (PEM)                               |
+| `app_service_https_ca`                          | `String`  | `null`                        | Optional CA cert path                                       |
+| `app_service_https_kts`                         | `String`  | `null`                        | Path to keystore (JKS, JCEKS, PKCS12)                       |
+| `app_service_https_password`                    | `String`  | `null`                        | Optional password for private key or keystore               |
+| `app_service_https_certs`                       | `String`  | `null`                        | Comma-separated list of cert/key/store files or directories |
 
 ## Events
 

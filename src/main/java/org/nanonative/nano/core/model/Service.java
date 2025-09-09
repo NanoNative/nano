@@ -33,7 +33,7 @@ public abstract class Service {
      * The timestamp can be used for service uptime tracking and performance metrics.
      */
     protected Service() {
-        this.createdAtMs = System.currentTimeMillis();
+        this.createdAtMs = System.nanoTime();
     }
 
     /**
@@ -69,7 +69,7 @@ public abstract class Service {
      * @param error The error event to handle
      * @return Response object from error handling, can be null
      */
-    public abstract Object onFailure(final Event error);
+    public abstract Object onFailure(final Event<?, ?> error);
 
     /**
      * Processes incoming events for the service.
@@ -81,7 +81,7 @@ public abstract class Service {
      *
      * @param event The event to process
      */
-    public abstract void onEvent(final Event event);
+    public abstract void onEvent(final Event<?, ?> event);
 
     /**
      * Configures the service with the provided configuration.
@@ -189,19 +189,18 @@ public abstract class Service {
      * @param event The event to process
      * @return This service instance for method chaining
      */
-    public Service receiveEvent(final Event event) {
-        if (event.channelId() == EVENT_CONFIG_CHANGE) {
-            event.payloadOpt().filter(TypeMapI.class::isInstance).map(TypeMapI.class::cast)
-                .or(() -> event.payloadOpt(Map.class).map(TypeMap::new).map(TypeMapI.class::cast))
-                .ifPresentOrElse(configs -> {
-                    final TypeMap merged = new TypeMap(context);
-                    context.forEach(merged::putIfAbsent);
-                    configure(configs, merged);
-                    context.putAll(configs);
-                }, () -> onEvent(event));
-        } else {
-            onEvent(event);
-        }
+    public Service receiveEvent(final Event<?, ?> event) {
+        event.channel(EVENT_CONFIG_CHANGE).map(Event::payload).map(map -> {
+            if (map instanceof final TypeMapI<?> typeMap)
+                return typeMap;
+            return new TypeMap((Map<?, ?>) map);
+
+        }).ifPresentOrElse(configs -> {
+            final TypeMap merged = new TypeMap(context);
+            context.forEach(merged::putIfAbsent);
+            configure(configs, merged);
+            context.putAll(configs);
+        }, () -> onEvent(event));
         return this;
     }
 
@@ -220,18 +219,18 @@ public abstract class Service {
      */
     public NanoThread nanoThread(final Context context) {
         return new NanoThread().run(() -> context.nano() != null ? context : null, () -> {
-            final long startTime = System.currentTimeMillis();
+            final long startTime = System.nanoTime();
             if (!isReady.get()) {
                 this.context = context.newContext(this.getClass());
                 this.configure(context);
                 this.start();
-                this.context.broadcastEvent(EVENT_APP_SERVICE_REGISTER, () -> this);
-                this.context.sendEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "application.services.ready.time", System.currentTimeMillis() - startTime, Map.of("class", this.getClass().getSimpleName())), result -> {});
+                this.context.newEvent(EVENT_APP_SERVICE_REGISTER).payload(() -> this).broadcast(true).send();
+                this.context.newEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "application.services.ready.time", System.nanoTime() - startTime, Map.of("class", this.getClass().getSimpleName()))).async(true).send();
                 isReady.set(true);
             }
         }).onComplete((nanoThread, error) -> {
             if (error != null)
-                this.context.sendEventError(context.newEvent(EVENT_APP_SERVICE_REGISTER).payload(() -> this), this, error);
+                this.context.sendEventError(context.newEvent(EVENT_APP_SERVICE_REGISTER).payload(() -> this).error(error), this, error);
         });
     }
 

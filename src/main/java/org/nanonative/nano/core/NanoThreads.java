@@ -35,7 +35,7 @@ import static org.nanonative.nano.helper.event.model.Event.eventOf;
 /**
  * The abstract base class for {@link Nano} framework providing thread handling functionalities.
  *
- * @param <T> The type of the {@link NanoThreads} implementation, used for method chaining.
+ * @param <T> The payload of the {@link NanoThreads} implementation, used for method chaining.
  */
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> {
@@ -51,12 +51,12 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
     protected NanoThreads(final Map<Object, Object> config, final String... args) {
         super(config, args);
         this.schedulers = ConcurrentHashMap.newKeySet();
-        subscribeEvent(EVENT_APP_SCHEDULER_REGISTER, event -> event.payloadOpt(ScheduledExecutorService.class).map(schedulers::add).ifPresent(nano -> event.acknowledge()));
-        subscribeEvent(EVENT_APP_SCHEDULER_UNREGISTER, event -> event.payloadOpt(ScheduledExecutorService.class).map(scheduler -> {
+        subscribeEvent(EVENT_APP_SCHEDULER_REGISTER, event -> schedulers.add(event.payloadAck()));
+        subscribeEvent(EVENT_APP_SCHEDULER_UNREGISTER, (event, scheduler) -> {
             scheduler.shutdown();
             schedulers.remove(scheduler);
-            return this;
-        }).ifPresent(nano -> event.acknowledge()));
+            event.acknowledge();
+        });
     }
 
     public static void runAsync(final Runnable task) {
@@ -128,7 +128,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
 
         if (dow != null) {
             nextRun = nextRun.with(TemporalAdjusters.nextOrSame(dow));
-            if(nextRun.isBefore(now))
+            if (nextRun.isBefore(now))
                 // don't try to catch up past events
                 nextRun = nextRun.with(TemporalAdjusters.next(dow));
         } else if (nextRun.isBefore(now))
@@ -222,7 +222,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
         try {
             task.run();
             if (!periodically)
-                eventOf(context(this.getClass()), EVENT_APP_SCHEDULER_UNREGISTER).payload(() -> scheduler).async(true).send();
+                eventOf(context(this.getClass()), EVENT_APP_SCHEDULER_UNREGISTER).payload(() -> scheduler).broadcast(true).async(true).send();
         } catch (final Throwable e) {
             handleJavaError(context, e);
             eventOf(context(this.getClass()), EVENT_APP_SCHEDULER_UNREGISTER).payload(() -> scheduler).broadcast(true).async(true).send();

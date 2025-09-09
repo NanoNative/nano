@@ -41,20 +41,20 @@ and [DefaultEventChannel](../../src/main/java/org/nanonative/nano/helper/event/m
 [Events](../events/README.md) can be sent **synchronous**, **asynchronous**, **single cast** or **broadcast**.
 
 * synchronous (SingleCast)
-    * `context.newEvent(channelId).payload(MyPayloadObject).send()`
+    * `context.event(channelId).payload(MyPayloadObject).send()`
 * asynchronous (SingleCast)
-    * `context.newEvent(channelId).payload(MyPayloadObject).async(true).send()`
+    * `context.event(channelId).payload(MyPayloadObject).async(true).send()`
 * asynchronous with listener (SingleCast)
-    * `context.newEvent(channelId).payload(MyPayloadObject).async(response -> myListener).send()`
+    * `context.event(channelId).payload(MyPayloadObject).async(response -> myListener).send()`
 
 * synchronous (BroadCast)
-    * `context.newEvent(channelId).payload(MyPayloadObject).broadcast(true).send()`
+    * `context.event(channelId).payload(MyPayloadObject).broadcast(true).send()`
     * _broadcast will not stop at the first responding listener_
 * asynchronous (BroadCast)
-    * `context.newEvent(channelId).payload(MyPayloadObject).broadcast(true).async(true).send()`
+    * `context.event(channelId).payload(MyPayloadObject).broadcast(true).async(true).send()`
     * _broadcast will not stop at the first responding listener_
 * asynchronous with listener (SingleCast)
-    * `context.newEvent(channelId).payload(MyPayloadObject).broadcast(true).async(true).send()`
+    * `context.event(channelId).payload(MyPayloadObject).broadcast(true).async(true).send()`
     * _broadcast will not stop at the first responding listener_
 
 # Listening to Events

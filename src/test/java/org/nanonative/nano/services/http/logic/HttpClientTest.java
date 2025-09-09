@@ -150,7 +150,7 @@ public class HttpClientTest {
         assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS, true));
         assertThat(client.followRedirects()).isTrue();
         assertWorkingHttpClient(client);
-        assertThat(client).hasToString("{\"version\":\"HTTP_2\",\"retries\":3,\"followRedirects\":true,\"readTimeoutMs\":10000,\"connectionTimeoutMs\":5000}");
+        assertThat(client).hasToString("{\"version\":\"HTTP_2\",\"retries\":3,\"followRedirects\":true,\"readTimeoutMs\":10000,\"connectionTimeoutMs\":5000,\"class\":\"HttpClient\"}");
         server.stop(server.context(this.getClass()));
 
     }
@@ -161,7 +161,7 @@ public class HttpClientTest {
             .newEvent(EVENT_SEND_HTTP)
             .payload(() -> new HttpObject().path(serverUrl).body("{Hällo Wörld?!}"))
             .send()
-            .response(HttpObject.class);
+            .response();
 
         assertThat(response).isNotNull();
         assertThat(response.failure()).isNull();
@@ -177,7 +177,7 @@ public class HttpClientTest {
             .newEvent(EVENT_SEND_HTTP)
             .payload(() -> new HttpObject().path("http://localhost/invalid/url"))
             .send()
-            .response(HttpObject.class);
+            .response();
 
         assertThat(response.failure()).isExactlyInstanceOf(ConnectException.class);
         assertThat(response.header(CONTENT_TYPE)).isEqualTo(APPLICATION_PROBLEM_JSON.value());
@@ -275,13 +275,13 @@ public class HttpClientTest {
         assertThat(client.onFailure(null)).isNull();
     }
 
-    public static void mimicRequest(final Event event) {
-        event.payloadOpt(HttpObject.class).ifPresent(request -> {
+    public static void mimicRequest(final Event<HttpObject, HttpObject> event) {
+        event.payloadOpt().ifPresent(request -> {
             // Answer only to incoming requests
             if (request instanceof final HttpObject httpObject && httpObject.exchange() == null)
                 return;
 
-            final HttpObject response = request.response();
+            final HttpObject response = request.createResponse();
             final AtomicInteger status = new AtomicInteger(200);
             final String[] paths = Arrays.stream(request.path().split("/", -1)).filter(NanoUtils::hasText).toArray(String[]::new);
             for (int i = 1; i < paths.length; i += 2) {
