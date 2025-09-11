@@ -3,21 +3,153 @@
 > / [Services](../../services/README.md)
 > / [**HttpServer**](README.md)
 
-* [Usage](#usage)
-    * [Start HTTP Service](#start-http-service)
-    * [Handle HTTP Requests](#handle-http-requests)
+* [Overview](#overview)
+* [Quick Start](#quick-start)
+* [Request Handling](#request-handling)
+    * [Basic Request Processing](#basic-request-processing)
+    * [Request Data Access](#request-data-access)
+    * [Path Matching](#path-matching)
+    * [Method Filtering](#method-filtering)
+* [Response Handling](#response-handling)
+    * [Creating Responses](#creating-responses)
+    * [Status Codes](#status-codes)
+    * [Headers and CORS](#headers-and-cors)
+* [Error Handling](#error-handling)
+* [Authentication & Authorization](#authentication--authorization)
 * [Configuration](#configuration)
+* [SSL/TLS Support](#ssltls-support)
+* [Best Practices](#best-practices)
 * [Events](#events)
 
-# Http Service
+# HTTP Service
 
-The `HttpServer` is a built-in [Service](../../services/README.md) of Nano responsible for handling HTTP and HTTPS
-requests.  
-Each request is processed concurrently using a thread pool.
+The `HttpServer` is Nano's built-in HTTP service that handles web requests and responses. It's designed to be simple, fast, and flexible - perfect for building REST APIs, web applications, and microservices.
 
-Full support for **SSL/TLS** is included.  
-Use PEM, CRT, PKCS#12, JKS, or JCEKS formats—individually or mixed. Certificates can be **hot-loaded from files or
-directories**.
+## Overview
+
+Nano's HTTP service provides:
+- **Non-blocking request handling** using virtual threads
+- **Built-in CORS support** with automatic origin handling
+- **Flexible request/response processing** through events
+- **SSL/TLS support** with multiple certificate formats
+- **Type-safe request parsing** with automatic JSON conversion
+- **Comprehensive error handling** at multiple levels
+
+## Quick Start
+
+Here's a complete example of a user registration API:
+
+```java
+public class UserApi {
+    public static void main(String[] args) {
+        final Nano nano = new Nano(args, new HttpServer());
+        
+        // CORS handling (must be first)
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleCors);
+        
+        // Authentication middleware
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleAuth);
+        
+        // API endpoints
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleRegister);
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleLogin);
+        
+        // Global error handling
+        nano.subscribeError(EVENT_HTTP_REQUEST, UserApi::handleError);
+    }
+    
+    // CORS handling
+    private static void handleCors(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodOptions)
+            .ifPresent(req -> req.createCorsResponse().respond(event));
+    }
+    
+    // Authentication middleware
+    private static void handleAuth(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(req -> req.pathMatch("/api/**"))
+            .filter(req -> !req.pathMatch("/api/auth/**")) // Skip auth for login/register
+            .filter(req -> !isValidToken(req.authToken()))
+            .ifPresent(req -> req.createResponse()
+                .statusCode(401)
+                .body(Map.of("error", "Unauthorized"))
+                .respond(event));
+    }
+    
+    // User registration
+    private static void handleRegister(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/api/auth/register"))
+            .ifPresent(req -> {
+                final TypeMap body = req.bodyAsJson().asMap();
+                final String email = body.asString("email");
+                final String password = body.asString("password");
+                
+                // Validate input
+                if (email == null || password == null) {
+                    req.createResponse()
+                        .statusCode(400)
+                        .body(Map.of("error", "Email and password required"))
+                        .respond(event);
+                    return;
+                }
+                
+                // Process registration
+                try {
+                    final User user = createUser(email, password);
+                    req.createResponse()
+                        .statusCode(201)
+                        .body(Map.of("id", user.getId(), "email", user.getEmail()))
+                        .respond(event);
+                } catch (ValidationException e) {
+                    req.createResponse()
+                        .statusCode(400)
+                        .body(Map.of("error", e.getMessage()))
+                        .respond(event);
+                }
+            });
+    }
+    
+    // User login
+    private static void handleLogin(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/api/auth/login"))
+            .ifPresent(req -> {
+                final TypeMap body = req.bodyAsJson().asMap();
+                final String email = body.asString("email");
+                final String password = body.asString("password");
+                
+                try {
+                    final String token = authenticateUser(email, password);
+                    req.createResponse()
+                        .statusCode(200)
+                        .body(Map.of("token", token, "user", getUserByEmail(email)))
+                        .respond(event);
+                } catch (AuthenticationException e) {
+                    req.createResponse()
+                        .statusCode(401)
+                        .body(Map.of("error", "Invalid credentials"))
+                        .respond(event);
+                }
+            });
+    }
+    
+    // Global error handler
+    private static void handleError(Event<?, ?> event) {
+        if (event.isEvent(EVENT_HTTP_REQUEST)) {
+            event.payloadAck()
+                .createResponse()
+                .statusCode(500)
+                .body(Map.of("error", "Internal server error", 
+                           "details", event.error().getMessage()))
+                .respond(event);
+        }
+    }
+}
+```
 
 ## Usage
 

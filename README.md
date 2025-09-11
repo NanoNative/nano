@@ -83,7 +83,6 @@ Keep it *stateless* where possible. Prefer *static functions* for domain logic; 
 Maven example
 
 ```xml
-
 <dependency>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
@@ -99,23 +98,45 @@ dependencies {
 }
 ```
 
-Simple Nano example with [HttpServer](docs/services/httpserver/README.md) _(a default service)_
+### Quick Start
+
+**New to Nano?** Start with our [Quick Start Guide](docs/quickstart/README.md) for a complete walkthrough.
+
+**Building a web API?** Check out our [HTTP Service Guide](docs/services/httpserver/README.md) with real-world examples.
+
+**Need architecture guidance?** See our [Architecture Patterns](docs/architecture/README.md) for best practices.
+
+**Having issues?** Our [Troubleshooting Guide](docs/troubleshooting/README.md) covers common problems and solutions.
+
+### Simple Example
+
+Here's a basic HTTP server with Nano:
 
 ```java
 public static void main(final String[] args) {
     // Start Nano with HttpServer
     final Nano app = new Nano(args, new HttpServer());
 
-    // listen to /hello
+    // Handle GET /hello
     app.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
         .filter(HttpObject::isMethodGet)
         .filter(request -> request.pathMatch("/hello"))
-        .ifPresent(request -> request.response().body(Map.of("Hello", System.getProperty("user.name"))).respond(event)));
+        .ifPresent(request -> request.createResponse()
+            .body(Map.of("Hello", System.getProperty("user.name")))
+            .respond(event)));
 
-    // Override error handling for HTTP requests
-    app.subscribeError(EVENT_HTTP_REQUEST, event -> event.payloadAck().createResponse().body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500).respond(event));
+    // Global error handling
+    app.subscribeError(EVENT_HTTP_REQUEST, event -> event.payloadAck()
+        .createResponse()
+        .body("Internal Server Error [" + event.error().getMessage() + "]")
+        .statusCode(500)
+        .respond(event));
 }
 ```
+
+### Real-World Example
+
+For a complete user management system, see our [Simple User API Example](src/test/java/org/nanonative/nano/examples/SimpleUserApi.java).
 
 ## 🔨 Build Nano
 

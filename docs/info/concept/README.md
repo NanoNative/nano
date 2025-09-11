@@ -1,9 +1,88 @@
 > [Home](../../../README.md) / **[Concept](README.md)**
 
-# Concept
+# Core Concepts
 
 Nano is a minimalist standalone library designed to facilitate the creation of microservices using plain, modern Java. 
-Nano is a tool, not a framework, and it emphasizes simplicity, security, and efficiency.
+Nano is a **tool, not a framework**, and it emphasizes simplicity, security, and efficiency.
+
+## 🎯 What Makes Nano Different?
+
+Unlike traditional frameworks like Spring Boot, Nano doesn't use:
+- **Annotations** - No `@Service`, `@Controller`, `@Autowired`
+- **Dependency Injection** - No complex IoC containers
+- **Reflection** - No runtime magic or performance overhead
+- **Complex Configuration** - No XML files or complex setup
+
+Instead, Nano provides:
+- **Static methods** for business logic
+- **Event-driven communication** between components
+- **Simple configuration** through properties and context
+- **Direct control** over your application structure
+
+## 🔄 Traditional vs Nano Approach
+
+### Traditional Spring Boot Approach
+```java
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+    
+    @Autowired
+    private UserService userService;
+    
+    @PostMapping("/register")
+    public ResponseEntity<User> register(@RequestBody UserDto userDto) {
+        try {
+            User user = userService.createUser(userDto);
+            return ResponseEntity.ok(user);
+        } catch (ValidationException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+}
+
+@Service
+public class UserService {
+    
+    @Autowired
+    private UserRepository userRepository;
+    
+    public User createUser(UserDto dto) {
+        // Business logic here
+        return userRepository.save(new User(dto));
+    }
+}
+```
+
+### Nano Approach
+```java
+public class UserController {
+    
+    public static void handleRegister(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/api/users/register"))
+            .ifPresent(req -> event.context().sendEvent(EVENT_CREATE_USER, req.bodyAsJson().asMap()));
+    }
+}
+
+public class DatabaseService extends Service {
+    
+    @Override
+    public void onEvent(Event<?, ?> event) {
+        event.channel(EVENT_CREATE_USER).ifPresent(e -> {
+            // Database operations here
+            event.reply(createUser(event.payload()));
+        });
+    }
+}
+```
+
+**Key Differences:**
+- **No annotations** - Everything is explicit and visible
+- **No dependency injection** - Services communicate through events
+- **No complex configuration** - Simple property-based setup
+- **Functional style** - Static methods instead of object hierarchies
 
 ### Modern and Fluent Design 🚀
 

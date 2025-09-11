@@ -393,18 +393,6 @@ public class Context extends ConcurrentTypeMap {
         return this;
     }
 
-//    /**
-//     * Registers an event listener for a specific event payload.
-//     *
-//     * @param channelId The integer identifier of the event payload.
-//     * @param listener  The consumer function that processes the {@link Event}.
-//     * @return Self for chaining
-//     */
-//    public Context subscribeEvent(final int channelId, final Consumer<Event> listener) {
-//        nano().subscribeEvent(channelId, listener);
-//        return this;
-//    }
-
     /**
      * Registers an event listener with a typed payload.
      *
@@ -493,47 +481,6 @@ public class Context extends ConcurrentTypeMap {
         nano().unsubscribeEvent(channelId, listener);
         return this;
     }
-
-//
-//    /**
-//     * Registers an event listener with a typed payload.
-//     *
-//     * @param channelId The integer identifier of the event payload.
-//     * @param listener  The bi-consumer to receive the {@link Event} and its payload.
-//     * @return Self for chaining
-//     */
-//    @SuppressWarnings({"unchecked"})
-//    public T subscribeEvent(final int channelId, final Consumer<Event> listener) {
-//        listeners.computeIfAbsent(channelId, value -> new LinkedHashSet<>()).add(listener);
-//        return (T) this;
-//    }
-//    /**
-//     * Registers an event listener with a specific payload payload.
-//     * This method provides payload-safe event handling by ensuring the payload matches the expected payload.
-//     * The listener will only be called if the event payload can be cast to the specified payload.
-//     *
-//     * @param <T>         The payload of the event payload
-//     * @param channelId   The event channel to subscribe to
-//     * @param payloadType The expected class payload of the event payload
-//     * @param listener    Consumer that receives both the event and the typed payload
-//     * @return Self for chaining
-//     */
-//    public <T> Context subscribeEvent(final int channelId, final Class<T> payloadType, final BiConsumer<Event, T> listener) {
-//        subscribeEvent(channelId, event -> event.payloadOpt().filter(payloadType::isInstance).map(payloadType::cast).ifPresent(payload -> listener.accept(event, payload)));
-//        return this;
-//    }
-//
-//    /**
-//     * Removes a registered event listener for a specific event payload.
-//     *
-//     * @param channelId The integer identifier of the event payload.
-//     * @param listener  The consumer function to be removed.
-//     * @return Self for chaining
-//     */
-//    public Context unsubscribeEvent(final int channelId, final Consumer<Event> listener) {
-//        nano().unsubscribeEvent(channelId, listener);
-//        return this;
-//    }
 
     /**
      * Executes a task asynchronously after a specified delay.
