@@ -51,7 +51,7 @@ public static void main(final String[] args) {
     final Context context = new Nano(args, new HttpClient()).context(MyClass.class);
 
     // send request via event
-    final HttpObject response1 = context.event(EVENT_SEND_HTTP, () -> new HttpObject()
+    final HttpObject response1 = context.newEvent(EVENT_SEND_HTTP, () -> new HttpObject()
         .methodType(GET)
         .path("http://localhost:8080/hello")
         .body("Hello World")

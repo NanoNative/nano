@@ -52,8 +52,6 @@ flowchart TD
   and execute the lambda
   when the event is triggered
 * `context.broadcastEvent(channelId, MyPayloadObject)` - Broadcast an [Event](../events/README.md) with a payload
-* `context.eventNameOf(channelId)` - Get the name of an [Event](../events/README.md) from the event id
-* `context.channelIdOf(eventName)` - Get the id of an [Event](../events/README.md) from the event name
 
 #### Executors
 
