@@ -13,13 +13,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import static java.util.Optional.ofNullable;
-import static org.nanonative.nano.core.NanoThreads.runAsync;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 
 public class NanoThread {
@@ -29,6 +29,7 @@ public class NanoThread {
 
     public static final ExecutorService GLOBAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
     protected static final AtomicLong activeNanoThreadCount = new AtomicLong(0);
+    private volatile Future<?> future;
 
     public boolean isComplete() {
         return isComplete.get();
@@ -55,7 +56,7 @@ public class NanoThread {
 
     @SuppressWarnings("java:S1181") // Throwable is caught
     public NanoThread run(final Supplier<Context> context, final ExRunnable task) {
-        runAsync(() -> {
+        future = GLOBAL_THREAD_POOL.submit(() -> {
             try {
                 activeNanoThreadCount.incrementAndGet();
                 task.run();
@@ -75,6 +76,15 @@ public class NanoThread {
         return this;
     }
 
+    public Future<?> future() {
+        return future;
+    }
+
+    public NanoThread future(final Future<?> future) {
+        this.future = future;
+        return this;
+    }
+
     public static long activeNanoThreads() {
         return activeNanoThreadCount.get();
     }
@@ -86,6 +96,7 @@ public class NanoThread {
             .filter(Objects::nonNull)
             .filter(info -> (info.getThreadName() != null && info.getThreadName().startsWith("CarrierThread"))
                 || (info.getLockName() != null && info.getLockName().startsWith("java.lang.VirtualThread"))
+                || (info.getLockName() != null && info.getLockName().startsWith("nano-thread-"))
                 || (info.getLockOwnerName() != null && info.getLockName().startsWith("nano-thread-"))
             )
             .count();
@@ -117,23 +128,22 @@ public class NanoThread {
      * @return The same array of {@link NanoThread} instances, allowing for method chaining or further processing.
      */
     public static NanoThread[] waitFor(final Runnable onComplete, final NanoThread... threads) {
-
         final CountDownLatch latch = new CountDownLatch(threads.length);
         for (final NanoThread thread : threads) {
             thread.onComplete((nt, error) -> {
                 latch.countDown();
-                if (!(error instanceof Error) && latch.getCount() <= 0 && onComplete != null) {
-                    onComplete.run();
-                }
+                if (!(error instanceof Error) && latch.getCount() == 0 && onComplete != null) onComplete.run();
             });
         }
-
         if (onComplete == null) {
+            // Wait up to configurable timeout; if it expires, dump diagnostics then block a bit longer
+            final long timeoutMs = Long.getLong("nano.waitFor.timeout.ms", 10000L);
             try {
-                //TODO configurable timeout
-                final boolean completed = latch.await(10, TimeUnit.SECONDS);
-                if (!completed) {
-                    System.err.println(new Date() + " [FATAL] Threads did no complete");
+                if (!latch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
+                    System.err.println(new Date() + " [FATAL] Threads did not complete in " + timeoutMs + "ms");
+                    for (final NanoThread t : threads) {
+                        if (t.future() != null) t.future().cancel(true); // cooperative cancel
+                    }
                 }
             } catch (final InterruptedException ignored) {
                 Thread.currentThread().interrupt();

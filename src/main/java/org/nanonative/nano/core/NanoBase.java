@@ -10,6 +10,7 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -139,7 +140,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings({"unchecked"})
     public <C, R> T subscribeEvent(final Channel<C, R> channel, final Consumer<? super Event<C, R>> listener) {
         if (channel != null && listener != null)
-            listeners.computeIfAbsent(channel.id(), value -> new LinkedHashSet<>()).add((Consumer<? super Event<?, ?>>) listener);
+            listeners.computeIfAbsent(channel.id(), value -> ConcurrentHashMap.newKeySet()).add((Consumer<? super Event<?, ?>>) listener);
         return (T) this;
     }
 
@@ -156,7 +157,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<? super Event<C, R>, C> listener) {
         final Consumer<? super Event<C, R>> wrapped = event ->
             event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
-        listeners.computeIfAbsent(channel.id(), value -> new LinkedHashSet<>()).add((Consumer<? super Event<?, ?>>) wrapped);
+        listeners.computeIfAbsent(channel.id(), value -> ConcurrentHashMap.newKeySet()).add((Consumer<? super Event<?, ?>>) wrapped);
         return (Consumer<Event<C, R>>) wrapped;
     }
 
@@ -195,7 +196,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      */
     @SuppressWarnings({"unchecked"})
     public <C, R> T unsubscribeEvent(final int channelId, final Consumer<Event<C, R>> listener) {
-        listeners.computeIfAbsent(channelId, value -> new LinkedHashSet<>()).remove(listener);
+        listeners.getOrDefault(channelId, Collections.emptySet()).remove(listener);
         return (T) this;
     }
 

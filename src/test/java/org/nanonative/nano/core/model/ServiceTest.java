@@ -24,14 +24,14 @@ class ServiceTest {
 
     @RepeatedTest(TEST_REPEAT)
     void testService() {
-        final long startTime = System.currentTimeMillis() - 10;
+        final long startTime = System.nanoTime();
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
         final Context context = nano.context(this.getClass());
         final TestService service = new TestService();
         final Event<Object, Object> errorEvent = eventOf(context, new Channel<>(999, "unknown", Object.class, Object.class)).payload(() -> "TEST ERROR_AA").error(new RuntimeException("TEST ERROR_BB"));
 
         assertThat(service).isNotNull();
-        assertThat(service.createdAtMs()).isGreaterThan(startTime);
+        assertThat(service.createdAtNs()).isGreaterThan(startTime);
         assertThat(service.startCount()).isZero();
         assertThat(service.stopCount()).isZero();
         assertThat(service.events()).isEmpty();

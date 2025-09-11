@@ -19,7 +19,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -38,6 +37,7 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_OOM;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SERVICE_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SHUTDOWN;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_START;
+import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.NanoUtils.generateNanoName;
 import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
@@ -128,7 +128,7 @@ public class Nano extends NanoServices<Nano> {
             eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.started.time", initTime, null)).async(true).send();
             eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.ready.time", readyTime, null)).async(true).send();
             subscribeEvent(EVENT_APP_SHUTDOWN, event -> {
-                CompletableFuture.runAsync(() -> shutdown(event.context()));
+                GLOBAL_THREAD_POOL.submit(() -> shutdown(event.context()));
                 event.acknowledge();
             });
             // INIT CLEANUP TASK - just for safety
@@ -394,12 +394,12 @@ public class Nano extends NanoServices<Nano> {
         try {
             final Thread sequence = new Thread(() -> {
                 final long startTimeMs = System.nanoTime();
-                printSystemInfo();
+                // printSystemInfo();  during shutdown, calls like printSystemInfo(), which asks the JVM for live thread details occasionally crashes there. JVM dies mid-shutdown. Can cause "random" failures.
                 context.debug(() -> "Shutdown Services count [{}] services [{}]", services.size(), services.stream().map(Service::getClass).map(Class::getSimpleName).distinct().collect(joining(", ")));
                 shutdownServices(this.context);
                 this.shutdownThreads();
                 listeners.clear();
-                printSystemInfo();
+                // printSystemInfo();
                 context.info(() -> "Stopped [{}] in [{}] with uptime [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(System.nanoTime() - startTimeMs), NanoUtils.formatDuration(System.nanoTime() - createdAtNs));
                 schedulers.clear();
             }, Nano.class.getSimpleName() + " Shutdown-Hook");

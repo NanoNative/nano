@@ -196,7 +196,7 @@ class NanoTest {
         assertThat(config.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(1)
+    @RepeatedTest(TEST_REPEAT)
     void sendEvent_Sync() throws InterruptedException {
         final TestService service = new TestService().doOnEvent(event -> event.channel(TEST_EVENT).ifPresent(e -> e.respond(e.payload())));
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), service);

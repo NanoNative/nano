@@ -74,20 +74,20 @@ class ContextTest {
 
         // Verify schedule once
         final CountDownLatch latch1 = new CountDownLatch(1);
-        context.run(latch1::countDown, 16, MILLISECONDS);
+        context.run(latch1::countDown, 50, MILLISECONDS);
         assertThat(latch1.await(TEST_TIMEOUT, MILLISECONDS))
             .withFailMessage("latch1 \nExpected: 1 \n Actual: " + latch1.getCount())
             .isTrue();
 
         // Verify schedule multiple time with stop
         final CountDownLatch latch2 = new CountDownLatch(4);
-        context.run(latch2::countDown, 0, 16, MILLISECONDS);
+        context.run(latch2::countDown, 0, 50, MILLISECONDS);
         assertThat(latch2.await(TEST_TIMEOUT, MILLISECONDS))
             .withFailMessage("latch2 \nExpected: 4 \n Actual: " + latch2.getCount())
             .isTrue();
 
         final CountDownLatch latch3 = new CountDownLatch(1);
-        context.run(latch3::countDown, LocalTime.now().plus(16, MILLIS));
+        context.run(latch3::countDown, LocalTime.now().plus(100, MILLIS));
         assertThat(latch3.await(TEST_TIMEOUT, MILLISECONDS))
             .withFailMessage("latch3 \nExpected: 1 \n Actual: " + latch3.getCount())
             .isTrue();

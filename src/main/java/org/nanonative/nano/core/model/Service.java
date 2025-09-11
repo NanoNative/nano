@@ -24,7 +24,7 @@ import static org.nanonative.nano.services.metric.model.MetricType.GAUGE;
 @SuppressWarnings("UnusedReturnValue")
 public abstract class Service {
 
-    protected final long createdAtMs;
+    protected final long createdAtNs;
     protected final AtomicBoolean isReady = new AtomicBoolean(false);
     protected Context context;
 
@@ -33,7 +33,7 @@ public abstract class Service {
      * The timestamp can be used for service uptime tracking and performance metrics.
      */
     protected Service() {
-        this.createdAtMs = System.nanoTime();
+        this.createdAtNs = System.nanoTime();
     }
 
     /**
@@ -172,8 +172,8 @@ public abstract class Service {
      *
      * @return Creation timestamp in milliseconds since epoch
      */
-    public long createdAtMs() {
-        return createdAtMs;
+    public long createdAtNs() {
+        return createdAtNs;
     }
 
     //########## GLOBAL SERVICE METHODS ##########

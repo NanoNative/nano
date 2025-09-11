@@ -59,10 +59,6 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
         });
     }
 
-    public static void runAsync(final Runnable task) {
-        GLOBAL_THREAD_POOL.submit(task);
-    }
-
     /**
      * Provides an unmodifiable set of {@link ScheduledExecutorService}.
      *
