@@ -170,6 +170,7 @@ public class HttpServer extends Service {
             byte[] body = response.body();
             final int statusCode = response.statusCode() > -1 && response.statusCode() < 600 ? response.statusCode() : 200;
             final Optional<String> encoding = request.acceptEncodings().stream().filter(s -> s.equals("gzip") || s.equals("deflate")).findFirst();
+            response.headerMap().remove("#throwable#");
             response.headerMap().asMap(String.class, value -> collectionOf(value, String.class)).forEach((key, value) -> exchange.getResponseHeaders().put(key, value));
             response.computedHeaders(false).forEach((key, value) -> exchange.getResponseHeaders().put(key, value));
 

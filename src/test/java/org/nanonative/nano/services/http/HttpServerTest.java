@@ -297,6 +297,31 @@ class HttpServerTest {
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
     }
 
+    @Test
+    void errorMapped_bySubscribeError() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(server, new HttpClient());
+
+        // A handler that explodes on purpose
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> {
+            throw new IllegalArgumentException("nope");
+        });
+
+        // Channel-scoped error mapping → RFC7807-ish 422
+        nano.subscribeError(EVENT_HTTP_REQUEST, event ->
+            event.payload().createResponse().failure(422, event.error()).respond(event));
+
+        final HttpObject resp = new HttpObject()
+            .path("http://localhost:" + server.address().getPort() + "/explode-with-style")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(resp.statusCode()).isEqualTo(422);
+        assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
+        assertThat(resp.bodyAsString()).contains("IllegalArgumentException", "nope");
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
     private static void testHttpsServer(Path cert, Path key, String password) {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
@@ -343,6 +368,4 @@ class HttpServerTest {
         assertThat(res).as("Resource not found: " + resource).isNotNull();
         return Paths.get(res.getPath());
     }
-
-    // TODO: error handling test with 404 and 500 exceptions and interceptors
 }

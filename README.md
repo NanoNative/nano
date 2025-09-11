@@ -52,18 +52,25 @@ Nano provides full access to all internal components, resulting in very few priv
 ```mermaid
 flowchart LR
     nano(((Nano))) --> context[Context]
-    context --> events[Events]
-    events --> services[Services]
-    services --> schedulers[Schedulers]
+    context --> ch[Channels]
+    nano --> services[Services]
+    context --> schedulers[Schedulers]
+    ch -->|sendEvent| listeners[Listeners]
+    services -->|ack/reply| responses[(Responses)]
+    listeners -->|ack/reply| responses[(Responses)]
     
     style nano fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style context fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
-    style events fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
+    style ch fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
+    style listeners fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
+    style responses fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style services fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style schedulers fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
 ```
 
 ## ⚙️ Mechanics
+
+Keep it *stateless* where possible. Prefer *static functions* for domain logic; treat services as infrastructure adapters.
 
 * [Error Handling](docs/info/errorhandling/README.md)
 * [Registers](docs/registers/README.md) _(ConfigRegister, TypeConversionRegister, LogFormatRegister,
