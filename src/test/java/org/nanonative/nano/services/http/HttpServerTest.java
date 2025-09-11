@@ -1,5 +1,6 @@
 package org.nanonative.nano.services.http;
 
+import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMap;
 import org.junit.jupiter.api.Test;
 import org.nanonative.nano.core.Nano;
@@ -19,6 +20,8 @@ import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_PASSWORD;
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTP_CLIENT;
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST_UNHANDLED;
+import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PROBLEM_JSON;
 
 class HttpServerTest {
 
@@ -229,6 +232,67 @@ class HttpServerTest {
 
         assertThat(response.bodyAsString()).isEqualTo("Failed to send HTTP request - maybe no [HttpClient] was configured?");
         assertThat(response.statusCode()).isEqualTo(-99);
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void error404_whenNoHandlerMatches() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(server, new HttpClient());
+
+        final HttpObject resp = new HttpObject()
+            .path("http://localhost:" + server.address().getPort() + "/there-is-no-cake")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(resp.statusCode()).isEqualTo(404);
+        assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
+        assertThat(resp.bodyAsString()).contains("Not Found");
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void error500_whenHandlerThrows() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(server, new HttpClient());
+
+        // A listener that *throws* → internalError flag → 500
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> {
+            throw new RuntimeException("boom");
+        });
+
+        final HttpObject resp = new HttpObject()
+            .path("http://localhost:" + server.address().getPort() + "/explode")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(resp.statusCode()).isEqualTo(500);
+        assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
+        assertThat(resp.bodyAsString()).contains("Internal Server Error");
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void errorFromUnhandledChannel_customResponse() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(server, new HttpClient());
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST_UNHANDLED, (event, request) ->
+            request.createResponse()
+                .statusCode(418)
+                .contentType(APPLICATION_PROBLEM_JSON)
+                .bodyT(new LinkedTypeMap()
+                    .putR("error", "I am a teapot")
+                    .putR("path", request.path()))
+                .respond(event));
+
+        final HttpObject resp = new HttpObject()
+            .path("http://localhost:" + server.address().getPort() + "/custom-error")
+            .send(nano.context(HttpServerTest.class));
+
+        assertThat(resp.statusCode()).isEqualTo(418);
+        assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
+        assertThat(resp.bodyAsString()).contains("I am a teapot");
 
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
     }

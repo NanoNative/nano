@@ -152,7 +152,6 @@ public class HttpClientTest {
         assertWorkingHttpClient(client);
         assertThat(client).hasToString("{\"version\":\"HTTP_2\",\"retries\":3,\"followRedirects\":true,\"readTimeoutMs\":10000,\"connectionTimeoutMs\":5000,\"class\":\"HttpClient\"}");
         server.stop(server.context(this.getClass()));
-
     }
 
     @RepeatedTest(TEST_REPEAT)
@@ -253,7 +252,7 @@ public class HttpClientTest {
         response = client.send(new HttpObject());
         assertThat(response.failure()).isExactlyInstanceOf(IllegalArgumentException.class);
         assertThat(response.header(CONTENT_TYPE)).isEqualTo(APPLICATION_PROBLEM_JSON.value());
-        assertThat((LinkedTypeMap) response.bodyAsJson()).contains(
+        assertThat(response.bodyAsJson().asMap()).contains(
             entry("instance", ""),
             entry("status", -1L),
             entry("title", "URI with undefined scheme"),
@@ -264,8 +263,7 @@ public class HttpClientTest {
         response = client.send(null);
         assertThat(response.failure()).isExactlyInstanceOf(IllegalArgumentException.class);
         assertThat(response.header(CONTENT_TYPE)).isEqualTo(APPLICATION_PROBLEM_JSON.value());
-        assertThat((LinkedTypeMap) response.bodyAsJson()).contains(
-            entry("instance", null),
+        assertThat(response.bodyAsJson().asMap()).contains(
             entry("status", 400L),
             entry("title", "Invalid request [null]"),
             entry("type", "https://github.com/nanonative/nano")

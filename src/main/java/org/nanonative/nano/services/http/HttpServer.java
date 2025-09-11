@@ -33,7 +33,6 @@ import static org.nanonative.nano.helper.event.model.Channel.registerChannelId;
 import static org.nanonative.nano.services.http.HttpsHelper.configureHttps;
 import static org.nanonative.nano.services.http.HttpsHelper.createDefaultServer;
 import static org.nanonative.nano.services.http.HttpsHelper.createHttpsServer;
-import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PROBLEM_JSON;
 
 public class HttpServer extends Service {
     protected com.sun.net.httpserver.HttpServer server;
@@ -90,17 +89,14 @@ public class HttpServer extends Service {
                         response -> sendResponse(exchange, request, response),
                         () -> context.newEvent(EVENT_HTTP_REQUEST_UNHANDLED, () -> request).send().responseOpt().ifPresentOrElse(
                             response -> sendResponse(exchange, request, response),
-                            () -> sendResponse(exchange, request, new HttpObject()
-                                .statusCode(internalError.get() ? 500 : 404)
-                                .bodyT(new LinkedTypeMap().putR("message", internalError.get() ? "Internal Server Error" : "Not Found").putR("timestamp", System.currentTimeMillis()))
-                                .contentType(APPLICATION_PROBLEM_JSON))
+                            () -> sendResponse(exchange, request, new HttpObject().failure(internalError.get() ? 500 : 404, internalError.get() ? "Internal Server Error" : "Not Found", null))
                         )
                     );
                 } catch (final Exception e) {
                     context.newEvent(EVENT_APP_ERROR).payload(() -> event).error(e).containsEvent(true).send();
-                    event.payloadOpt().ifPresentOrElse(
+                    event.responseOpt().ifPresentOrElse(
                         response -> sendResponse(exchange, request, response),
-                        () -> new HttpObject().statusCode(500).body("Internal Server Error".getBytes()).contentType(APPLICATION_PROBLEM_JSON)
+                        () -> sendResponse(exchange, request, new HttpObject().failure(500, "Internal Server Error", null))
                     );
                 }
             });

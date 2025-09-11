@@ -36,17 +36,4 @@ public class TestConfig {
     public static boolean await(final CountDownLatch latch) throws InterruptedException {
         return latch.await(TEST_TIMEOUT, MILLISECONDS);
     }
-
-    public static <T> T waitForNonNull(final Supplier<T> waitFor) {
-        return waitForNonNull(waitFor, 2000);
-    }
-
-    public static <T> T waitForNonNull(final Supplier<T> waitFor, final long timeoutMs) {
-        final long startTime = System.currentTimeMillis();
-        final AtomicReference<T> result = new AtomicReference<>(null);
-        while (result.get() == null && (System.currentTimeMillis() - startTime) < timeoutMs) {
-            ofNullable(waitFor.get()).ifPresentOrElse(result::set, () -> tryExecute(null, () -> Thread.sleep(100)));
-        }
-        return result.get();
-    }
 }

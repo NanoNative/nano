@@ -220,7 +220,7 @@ public class MetricService extends Service {
         tryExecute(context, () -> {
             metrics.gaugeSet("jvm.threads.live", Thread.activeCount());
             metrics.gaugeSet("jvm.threads.nano", NanoThread.activeNanoThreads());
-            metrics.gaugeSet("jvm.threads.carrier", NanoThread.activeCarrierThreads());
+            metrics.gaugeSet("jvm.threads.carrier", NanoThread.activeNanoThreads());
         });
         tryExecute(context, () -> {
             final ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();

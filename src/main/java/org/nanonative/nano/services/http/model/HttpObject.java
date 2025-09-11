@@ -50,6 +50,8 @@ import static java.util.zip.GZIPInputStream.GZIP_MAGIC;
 import static org.nanonative.nano.helper.NanoUtils.hasText;
 import static org.nanonative.nano.services.http.HttpClient.EVENT_SEND_HTTP;
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST_UNHANDLED;
+import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PROBLEM_JSON;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_ENCODING;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_LANGUAGE;
@@ -1036,7 +1038,7 @@ public class HttpObject extends HttpRequest {
      * @return the event after attaching this {@link HttpObject} as a response, facilitating chaining and further manipulation.
      */
     public <C, R> Event<C, R> respond(final Event<C, R> event) {
-        event.channel(EVENT_HTTP_REQUEST).ifPresent(request -> request.respond(this));
+        event.channel(EVENT_HTTP_REQUEST).or(() -> event.channel(EVENT_HTTP_REQUEST_UNHANDLED)).ifPresent(request -> request.respond(this));
         return event;
     }
 
@@ -1089,7 +1091,7 @@ public class HttpObject extends HttpRequest {
      * @return true if an exception or failure is indicated in the headers, false otherwise.
      */
     public boolean hasFailed() {
-        return !is2xxSuccessful() || (headers != null && (headers.containsValue(ContentType.APPLICATION_PROBLEM_JSON.value()) || headers.containsValue(ContentType.APPLICATION_PROBLEM_XML.value()) || headers.containsValue(HTTP_EXCEPTION_HEADER)));
+        return !is2xxSuccessful() || (headers != null && (headers.containsValue(APPLICATION_PROBLEM_JSON.value()) || headers.containsValue(ContentType.APPLICATION_PROBLEM_XML.value()) || headers.containsValue(HTTP_EXCEPTION_HEADER)));
     }
 
     /**
@@ -1117,20 +1119,35 @@ public class HttpObject extends HttpRequest {
      * This method allows an exception to be attached to the HTTP object,
      * potentially for logging purposes or for transmitting error information back to a client or server.
      *
+     * @param statusCode the HTTP status code to set for the failure.
      * @param throwable the {@link Throwable} exception to store in the headers.
      * @return this {@link HttpObject} to allow for method chaining.
      */
     public HttpObject failure(final int statusCode, final Throwable throwable) {
         header(HTTP_EXCEPTION_HEADER, throwable);
-        header(CONTENT_TYPE, ContentType.APPLICATION_PROBLEM_JSON.value());
+        return failure(statusCode, ofNullable(throwable.getMessage()).orElse(throwable.getClass().getSimpleName()), convertObj(throwable, String.class));
+    }
+
+    /**
+     * Stores a failure exception within the HTTP headers. RFC 7807 To The Rescue!
+     * This method allows an exception to be attached to the HTTP object,
+     * potentially for logging purposes or for transmitting error information back to a client or server.
+     *
+     * @param statusCode the HTTP status code to set for the failure.
+     * @param title      the failure title to store in the headers.
+     * @param detail     the failure detail message to store in the headers.
+     * @return this {@link HttpObject} to allow for method chaining.
+     */
+    public HttpObject failure(final int statusCode, final String title, final String detail) {
+        contentType(APPLICATION_PROBLEM_JSON);
         statusCode(statusCode);
-        body(new TypeMap()
+        body(new LinkedTypeMap()
             .putR("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
             .putR("type", "https://github.com/nanonative/nano")
-            .putR("title", ofNullable(throwable.getMessage()).orElse(throwable.getClass().getSimpleName()))
+            .putR("title", title)
             .putR("status", statusCode)
             .putR("instance", path())
-            .putR("detail", convertObj(throwable, String.class))
+            .putR("detail", detail)
             .putR("timestamp", Instant.now().toEpochMilli())
         );
         return this;
