@@ -21,6 +21,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 import static java.util.Collections.unmodifiableSet;
+import static java.util.Optional.ofNullable;
 import static java.util.concurrent.TimeUnit.DAYS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.nanonative.nano.core.model.Context.CONFIG_THREAD_POOL_TIMEOUT_MS;
@@ -30,7 +31,6 @@ import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.NanoUtils.callerInfoStr;
 import static org.nanonative.nano.helper.NanoUtils.getThreadName;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
-import static org.nanonative.nano.helper.event.model.Event.eventOf;
 
 /**
  * The abstract base class for {@link Nano} framework providing thread handling functionalities.
@@ -152,7 +152,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
                 }
             }
         };
-        eventOf(context(Scheduler.class), EVENT_APP_SCHEDULER_REGISTER).payload(() -> scheduler).broadcast(true).async(true).send();
+        context(Scheduler.class).newEvent(EVENT_APP_SCHEDULER_REGISTER, () -> scheduler).broadcast(true).async(true).send();
         return scheduler;
     }
 
@@ -214,15 +214,24 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
         }
     }
 
+    /**
+     * Executes the task.
+     *
+     * @param context      the context
+     * @param task         the task
+     * @param scheduler    the scheduler
+     * @param periodically the periodically
+     */
     protected void executeScheduler(final Supplier<Context> context, final ExRunnable task, final Scheduler scheduler, final boolean periodically) {
+        final Context ctx = ofNullable(context).map(Supplier::get).orElse(this.context);
         try {
             task.run();
             if (!periodically)
-                eventOf(context(this.getClass()), EVENT_APP_SCHEDULER_UNREGISTER).payload(() -> scheduler).broadcast(true).async(true).send();
+                ctx.newEvent(EVENT_APP_SCHEDULER_UNREGISTER, () -> scheduler).broadcast(true).async(true).send();
         } catch (final Throwable e) {
             handleJavaError(context, e);
-            eventOf(context(this.getClass()), EVENT_APP_SCHEDULER_UNREGISTER).payload(() -> scheduler).broadcast(true).async(true).send();
-            context(this.getClass()).sendEventError(scheduler, e);
+            ctx.newEvent(EVENT_APP_SCHEDULER_UNREGISTER, () -> scheduler).broadcast(true).async(true).send();
+            ctx.sendEventError(scheduler, e);
         }
     }
 

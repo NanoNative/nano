@@ -16,7 +16,6 @@ import static org.nanonative.nano.core.config.TestConfig.TEST_REPEAT;
 import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
-import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Execution(ExecutionMode.CONCURRENT)
@@ -28,7 +27,7 @@ class ServiceTest {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
         final Context context = nano.context(this.getClass());
         final TestService service = new TestService();
-        final Event<Object, Object> errorEvent = eventOf(context, new Channel<>(999, "unknown", Object.class, Object.class)).payload(() -> "TEST ERROR_AA").error(new RuntimeException("TEST ERROR_BB"));
+        final Event<Object, Object> errorEvent = context.newEvent(new Channel<>(999, "unknown", Object.class, Object.class)).payload(() -> "TEST ERROR_AA").error(new RuntimeException("TEST ERROR_BB"));
 
         assertThat(service).isNotNull();
         assertThat(service.createdAtNs()).isGreaterThan(startTime);
@@ -46,7 +45,7 @@ class ServiceTest {
         service.onFailure(errorEvent);
         assertThat(service.failures()).hasSize(1).contains(errorEvent);
 
-        final Event<Object, Void> event = eventOf(context, EVENT_APP_ERROR).payload(() -> Map.of("myKey", "myValue")).send();
+        final Event<Object, Void> event = context.newEvent(EVENT_APP_ERROR).payload(() -> Map.of("myKey", "myValue")).send();
         service.onEvent(event);
         final Event<Object, Void> receivedEvent = service.getEvent(EVENT_APP_ERROR);
         assertThat(receivedEvent).isNotNull();

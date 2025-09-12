@@ -39,7 +39,6 @@ import static java.net.http.HttpClient.Version.HTTP_2;
 import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.model.Service.threadsOf;
 import static org.nanonative.nano.helper.NanoUtils.reduceSte;
-import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
 import static org.nanonative.nano.services.logging.LogService.MAX_LOG_NAME_LENGTH;
 
@@ -149,10 +148,10 @@ public class Context extends ConcurrentTypeMap {
      */
     public String traceId(final int index) {
         return index < 1 ? traceId() : Stream.iterate(Optional.of(this), opt -> opt.flatMap(ctx -> ofNullable(ctx.parent())))
-            .limit(index + 1L)
-            .reduce((first, second) -> second)
-            .flatMap(ctx -> ctx.map(Context::traceId))
-            .orElse(traceId());
+                .limit(index + 1L)
+                .reduce((first, second) -> second)
+                .flatMap(ctx -> ctx.map(Context::traceId))
+                .orElse(traceId());
     }
 
     /**
@@ -162,9 +161,9 @@ public class Context extends ConcurrentTypeMap {
      */
     public List<String> traceIds() {
         return Stream.iterate(Optional.of(this), Optional::isPresent, opt -> opt.flatMap(ctx -> ofNullable(ctx.parent())))
-            .map(opt -> opt.flatMap(ctx -> ofNullable(ctx.traceId())))
-            .flatMap(Optional::stream)
-            .toList();
+                .map(opt -> opt.flatMap(ctx -> ofNullable(ctx.traceId())))
+                .flatMap(Optional::stream)
+                .toList();
     }
 
     //########## LOGGING ##########
@@ -330,16 +329,16 @@ public class Context extends ConcurrentTypeMap {
      */
     public Context log(final LogLevel level, final Throwable thrown, final Supplier<String> message, final Object... params) {
         newEvent(EVENT_LOGGING).async(true).broadcast(false).payload(
-                () -> {
-                    final LogRecord logRecord = new LogRecord(level.toJavaLogLevel(), message.get());
-                    logRecord.setParameters(params);
-                    logRecord.setThrown(reduceSte(thrown));
-                    logRecord.setLoggerName(clazz().getCanonicalName());
-                    return logRecord;
-                }
-            ).putR("level", level)
-            .putR("name", clazz().getCanonicalName())
-            .send();
+                        () -> {
+                            final LogRecord logRecord = new LogRecord(level.toJavaLogLevel(), message.get());
+                            logRecord.setParameters(params);
+                            logRecord.setThrown(reduceSte(thrown));
+                            logRecord.setLoggerName(clazz().getCanonicalName());
+                            return logRecord;
+                        }
+                ).putR("level", level)
+                .putR("name", clazz().getCanonicalName())
+                .send();
         return this;
     }
 
@@ -619,10 +618,10 @@ public class Context extends ConcurrentTypeMap {
      */
     public final NanoThread[] runReturnHandled(final Consumer<Event<Object, Void>> onFailure, final ExRunnable... runnable) {
         return Arrays.stream(runnable).map(task -> new NanoThread()
-            .onComplete((thread, error) -> {
-                if (error != null)
-                    onFailure.accept(newEvent(EVENT_APP_ERROR).error(error).payload(() -> thread));
-            }).run(() -> this, task)
+                .onComplete((thread, error) -> {
+                    if (error != null)
+                        onFailure.accept(newEvent(EVENT_APP_ERROR).error(error).payload(() -> thread));
+                }).run(() -> this, task)
         ).toArray(NanoThread[]::new);
     }
 
@@ -755,7 +754,7 @@ public class Context extends ConcurrentTypeMap {
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
     public <C, R> Event<C, R> newEvent(final Channel<C, R> channel) {
-        return eventOf(this, channel);
+        return new Event<>(this, channel);
     }
 
     /**
@@ -766,7 +765,7 @@ public class Context extends ConcurrentTypeMap {
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
     public <C, R> Event<C, R> newEvent(final Channel<C, R> channel, final Supplier<C> payload) {
-        return eventOf(this, channel).payload(payload);
+        return new Event<>(this, channel).payload(payload);
     }
 
     /**
@@ -861,9 +860,9 @@ public class Context extends ConcurrentTypeMap {
     @Override
     public String toString() {
         return new LinkedTypeMap()
-            .putR("size", size())
-            .putR("logger", ofNullable(clazz()).map(Class::getSimpleName).orElse(null))
-            .putR("class", this.getClass().getSimpleName())
-            .toJson();
+                .putR("size", size())
+                .putR("logger", ofNullable(clazz()).map(Class::getSimpleName).orElse(null))
+                .putR("class", this.getClass().getSimpleName())
+                .toJson();
     }
 }

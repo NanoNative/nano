@@ -9,6 +9,9 @@ import java.util.Optional;
 import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.NanoBase.EVENT_CHANNELS;
 
+/**
+ * Publish/subscribe channel used to route events between components.
+ */
 public record Channel<T, R>(int id, String name, Class<T> payload, Class<R> response) {
 
     /**
@@ -88,6 +91,10 @@ public record Channel<T, R>(int id, String name, Class<T> payload, Class<R> resp
         return EVENT_CHANNELS.containsKey(id);
     }
 
+    /**
+     * Performs the toString operation.
+     * @return the result
+     */
     @Override
     public String toString() {
         return new LinkedTypeMap()

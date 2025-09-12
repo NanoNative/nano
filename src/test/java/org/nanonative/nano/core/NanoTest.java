@@ -34,11 +34,10 @@ import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_PARENT_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_TRACE_ID_KEY;
-import static org.nanonative.nano.core.model.Context.EVENT_APP_SHUTDOWN;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_SHUTDOWN;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
-import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.model.TestService.TEST_EVENT;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.services.logging.model.LogLevel.INFO;
@@ -89,16 +88,16 @@ class NanoTest {
         final CountDownLatch latch = new CountDownLatch(8);
 
         final Nano nano1 = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
         );
         final Nano nano2 = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, CONFIG_PARALLEL_SHUTDOWN, true),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
         );
         assertThat(nano1.stop(this.getClass())).isEqualTo(nano1);
         assertThat(nano2.stop(this.getClass())).isEqualTo(nano2);
@@ -127,7 +126,7 @@ class NanoTest {
     void constructorNoArgsTest() {
         final Nano nano = new Nano();
         assertThat(nano).isNotNull();
-        eventOf(nano.context, EVENT_CONFIG_CHANGE).payload(() -> Map.of(CONFIG_LOG_LEVEL, INFO)).send();
+        nano.context.newEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, INFO)).send();
         assertThat(nano.context.as(LogLevel.class, CONFIG_LOG_LEVEL)).isEqualTo(INFO);
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
@@ -137,7 +136,7 @@ class NanoTest {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
         assertThat(nano).isNotNull();
         assertThat(nano.context.as(LogLevel.class, CONFIG_LOG_LEVEL)).isEqualTo(TEST_LOG_LEVEL);
-        eventOf(nano.context, EVENT_CONFIG_CHANGE).payload(() -> Map.of(CONFIG_LOG_LEVEL, INFO)).broadcast(true).send();
+        nano.context.newEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, INFO)).broadcast(true).send();
         assertThat(nano.context.as(LogLevel.class, CONFIG_LOG_LEVEL)).isEqualTo(INFO);
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
@@ -187,11 +186,11 @@ class NanoTest {
         final Nano config = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, APP_PARAMS, true));
         assertThat(config).isNotNull();
         assertThat(config.toString()).contains(
-            "pid=",
-            "schedulers=", "services=", "listeners=",
-            "cores=", "usedMemory=",
-            "threadsNano=", "threadsActive=", "threadsOther=",
-            "java=", "arch=", "os="
+                "pid=",
+                "schedulers=", "services=", "listeners=",
+                "cores=", "usedMemory=",
+                "threadsNano=", "threadsActive=", "threadsOther=",
+                "java=", "arch=", "os="
         );
         assertThat(config.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
@@ -203,7 +202,7 @@ class NanoTest {
 
         // send to first service
         final CountDownLatch latch1 = new CountDownLatch(1);
-        nano.sendEvent(eventOf(nano.context(this.getClass()), TEST_EVENT).payload(() -> 11111111).async(response -> latch1.countDown()));
+        nano.context(this.getClass()).newEvent(TEST_EVENT, () -> 11111111).async(response -> latch1.countDown()).send();
         assertThat(service.getEvent(TEST_EVENT, event -> event.payloadOpt().filter(Integer.class::isInstance).map(Integer.class::cast).map(i -> i.equals(11111111)).isPresent())).isNotNull();
         assertThat(latch1.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
 
@@ -211,14 +210,14 @@ class NanoTest {
         service.resetEvents();
         final CountDownLatch latch2 = new CountDownLatch(1);
         nano.subscribeEvent(TEST_EVENT, e -> e.acknowledge());
-        eventOf(nano.context(this.getClass()), TEST_EVENT).payload(() -> 22222222).async(response -> latch2.countDown()).send();
+        nano.context(this.getClass()).newEvent(TEST_EVENT, () -> 22222222).async(response -> latch2.countDown()).send();
         assertThat(latch2.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThatThrownBy(() -> service.getEvent(TEST_EVENT, 64)).isInstanceOf(AssertionError.class);
 
         // send to all (listener and services)
         service.resetEvents();
         final CountDownLatch latch3 = new CountDownLatch(1);
-        eventOf(nano.context(this.getClass()), TEST_EVENT).payload(() -> 33333333).async(response -> latch3.countDown()).broadcast(true).send();
+        nano.context(this.getClass()).newEvent(TEST_EVENT, () -> 33333333).async(response -> latch3.countDown()).broadcast(true).send();
         assertThat(latch3.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThat(service.getEvent(TEST_EVENT, event -> ((Integer) 33333333).equals(event.payloadAck()))).isNotNull();
 
@@ -238,7 +237,7 @@ class NanoTest {
         final Context context = nano.contextEmpty(this.getClass());
         assertThat(context).hasSize(4).containsKeys(CONTEXT_NANO_KEY, CONTEXT_TRACE_ID_KEY, CONTEXT_CLASS_KEY, CONTEXT_PARENT_KEY);
 
-        nano.sendEvent(eventOf(context, TEST_EVENT).payload(() -> 44444444).async(true));
+        context.newEvent(TEST_EVENT, () -> 44444444).async(true).send();
         assertThat(service.getEvent(EVENT_APP_ERROR, event -> event.channel(TEST_EVENT).get().payload().equals(44444444))).isNotNull();
         assertThat(service.startCount()).isEqualTo(1);
         assertThat(service.stopCount()).isZero();
@@ -288,11 +287,11 @@ class NanoTest {
         // Schedule next time
         final AtomicBoolean scheduled = new AtomicBoolean(false);
         nano.run(
-            null,
-            () -> scheduled.set(true),
-            LocalTime.now().minusHours(1),
-            LocalDateTime.now().getDayOfWeek(),
-            () -> false
+                null,
+                () -> scheduled.set(true),
+                LocalTime.now().minusHours(1),
+                LocalDateTime.now().getDayOfWeek(),
+                () -> false
         );
         Thread.sleep(24);
         assertThat(scheduled.get()).isFalse();
@@ -300,11 +299,11 @@ class NanoTest {
         // Schedule now
         final CountDownLatch latch = new CountDownLatch(1);
         nano.run(
-            null,
-            latch::countDown,
-            LocalTime.now().plusNanos(64 * 1000),
-            LocalDateTime.now().getDayOfWeek(),
-            () -> false
+                null,
+                latch::countDown,
+                LocalTime.now().plusNanos(64 * 1000),
+                LocalDateTime.now().getDayOfWeek(),
+                () -> false
         );
         assertThat(latch.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
     }
