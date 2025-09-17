@@ -215,9 +215,9 @@ public class HttpObject extends HttpRequest {
      */
     public HttpObject contentType(final Charset charset, final ContentType... contentType) {
         headerMap().put(CONTENT_TYPE, Arrays.stream(contentType)
-            .filter(Objects::nonNull)
-            .map(ContentType::value)
-            .collect(Collectors.joining(", ")) + (charset == null ? "" : "; charset=" + charset.name()));
+                .filter(Objects::nonNull)
+                .map(ContentType::value)
+                .collect(Collectors.joining(", ")) + (charset == null ? "" : "; charset=" + charset.name()));
         return this;
     }
 
@@ -232,18 +232,18 @@ public class HttpObject extends HttpRequest {
 
     public HttpObject accept(final String... contentType) {
         headerMap().put(HttpHeaders.ACCEPT, Arrays.stream(contentType)
-            .map(ContentType::fromValue)
-            .filter(Objects::nonNull)
-            .map(ContentType::value)
-            .collect(Collectors.joining(", ")));
+                .map(ContentType::fromValue)
+                .filter(Objects::nonNull)
+                .map(ContentType::value)
+                .collect(Collectors.joining(", ")));
         return this;
     }
 
     public HttpObject accept(final ContentType... contentType) {
         headerMap().put(HttpHeaders.ACCEPT, Arrays.stream(contentType)
-            .filter(Objects::nonNull)
-            .map(ContentType::value)
-            .collect(Collectors.joining(", ")));
+                .filter(Objects::nonNull)
+                .map(ContentType::value)
+                .collect(Collectors.joining(", ")));
         return this;
     }
 
@@ -306,8 +306,8 @@ public class HttpObject extends HttpRequest {
             headerMap().remove(HttpHeaders.ACCEPT_LANGUAGE);
         } else {
             final String acceptLanguageValue = IntStream.range(0, locales.length)
-                .mapToObj(i -> locales[i].toLanguageTag() + ";q=" + Math.max(0.1, 1.1 - ((i + 1d) / 10)))
-                .collect(Collectors.joining(", "));
+                    .mapToObj(i -> locales[i].toLanguageTag() + ";q=" + Math.max(0.1, 1.1 - ((i + 1d) / 10)))
+                    .collect(Collectors.joining(", "));
             headerMap().put(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguageValue);
         }
         return this;
@@ -348,13 +348,31 @@ public class HttpObject extends HttpRequest {
     }
 
     /**
-     * Returns a string representation of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
+     * Returns a {@link TypeInfo} representation of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
      *
      * @return the body as a json.
      */
     @SuppressWarnings("java:S1452") // generic wildcard payload
     public TypeInfo<?> bodyAsJson() {
         return JsonDecoder.jsonTypeOf(bodyAsString());
+    }
+
+    /**
+     * Returns {@link LinkedTypeMap} of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
+     *
+     * @return the body as a map.
+     */
+    public LinkedTypeMap bodyAsMap() {
+        return bodyAsJson().asMap();
+    }
+
+    /**
+     * Returns {@link TypeList} of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
+     *
+     * @return the body as a list.
+     */
+    public TypeList bodyAsList() {
+        return bodyAsJson().asList();
     }
 
     /**
@@ -625,17 +643,17 @@ public class HttpObject extends HttpRequest {
      */
     public String[] authTokens() {
         return ofNullable(header(HttpHeaders.AUTHORIZATION))
-            .map(value -> {
-                if (value.startsWith("Bearer ")) {
-                    return new String[]{value.substring("Bearer ".length())};
-                }
-                if (value.startsWith("Basic ")) {
-                    final String decode = new String(Base64.getDecoder().decode(value.substring("Basic ".length())));
-                    return decode.contains(":") ? NanoUtils.split(decode, ":") : new String[]{decode};
-                }
-                return new String[]{value};
-            })
-            .orElse(new String[0]);
+                .map(value -> {
+                    if (value.startsWith("Bearer ")) {
+                        return new String[]{value.substring("Bearer ".length())};
+                    }
+                    if (value.startsWith("Basic ")) {
+                        final String decode = new String(Base64.getDecoder().decode(value.substring("Basic ".length())));
+                        return decode.contains(":") ? NanoUtils.split(decode, ":") : new String[]{decode};
+                    }
+                    return new String[]{value};
+                })
+                .orElse(new String[0]);
     }
 
     /**
@@ -760,8 +778,8 @@ public class HttpObject extends HttpRequest {
      */
     public long size() {
         return Math.max(
-            body().length,
-            headers == null ? -1L : headers.asStringOpt(CONTENT_RANGE).map(s -> s.replace("bytes 0-0/", "")).map(s -> convertObj(s, Long.class)).orElse(-1L)
+                body().length,
+                headers == null ? -1L : headers.asStringOpt(CONTENT_RANGE).map(s -> s.replace("bytes 0-0/", "")).map(s -> convertObj(s, Long.class)).orElse(-1L)
         );
     }
 
@@ -803,18 +821,18 @@ public class HttpObject extends HttpRequest {
     protected TypeMap queryParamsOf(final String query) {
         if (queryParams == null) {
             queryParams = ofNullable(query)
-                .map(q -> {
-                    final TypeMap result = new TypeMap();
-                    Arrays.stream(NanoUtils.split(q, "&"))
-                        .map(param -> NanoUtils.split(param, "="))
-                        .forEach(keyValue -> {
-                            final String key = URLDecoder.decode(keyValue[0], UTF_8);
-                            final String value = keyValue.length > 1 ? URLDecoder.decode(keyValue[1], UTF_8) : "";
-                            result.put(key, value);
-                        });
-                    return result;
-                })
-                .orElseGet(TypeMap::new);
+                    .map(q -> {
+                        final TypeMap result = new TypeMap();
+                        Arrays.stream(NanoUtils.split(q, "&"))
+                                .map(param -> NanoUtils.split(param, "="))
+                                .forEach(keyValue -> {
+                                    final String key = URLDecoder.decode(keyValue[0], UTF_8);
+                                    final String value = keyValue.length > 1 ? URLDecoder.decode(keyValue[1], UTF_8) : "";
+                                    result.put(key, value);
+                                });
+                        return result;
+                    })
+                    .orElseGet(TypeMap::new);
         }
         return queryParams;
     }
@@ -963,21 +981,21 @@ public class HttpObject extends HttpRequest {
      */
     @SuppressWarnings("java:S3358")
     public HttpObject createCorsResponse(
-        final String origin,
-        final String methods,
-        final String headers,
-        final int maxAge,
-        final boolean credentials
+            final String origin,
+            final String methods,
+            final String headers,
+            final int maxAge,
+            final boolean credentials
     ) {
         final String resultOrigin = origin(origin, credentials);
         return new HttpObject()
-            .header(ACCESS_CONTROL_ALLOW_ORIGIN, resultOrigin)
-            .header(ACCESS_CONTROL_ALLOW_METHODS, hasText(methods) ? methods : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_METHOD).orElse(method())))
-            .header(ACCESS_CONTROL_ALLOW_HEADERS, hasText(headers) ? headers : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_HEADERS).orElse("Content-Type, Accept, Authorization, X-Requested-With")))
-            .header(ACCESS_CONTROL_ALLOW_CREDENTIALS, String.valueOf(credentials))
-            .header(ACCESS_CONTROL_MAX_AGE, String.valueOf(maxAge > 0 ? maxAge : 86400))
-            .statusCode(resultOrigin.equals("null") ? 403 : (isMethodOptions() ? 204 : 200)) // 403 if origin doesn't match, 204 for preflight, 200 otherwise
-            .header(VARY, "Origin"); // Ensure the response is cached based on the Origin header
+                .header(ACCESS_CONTROL_ALLOW_ORIGIN, resultOrigin)
+                .header(ACCESS_CONTROL_ALLOW_METHODS, hasText(methods) ? methods : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_METHOD).orElse(method())))
+                .header(ACCESS_CONTROL_ALLOW_HEADERS, hasText(headers) ? headers : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_HEADERS).orElse("Content-Type, Accept, Authorization, X-Requested-With")))
+                .header(ACCESS_CONTROL_ALLOW_CREDENTIALS, String.valueOf(credentials))
+                .header(ACCESS_CONTROL_MAX_AGE, String.valueOf(maxAge > 0 ? maxAge : 86400))
+                .statusCode(resultOrigin.equals("null") ? 403 : (isMethodOptions() ? 204 : 200)) // 403 if origin doesn't match, 204 for preflight, 200 otherwise
+                .header(VARY, "Origin"); // Ensure the response is cached based on the Origin header
     }
 
     /**
@@ -1006,8 +1024,8 @@ public class HttpObject extends HttpRequest {
     public String origin(final String origin, final boolean credentials) {
         final String requestOrigin = headerMap().asStringOpt(ORIGIN).or(() -> headerMap().asString(HOST)).orElseGet(() -> credentials ? "null" : "*");
         return hasText(origin) && !(credentials && origin.equals("*"))
-            ? origin.equals("*") ? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
-            : requestOrigin;
+                ? origin.equals("*") ? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
+                : requestOrigin;
     }
 
     /**
@@ -1120,7 +1138,7 @@ public class HttpObject extends HttpRequest {
      * potentially for logging purposes or for transmitting error information back to a client or server.
      *
      * @param statusCode the HTTP status code to set for the failure.
-     * @param throwable the {@link Throwable} exception to store in the headers.
+     * @param throwable  the {@link Throwable} exception to store in the headers.
      * @return this {@link HttpObject} to allow for method chaining.
      */
     public HttpObject failure(final int statusCode, final Throwable throwable) {
@@ -1142,13 +1160,13 @@ public class HttpObject extends HttpRequest {
         contentType(APPLICATION_PROBLEM_JSON);
         statusCode(statusCode);
         body(new LinkedTypeMap()
-            .putR("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
-            .putR("type", "https://github.com/nanonative/nano")
-            .putR("title", title)
-            .putR("status", statusCode)
-            .putR("instance", path())
-            .putR("detail", detail)
-            .putR("timestamp", Instant.now().toEpochMilli())
+                .putR("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
+                .putR("type", "https://github.com/nanonative/nano")
+                .putR("title", title)
+                .putR("status", statusCode)
+                .putR("instance", path())
+                .putR("detail", detail)
+                .putR("timestamp", Instant.now().toEpochMilli())
         );
         return this;
     }
@@ -1163,10 +1181,10 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isFrontendCall() {
         return ofNullable(headers)
-            .map(header -> header.asString(HttpHeaders.USER_AGENT))
-            .map(String::toLowerCase)
-            .filter(agent -> (Stream.of(USER_AGENT_BROWSERS).anyMatch(agent::contains)))
-            .isPresent();
+                .map(header -> header.asString(HttpHeaders.USER_AGENT))
+                .map(String::toLowerCase)
+                .filter(agent -> (Stream.of(USER_AGENT_BROWSERS).anyMatch(agent::contains)))
+                .isPresent();
     }
 
     /**
@@ -1177,10 +1195,10 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isMobileCall() {
         return ofNullable(headers)
-            .map(header -> header.asString(HttpHeaders.USER_AGENT))
-            .map(String::toLowerCase)
-            .filter(agent -> (Stream.of(USER_AGENT_MOBILE).anyMatch(agent::contains)))
-            .isPresent();
+                .map(header -> header.asString(HttpHeaders.USER_AGENT))
+                .map(String::toLowerCase)
+                .filter(agent -> (Stream.of(USER_AGENT_MOBILE).anyMatch(agent::contains)))
+                .isPresent();
     }
 
     /**
@@ -1190,7 +1208,7 @@ public class HttpObject extends HttpRequest {
      */
     public String host() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getHostName()))
-            .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
+                .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
     }
 
     /**
@@ -1200,11 +1218,11 @@ public class HttpObject extends HttpRequest {
      */
     public int port() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getPort()))
-            .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
-                .filter(a -> a.length > 1)
-                .map(a -> a[1])
-                .map(s -> convertObj(s, Integer.class))
-            ).orElse(-1);
+                .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
+                        .filter(a -> a.length > 1)
+                        .map(a -> a[1])
+                        .map(s -> convertObj(s, Integer.class))
+                ).orElse(-1);
     }
 
     /**
@@ -1234,12 +1252,12 @@ public class HttpObject extends HttpRequest {
      */
     public Charset encoding() {
         return Arrays.stream(ofNullable(header(CONTENT_TYPE)).map(s -> NanoUtils.split(s, ";")).orElse(new String[0]))
-            .map(String::trim)
-            .filter(part -> part.toLowerCase().startsWith("charset="))
-            .map(charset -> charset.substring(8).trim())
-            .map(charset -> convertObj(charset, Charset.class))
-            .filter(Objects::nonNull)
-            .findFirst().orElse(Charset.defaultCharset());
+                .map(String::trim)
+                .filter(part -> part.toLowerCase().startsWith("charset="))
+                .map(charset -> charset.substring(8).trim())
+                .map(charset -> convertObj(charset, Charset.class))
+                .filter(Objects::nonNull)
+                .findFirst().orElse(Charset.defaultCharset());
     }
 
     public boolean hasContentType(final String... contentTypes) {
@@ -1427,12 +1445,12 @@ public class HttpObject extends HttpRequest {
     @Override
     public String toString() {
         return new StringJoiner(", ", HttpObject.class.getSimpleName() + "[", "]")
-            .add("statusCode=" + statusCode)
-            .add("path=" + path)
-            .add("method=" + method())
-            .add("headers=" + headers)
-            .add("body=" + bodyAsString())
-            .toString();
+                .add("statusCode=" + statusCode)
+                .add("path=" + path)
+                .add("method=" + method())
+                .add("headers=" + headers)
+                .add("body=" + bodyAsString())
+                .toString();
     }
 
     // ########## STATICS ##########
@@ -1458,11 +1476,11 @@ public class HttpObject extends HttpRequest {
         if (value.size() != 1)
             return value.stream().map(mapper).toList();
         return Arrays.stream(NanoUtils.split(value.iterator().next(), ","))
-            .map(s -> NanoUtils.split(s, ";q="))
-            .sorted(Comparator.comparing(parts -> parts.length > 1 ? Double.parseDouble(parts[1].trim()) : 1.0, Comparator.reverseOrder()))
-            .map(parts -> mapper.apply(parts[0].trim()))
-            .filter(Objects::nonNull)
-            .toList();
+                .map(s -> NanoUtils.split(s, ";q="))
+                .sorted(Comparator.comparing(parts -> parts.length > 1 ? Double.parseDouble(parts[1].trim()) : 1.0, Comparator.reverseOrder()))
+                .map(parts -> mapper.apply(parts[0].trim()))
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     public static boolean isMethod(final HttpObject request, final HttpMethod method) {
@@ -1477,13 +1495,13 @@ public class HttpObject extends HttpRequest {
      */
     public static TypeMap convertHeaders(final Map<String, ?> headers) {
         return headers.entrySet().stream()
-            .filter(entry -> entry.getKey() != null && entry.getValue() != null)
-            .collect(Collectors.toMap(
-                entry -> entry.getKey().toLowerCase(),
-                Map.Entry::getValue,
-                (v1, v2) -> v1,
-                TypeMap::new
-            ));
+                .filter(entry -> entry.getKey() != null && entry.getValue() != null)
+                .collect(Collectors.toMap(
+                        entry -> entry.getKey().toLowerCase(),
+                        Map.Entry::getValue,
+                        (v1, v2) -> v1,
+                        TypeMap::new
+                ));
     }
 
     public static String removeLast(final String input, final String removable) {
@@ -1506,9 +1524,9 @@ public class HttpObject extends HttpRequest {
     public boolean isZipCompressed(final byte[] body) {
         final int ZIP_MAGIC = 0x504B0304;
         return body.length > 3
-            && (body[0] & 0xFF) == ((ZIP_MAGIC >> 24) & 0xFF)
-            && (body[1] & 0xFF) == ((ZIP_MAGIC >> 16) & 0xFF)
-            && (body[2] & 0xFF) == ((ZIP_MAGIC >> 8) & 0xFF)
-            && (body[3] & 0xFF) == (ZIP_MAGIC & 0xFF);
+                && (body[0] & 0xFF) == ((ZIP_MAGIC >> 24) & 0xFF)
+                && (body[1] & 0xFF) == ((ZIP_MAGIC >> 16) & 0xFF)
+                && (body[2] & 0xFF) == ((ZIP_MAGIC >> 8) & 0xFF)
+                && (body[3] & 0xFF) == (ZIP_MAGIC & 0xFF);
     }
 }

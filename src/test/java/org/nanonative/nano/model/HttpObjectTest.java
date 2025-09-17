@@ -447,6 +447,8 @@ class HttpObjectTest {
         assertThat(nullTest.bodyAsJson()).isEqualTo(new TypeList().addR(""));
         assertThat(nullTest.bodyAsXml()).isNotNull();
         assertThat(nullTest.bodyAsJson().asString("key")).isNull();
+        assertThat(nullTest.bodyAsMap().asString("key")).isNull();
+        assertThat(nullTest.bodyAsList().asString("key")).isNull();
 
         // Byte[] body
         final HttpObject byteTest = new HttpObject().body(bodyString.getBytes(Charset.defaultCharset()));
@@ -455,6 +457,8 @@ class HttpObjectTest {
         assertThat(byteTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(byteTest.bodyAsXml()).isNotNull();
         assertThat(byteTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // String body
         final HttpObject stringTest = new HttpObject().body(bodyString);
@@ -463,6 +467,8 @@ class HttpObjectTest {
         assertThat(stringTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(stringTest.bodyAsXml()).isNotNull();
         assertThat(stringTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // JSON body
         final HttpObject jsonTest = new HttpObject().body(bodyJson);
@@ -471,6 +477,8 @@ class HttpObjectTest {
         assertThat(jsonTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(jsonTest.bodyAsXml()).isNotNull();
         assertThat(jsonTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // HttpExchange body
         final HttpObject exchangeTest = new HttpObject(createMockHttpExchange("GET", "/test", new Headers(), bodyString));
@@ -479,6 +487,8 @@ class HttpObjectTest {
         assertThat(exchangeTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(exchangeTest.bodyAsXml()).isNotNull();
         assertThat(exchangeTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // General
         assertThat(new HttpObject().bodyAsJson()).isEqualTo(new TypeList().addR(""));

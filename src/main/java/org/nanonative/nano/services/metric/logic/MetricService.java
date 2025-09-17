@@ -103,52 +103,52 @@ public class MetricService extends Service {
 
     protected void addMetricsEndpoint(final Event<?, ?> event) {
         event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
-            ofNullable(prometheusPath)
-                .filter(request::pathMatch)
-                .filter(path -> request.isMethodGet())
-                .ifPresent(path ->
-                    request.createResponse()
-                        .statusCode(200)
-                        .body(metrics.prometheus())
-                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                        .respond(event)
-                )
+                ofNullable(prometheusPath)
+                        .filter(request::pathMatch)
+                        .filter(path -> request.isMethodGet())
+                        .ifPresent(path ->
+                                request.createResponse()
+                                        .statusCode(200)
+                                        .body(metrics.prometheus())
+                                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                                        .respond(event)
+                        )
         );
         event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
-            ofNullable(dynamoPath)
-                .filter(request::pathMatch)
-                .filter(path -> request.isMethodGet())
-                .ifPresent(path ->
-                    request.createResponse()
-                        .statusCode(200)
-                        .body(metrics.dynatrace())
-                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                        .respond(event)
-                )
+                ofNullable(dynamoPath)
+                        .filter(request::pathMatch)
+                        .filter(path -> request.isMethodGet())
+                        .ifPresent(path ->
+                                request.createResponse()
+                                        .statusCode(200)
+                                        .body(metrics.dynatrace())
+                                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                                        .respond(event)
+                        )
         );
         event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
-            ofNullable(influx)
-                .filter(request::pathMatch)
-                .filter(path -> request.isMethodGet())
-                .ifPresent(path ->
-                    request.createResponse()
-                        .statusCode(200)
-                        .body(metrics.influx())
-                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                        .respond(event)
-                )
+                ofNullable(influx)
+                        .filter(request::pathMatch)
+                        .filter(path -> request.isMethodGet())
+                        .ifPresent(path ->
+                                request.createResponse()
+                                        .statusCode(200)
+                                        .body(metrics.influx())
+                                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                                        .respond(event)
+                        )
         );
         event.channel(EVENT_HTTP_REQUEST).map(Event::payload).ifPresent(request ->
-            ofNullable(wavefront)
-                .filter(request::pathMatch)
-                .filter(path -> request.isMethodGet())
-                .ifPresent(path ->
-                    request.createResponse()
-                        .statusCode(200)
-                        .body(metrics.wavefront())
-                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
-                        .respond(event)
-                )
+                ofNullable(wavefront)
+                        .filter(request::pathMatch)
+                        .filter(path -> request.isMethodGet())
+                        .ifPresent(path ->
+                                request.createResponse()
+                                        .statusCode(200)
+                                        .body(metrics.wavefront())
+                                        .headerMap(Map.of(HttpHeaders.CONTENT_TYPE, ContentType.TEXT_PLAIN))
+                                        .respond(event)
+                        )
         );
     }
 
@@ -176,6 +176,7 @@ public class MetricService extends Service {
         updateThreadMetrics(nano::context);
         updateBufferMetrics(nano::context);
         updateClassLoaderMetrics(nano::context);
+        updateDeadlockMetrics(nano::context);
         updateCompilerMetrics(nano);
         nano.context().tryExecute(() -> {
             metrics.gaugeSet("service.metrics.gauges", metrics.gauges().size());
@@ -229,9 +230,9 @@ public class MetricService extends Service {
             metrics.gaugeSet("jvm.threads.peak", threadMXBean.getPeakThreadCount());
 
             Arrays.stream(threadMXBean.getThreadInfo(threadMXBean.getAllThreadIds()))
-                .filter(Objects::nonNull)
-                .collect(Collectors.groupingBy(ThreadInfo::getThreadState, Collectors.counting()))
-                .forEach((state, count) -> metrics.gaugeSet("jvm.threads.states", count, Map.of("state", state.toString().toLowerCase())));
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.groupingBy(ThreadInfo::getThreadState, Collectors.counting()))
+                    .forEach((state, count) -> metrics.gaugeSet("jvm.threads.states", count, Map.of("state", state.toString().toLowerCase())));
         });
     }
 
@@ -241,20 +242,42 @@ public class MetricService extends Service {
             for (final MemoryPoolMXBean pool : pools) {
                 final String area = pool.getType() == MemoryType.HEAP ? "heap" : "nonheap";
                 final MemoryUsage usage = pool.getUsage();
+                long max = usage.getMax();
+                long used = getUsed(usage);
 
-                metrics.gaugeSet("jvm.memory.max.bytes", usage.getMax(), Map.of("area", area, "id", pool.getName()));
-                metrics.gaugeSet("jvm.memory.used.bytes", usage.getUsed(), Map.of("area", area, "id", pool.getName()));
+                metrics.gaugeSet("jvm.memory.max.bytes", max, Map.of("area", area, "id", pool.getName()));
+                metrics.gaugeSet("jvm.memory.used.bytes", used, Map.of("area", area, "id", pool.getName()));
                 metrics.gaugeSet("jvm.memory.committed.bytes", usage.getCommitted(), Map.of("area", area, "id", pool.getName()));
+                if (max > 0) {
+                    final double pct = (used * 100.0) / max;
+                    metrics.gaugeSet("jvm.memory.used.percent", pct, Map.of("area", area, "id", pool.getName()));
+                }
             }
         });
+    }
+
+    private static long getUsed(MemoryUsage usage) {
+        return usage.getUsed();
     }
 
     public void updateMemoryMetrics(final Supplier<Context> context) {
         tryExecute(context, () -> {
             final Runtime runtime = Runtime.getRuntime();
+            long total = runtime.totalMemory();
+            long free = runtime.freeMemory();
+            long max = runtime.maxMemory();
+            double used = (double) total - free;
+
             metrics.gaugeSet("system.cpu.cores", runtime.availableProcessors());
-            metrics.gaugeSet("jvm.memory.max.bytes", runtime.maxMemory());
-            metrics.gaugeSet("jvm.memory.used.bytes", (double) runtime.totalMemory() - runtime.freeMemory());
+            metrics.gaugeSet("jvm.memory.max.bytes", max);
+            metrics.gaugeSet("jvm.memory.used.bytes", used);
+
+            // Memory (human friendly)
+            metrics.gaugeSet("jvm.memory.used.mb", used / 1_048_576d);
+            metrics.gaugeSet("jvm.memory.used.gb", used / 1_073_741_824d);
+            metrics.gaugeSet("jvm.memory.max.mb", max / 1_048_576d);
+            metrics.gaugeSet("jvm.memory.max.gb", max / 1_073_741_824d);
+            metrics.gaugeSet("jvm.memory.free.mb", free / 1_048_576d);
         });
     }
 
@@ -270,18 +293,47 @@ public class MetricService extends Service {
         tryExecute(context, () -> {
             final OperatingSystemMXBean osMXBean = ManagementFactory.getOperatingSystemMXBean();
             if (osMXBean instanceof final com.sun.management.OperatingSystemMXBean sunOsMXBean) {
-                metrics.gaugeSet("process.cpu.usage", sunOsMXBean.getProcessCpuLoad());
-                metrics.gaugeSet("system.cpu.usage", sunOsMXBean.getCpuLoad());
+                final double p = sunOsMXBean.getProcessCpuLoad();
+                final double s = sunOsMXBean.getCpuLoad();
+                metrics.gaugeSet("process.cpu.usage", p);
+                metrics.gaugeSet("system.cpu.usage", s);
+
+                // CPU percent (0..100)
+                metrics.gaugeSet("process.cpu.percent", p >= 0 ? p * 100d : 0d);
+                metrics.gaugeSet("system.cpu.percent", s >= 0 ? s * 100d : 0d);
+
+                // Uptime
+                final long uptimeMs = ManagementFactory.getRuntimeMXBean().getUptime();
+                metrics.gaugeSet("application.uptime.ms", uptimeMs);
+                metrics.gaugeSet("application.uptime.seconds", uptimeMs / 1000d);
+                metrics.gaugeSet("process.start.time.epoch.ms", ManagementFactory.getRuntimeMXBean().getStartTime());
+
+                // Timezone & time
+                final java.time.ZonedDateTime now = java.time.ZonedDateTime.now();
+                final int offsetSeconds = now.getOffset().getTotalSeconds();
+                metrics.gaugeSet("system.timezone.offset.hours", offsetSeconds / 3600d);
+                metrics.gaugeSet("system.timezone.offset.minutes", offsetSeconds / 60d);
+                metrics.gaugeSet("system.time.epoch.ms", System.currentTimeMillis());
+                metrics.gaugeSet("system.time.epoch.ns", System.nanoTime());
             }
             metrics.gaugeSet("system.load.average.1m", osMXBean.getSystemLoadAverage());
+        });
+    }
+
+    public void updateDeadlockMetrics(final java.util.function.Supplier<Context> context) {
+        tryExecute(context, () -> {
+            final java.lang.management.ThreadMXBean tm = java.lang.management.ManagementFactory.getThreadMXBean();
+            final long[] ids = tm.findDeadlockedThreads();
+            final int count = (ids == null) ? 0 : ids.length;
+            metrics.gaugeSet("jvm.threads.deadlocked", count);
         });
     }
 
     public void updateNanoMetrics(final Nano nano) {
         tryExecute(nano::context, () -> {
             nano.services().stream()
-                .collect(Collectors.groupingBy(service -> service.getClass().getSimpleName(), Collectors.counting()))
-                .forEach((className, count) -> metrics.gaugeSet("application.services", count, Map.of("class", className)));
+                    .collect(Collectors.groupingBy(service -> service.getClass().getSimpleName(), Collectors.counting()))
+                    .forEach((className, count) -> metrics.gaugeSet("application.services", count, Map.of("class", className)));
             metrics.gaugeSet("application.schedulers", nano.schedulers().size());
             metrics.gaugeSet("application.listeners", nano.listeners().size());
         });
@@ -338,8 +390,8 @@ public class MetricService extends Service {
         long totalSize = 0;
         // Calculate size for counters, gauges, and timers
         totalSize += estimateMapSize(new HashMap<>(metrics.counters()), 28) +
-            estimateMapSize(new HashMap<>(metrics.gauges()), 24) +
-            estimateMapSize(new HashMap<>(metrics.timers()), 16);
+                estimateMapSize(new HashMap<>(metrics.gauges()), 24) +
+                estimateMapSize(new HashMap<>(metrics.timers()), 16);
 
         return totalSize;
     }
@@ -348,8 +400,8 @@ public class MetricService extends Service {
         long size = 36L;
         for (final Map.Entry<String, MetricCache.Metric<?>> entry : map.entrySet()) {
             size += 32L + // Entry overhead
-                estimateStringSize(entry.getKey()) + // Key size
-                estimateMetricSize(entry.getValue(), numberSize); // Value size
+                    estimateStringSize(entry.getKey()) + // Key size
+                    estimateMetricSize(entry.getValue(), numberSize); // Value size
         }
         return size;
     }
