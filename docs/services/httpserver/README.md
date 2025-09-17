@@ -5,20 +5,7 @@
 
 * [Overview](#overview)
 * [Quick Start](#quick-start)
-* [Request Handling](#request-handling)
-    * [Basic Request Processing](#basic-request-processing)
-    * [Request Data Access](#request-data-access)
-    * [Path Matching](#path-matching)
-    * [Method Filtering](#method-filtering)
-* [Response Handling](#response-handling)
-    * [Creating Responses](#creating-responses)
-    * [Status Codes](#status-codes)
-    * [Headers and CORS](#headers-and-cors)
-* [Error Handling](#error-handling)
-* [Authentication & Authorization](#authentication--authorization)
 * [Configuration](#configuration)
-* [SSL/TLS Support](#ssltls-support)
-* [Best Practices](#best-practices)
 * [Events](#events)
 
 # HTTP Service
