@@ -6,7 +6,10 @@ import org.nanonative.nano.helper.ExRunnable;
 
 import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Arrays;
@@ -22,8 +25,7 @@ import java.util.function.Supplier;
 
 import static java.util.Collections.unmodifiableSet;
 import static java.util.Optional.ofNullable;
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.SECONDS;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.nanonative.nano.core.model.Context.CONFIG_THREAD_POOL_TIMEOUT_MS;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_UNREGISTER;
@@ -57,6 +59,141 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
             schedulers.remove(scheduler);
             event.acknowledge();
         });
+    }
+
+    /**
+     * Executes a task periodically, starting after an initial delay.
+     * <code>nano.run(() -> myMethod(), LocalTime.of(7, 0, 0))</code>
+     *
+     * @param task   The task to execute.
+     * @param atTime The time of hour/minute/second to start the task.
+     * @param dow    The day of the week to start the task.
+     * @param until  A BooleanSupplier indicating the termination condition. <code>true</code> stops the next execution.
+     * @return Self for chaining
+     */
+    public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
+        return run(context, task, atTime, dow, ZoneId.systemDefault(), until);
+    }
+
+    /**
+     * Executes a task daily at the specified wall-clock time in the server's
+     * default time zone until the stop condition returns {@code true}.
+     *
+     * @param context the execution context supplier
+     * @param task    the task to execute
+     * @param atTime  the daily wall-clock time (hour, minute, second)
+     * @param until   stop condition; when {@code true}, cancels further runs
+     * @return self for chaining
+     */
+    public T runDaily(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final BooleanSupplier until) {
+        return run(context, task, atTime, null, ZoneId.systemDefault(), until);
+    }
+
+    /**
+     * Executes a task weekly at the given day of week and wall-clock time
+     * in the server's default time zone until the stop condition returns {@code true}.
+     *
+     * @param context the execution context supplier
+     * @param task    the task to execute
+     * @param dow     the day of the week
+     * @param atTime  the weekly wall-clock time (hour, minute, second)
+     * @param until   stop condition; when {@code true}, cancels further runs
+     * @return self for chaining
+     */
+    public T runWeekly(final Supplier<Context> context, final ExRunnable task, final DayOfWeek dow, final LocalTime atTime, final BooleanSupplier until) {
+        return run(context, task, atTime, dow, ZoneId.systemDefault(), until);
+    }
+
+    /**
+     * Core scheduling method for daily or weekly execution at a fixed wall-clock time.
+     * Uses {@link ZonedDateTime} in the given zone to account for daylight saving changes.
+     *
+     * @param context the execution context supplier
+     * @param task    the task to execute
+     * @param atTime  the wall-clock time (hour, minute, second)
+     * @param dow     optional day of week; if {@code null}, runs every day
+     * @param zone    the time zone (usually {@link ZoneId#systemDefault()})
+     * @param until   stop condition; when {@code true}, cancels further runs
+     * @return self for chaining
+     */
+    public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone, final BooleanSupplier until) {
+        final Scheduler scheduler = asyncFromPool(context);
+        final ZonedDateTime firstPlanned = initialPlanned(atTime, dow, zone);
+        scheduleOnce(context, task, scheduler, until, atTime, dow, zone, firstPlanned);
+        return (T) this;
+    }
+
+    /**
+     * Internal recursive scheduler: schedules the given task once,
+     * then reschedules itself for the next occurrence.
+     *
+     * @param context   the execution context supplier
+     * @param task      the task to execute
+     * @param scheduler the scheduler executor
+     * @param until     stop condition; when {@code true}, cancels further runs
+     * @param atTime    the wall-clock time (hour, minute, second)
+     * @param dow       optional day of week; if {@code null}, runs every day
+     * @param zone      the time zone
+     * @param planned   the planned execution time
+     */
+    protected void scheduleOnce(final Supplier<Context> context, final ExRunnable task, final Scheduler scheduler, final BooleanSupplier until, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone, final ZonedDateTime planned) {
+        final long delayMs = Math.max(1L, Duration.between(ZonedDateTime.now(zone), planned).toMillis());
+
+        scheduler.schedule(() -> {
+            if (ofNullable(until).map(BooleanSupplier::getAsBoolean).filter(end -> end).isPresent()) {
+                scheduler.shutdown();
+                return;
+            }
+            executeScheduler(context, task, scheduler, true);
+
+            // compute next run from planned time, not from "now"
+            scheduleOnce(context, task, scheduler, until, atTime, dow, zone, nextPlanned(planned, atTime, dow, zone));
+        }, delayMs, MILLISECONDS);
+    }
+
+    /**
+     * Calculates the first execution time after now for the given
+     * wall-clock time and day of week.
+     *
+     * @param atTime the wall-clock time
+     * @param dow    optional day of week; if {@code null}, runs daily
+     * @param zone   the time zone
+     * @return the first valid planned execution time
+     */
+    protected static ZonedDateTime initialPlanned(final LocalTime atTime, final DayOfWeek dow, final ZoneId zone) {
+        final ZonedDateTime now = ZonedDateTime.now(zone);
+        ZonedDateTime candidate = resolveWallTime(now.toLocalDate(), atTime, zone);
+
+        if (dow != null) {
+            candidate = candidate.with(TemporalAdjusters.nextOrSame(dow));
+            if (candidate.isBefore(now)) {
+                candidate = resolveWallTime(candidate.toLocalDate().plusWeeks(1), atTime, zone);
+            }
+        } else if (candidate.isBefore(now)) {
+            candidate = resolveWallTime(now.toLocalDate().plusDays(1), atTime, zone);
+        }
+        return candidate;
+    }
+
+    /**
+     * Calculates the next execution time after a previous planned run.
+     *
+     * @param prevPlanned the previous planned run time
+     * @param atTime      the wall-clock time
+     * @param dow         optional day of week; if {@code null}, runs daily
+     * @param zone        the time zone
+     * @return the next planned execution time
+     */
+    protected static ZonedDateTime nextPlanned(final ZonedDateTime prevPlanned, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone) {
+        return dow != null ? resolveWallTime(prevPlanned.toLocalDate().plusWeeks(1), atTime, zone)
+                : resolveWallTime(prevPlanned.toLocalDate().plusDays(1), atTime, zone);
+    }
+
+    /**
+     * DST-safe wall time: pushes through gaps, picks the earlier offset in overlaps.
+     */
+    protected static ZonedDateTime resolveWallTime(final LocalDate date, final LocalTime time, final ZoneId zone) {
+        return ZonedDateTime.ofLocal(LocalDateTime.of(date, time), zone, null);
     }
 
     /**
@@ -106,32 +243,6 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
             }
         }, delay, period, unit);
         return (T) this;
-    }
-
-    /**
-     * Executes a task periodically, starting after an initial delay.
-     * <code>nano.run(() -> myMethod(), LocalTime.of(7, 0, 0))</code>
-     *
-     * @param task   The task to execute.
-     * @param atTime The time of hour/minute/second to start the task.
-     * @param dow    The day of the week to start the task.
-     * @param until  A BooleanSupplier indicating the termination condition. <code>true</code> stops the next execution.
-     * @return Self for chaining
-     */
-    public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
-        final ZonedDateTime now = ZonedDateTime.now();
-        ZonedDateTime nextRun = now.withHour(atTime.getHour()).withMinute(atTime.getMinute()).withSecond(atTime.getSecond());
-
-        if (dow != null) {
-            nextRun = nextRun.with(TemporalAdjusters.nextOrSame(dow));
-            if (nextRun.isBefore(now))
-                // don't try to catch up past events
-                nextRun = nextRun.with(TemporalAdjusters.next(dow));
-        } else if (nextRun.isBefore(now))
-            // don't try to catch up past events
-            nextRun = nextRun.plusDays(1);
-
-        return run(context, task, Duration.between(now, nextRun).getSeconds(), (dow != null) ? DAYS.toSeconds(7) : DAYS.toSeconds(1), SECONDS, until);
     }
 
     /**
@@ -205,10 +316,10 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      * @throws InterruptedException if interrupted while waiting.
      */
     protected void kill(final ExecutorService executorService, final long timeoutMs) throws InterruptedException {
-        if (!executorService.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+        if (!executorService.awaitTermination(timeoutMs, MILLISECONDS)) {
             context.debug(() -> "Kill [{}]", getThreadName(executorService));
             executorService.shutdownNow();
-            if (!executorService.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS)) {
+            if (!executorService.awaitTermination(timeoutMs, MILLISECONDS)) {
                 context.warn(() -> "[{}] did not terminate. Is this a glitch in the Matrix?", getThreadName(executorService));
             }
         }

@@ -17,6 +17,8 @@ import org.nanonative.nano.services.logging.model.LogLevel;
 
 import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -558,6 +560,76 @@ public class Context extends ConcurrentTypeMap {
      */
     public Context run(final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final BooleanSupplier until) {
         nano().run(() -> this, task, atTime, dow, until);
+        return this;
+    }
+
+    /**
+     * Executes a task daily at the specified wall-clock time in the server's
+     * default time zone. Runs indefinitely.
+     *
+     * @param task    the task to execute
+     * @param atTime  the daily wall-clock time (hour, minute, second)
+     * @return self for chaining
+     */
+    public Context runDaily(final ExRunnable task, final LocalTime atTime) {
+        return runDaily(task, atTime, null);
+    }
+
+    /**
+     * Executes a task daily at the specified wall-clock time in the server's
+     * default time zone until the stop condition returns {@code true}.
+     *
+     * @param task    the task to execute
+     * @param atTime  the daily wall-clock time (hour, minute, second)
+     * @param until   stop condition; when {@code true}, cancels further runs
+     * @return self for chaining
+     */
+    public Context runDaily(final ExRunnable task, final LocalTime atTime, final BooleanSupplier until) {
+        run(task, atTime, null, ZoneId.systemDefault(), until);
+        return this;
+    }
+
+    /**
+     * Executes a task weekly at the given day of week and wall-clock time
+     * in the server's default time zone. Runs indefinitely.
+     *
+     * @param task    the task to execute
+     * @param dow     the day of the week
+     * @param atTime  the weekly wall-clock time (hour, minute, second)
+     * @return self for chaining
+     */
+    public Context runWeekly(final ExRunnable task, final DayOfWeek dow, final LocalTime atTime) {
+        return runWeekly(task, dow, atTime, null);
+    }
+
+    /**
+     * Executes a task weekly at the given day of week and wall-clock time
+     * in the server's default time zone until the stop condition returns {@code true}.
+     *
+     * @param task    the task to execute
+     * @param dow     the day of the week
+     * @param atTime  the weekly wall-clock time (hour, minute, second)
+     * @param until   stop condition; when {@code true}, cancels further runs
+     * @return self for chaining
+     */
+    public Context runWeekly(final ExRunnable task, final DayOfWeek dow, final LocalTime atTime, final BooleanSupplier until) {
+        run(task, atTime, dow, ZoneId.systemDefault(), until);
+        return this;
+    }
+
+    /**
+     * Core scheduling method for daily or weekly execution at a fixed wall-clock time.
+     * Uses {@link ZonedDateTime} in the given zone to account for daylight saving changes.
+     *
+     * @param task    the task to execute
+     * @param atTime  the wall-clock time (hour, minute, second)
+     * @param dow     optional day of week; if {@code null}, runs every day
+     * @param zone    the time zone (usually {@link ZoneId#systemDefault()})
+     * @param until   stop condition; when {@code true}, cancels further runs
+     * @return self for chaining
+     */
+    public Context run(final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone, final BooleanSupplier until) {
+        nano().run(() -> this, task, atTime, dow, zone, until);
         return this;
     }
 

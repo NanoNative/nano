@@ -12,6 +12,7 @@ import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.model.TestService;
 import org.nanonative.nano.services.logging.model.LogLevel;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
@@ -279,33 +280,37 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(32)
-        // custom repeats as they are time heavy tests
+    @RepeatedTest(32) // still time-heavy, but quick per run
     void schedulerRunDayOfWeek() throws InterruptedException {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
+        try {
+            final DayOfWeek today = LocalDateTime.now().getDayOfWeek();
 
-        // Schedule next time
-        final AtomicBoolean scheduled = new AtomicBoolean(false);
-        nano.run(
-                null,
-                () -> scheduled.set(true),
-                LocalTime.now().minusHours(1),
-                LocalDateTime.now().getDayOfWeek(),
-                () -> false
-        );
-        Thread.sleep(24);
-        assertThat(scheduled.get()).isFalse();
+            // 1) Past time today => should NOT run now (next occurrence is next week)
+            final CountDownLatch shouldNotFire = new CountDownLatch(1);
+            nano.run(
+                    nano::context,
+                    shouldNotFire::countDown,
+                    LocalTime.now().minusHours(1), // past
+                    today,
+                    () -> false
+            );
+            // Give a short window; it must NOT fire
+            assertThat(shouldNotFire.await(120, MILLISECONDS)).isFalse();
 
-        // Schedule now
-        final CountDownLatch latch = new CountDownLatch(1);
-        nano.run(
-                null,
-                latch::countDown,
-                LocalTime.now().plusNanos(64 * 1000),
-                LocalDateTime.now().getDayOfWeek(),
-                () -> false
-        );
-        assertThat(latch.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
+            // 2) Near-future time today => should run once, soon
+            final CountDownLatch shouldFire = new CountDownLatch(1);
+            nano.run(
+                    nano::context,
+                    shouldFire::countDown,
+                    LocalTime.now().plusNanos(50_000_000), // ~50ms
+                    today,
+                    () -> false
+            );
+            assertThat(shouldFire.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
+        } finally {
+            nano.stop(this.getClass()).waitForStop();
+        }
     }
 
     @RepeatedTest(TEST_REPEAT)
