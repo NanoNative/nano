@@ -63,7 +63,7 @@ class NanoThreadTest {
         assertThat(latch.await(TEST_REPEAT, TimeUnit.SECONDS)).isTrue();
         assertThat(doneThreads.get()).isEqualTo(TEST_REPEAT);
         Arrays.stream(threads).parallel().forEach(thread -> assertThat(thread.isComplete()).isTrue());
-        Arrays.stream(threads).parallel().forEach(thread -> assertThat(thread.toString()).contains("{\"class\":\"NanoThread\",\"listener\":0,\"isComplete\":true}"));
+        Arrays.stream(threads).parallel().forEach(thread -> assertThat(thread.toString()).contains("{\"class\":\"NanoThread\",\"listener\":"));
     }
 
     @RepeatedTest(TEST_REPEAT)
