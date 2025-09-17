@@ -2,22 +2,24 @@
 
 # Core Concepts
 
-Nano is a minimalist standalone library designed to facilitate the creation of microservices using plain, modern Java. 
-Nano is a **tool, not a framework**, and it emphasizes simplicity, security, and efficiency.
+Nano is a minimalistic approach to microservice development that fundamentally changes how you think about application architecture. Instead of creating complex object hierarchies with Controllers, Services, and Repositories, Nano uses **static event listeners** that react to events in a functional, stateless manner.
+
+Nano is a **tool, not a framework**, designed to bring you back to the basics of clean, functional Java programming. Emphasizes simplicity, security, and efficiency
 
 ## 🎯 What Makes Nano Different?
 
-Unlike traditional frameworks like Spring Boot, Nano doesn't use:
-- **Annotations** - No `@Service`, `@Controller`, `@Autowired`
-- **Dependency Injection** - No complex IoC containers
-- **Reflection** - No runtime magic or performance overhead
-- **Complex Configuration** - No XML files or complex setup
+**🚫 Traditional OOP Problems Nano Solves:**
+- **No More Object Hierarchies**: Forget Controllers, Services, Repositories - just static methods and events!
+- **No Dependency Injection**: No complex IoC containers or `@Autowired` annotations
+- **No Reflection**: No runtime magic or performance overhead
+- **No Complex Configuration**: No XML files or complex setup
 
-Instead, Nano provides:
-- **Static methods** for business logic
-- **Event-driven communication** between components
-- **Simple configuration** through properties and context
-- **Direct control** over your application structure
+**✅ Nano's minimalistic Approach:**
+- **Static Methods for Business Logic**: Your domain logic lives in static methods, not service objects
+- **Event-Driven Communication**: Everything communicates through events, not direct method calls
+- **Universal Services**: Services are generic connectors for external systems (databases, HTTP, queues) - no business logic
+- **TypeMap Everywhere**: Built-in type conversion and data transformation using TypeMap
+- **Global Error Handling**: Even errors are events that can be subscribed to and handled globally
 
 ## 🔄 Traditional vs Nano Approach
 
@@ -58,6 +60,7 @@ public class UserService {
 ```java
 public class UserController {
     
+    // Static method handles HTTP request - no @Controller needed!
     public static void handleRegister(Event<HttpObject, HttpObject> event) {
         event.payloadOpt()
             .filter(HttpObject::isMethodPost)
@@ -66,23 +69,27 @@ public class UserController {
     }
 }
 
+// Database Service - Universal Connector for external systems
 public class DatabaseService extends Service {
     
     @Override
     public void onEvent(Event<?, ?> event) {
-        event.channel(EVENT_CREATE_USER).ifPresent(e -> {
-            // Database operations here
-            event.reply(createUser(event.payload()));
-        });
+        if (event.isEvent(EVENT_CREATE_USER)) {
+            final TypeMap userData = event.payloadAsMap();
+            final User user = createUser(userData);
+            event.respond(user);
+        }
     }
 }
 ```
 
-**Key Differences:**
-- **No annotations** - Everything is explicit and visible
-- **No dependency injection** - Services communicate through events
-- **No complex configuration** - Simple property-based setup
-- **Functional style** - Static methods instead of object hierarchies
+**🎯 Key Differences:**
+- **No Annotations**: Everything is explicit and visible - no magic!
+- **No Dependency Injection**: Services communicate through events, not direct calls
+- **No Complex Configuration**: Simple property-based setup through Context
+- **Static Methods**: Business logic in static methods, not service objects
+- **Universal Services**: Services are pure infrastructure connectors - no business logic
+- **Event-Driven**: Everything flows through events - HTTP requests, database operations, errors
 
 ### Modern and Fluent Design 🚀
 
@@ -136,20 +143,82 @@ when started.
 
 ### Service-Based Architecture 📊
 
-([Services](../../services/README.md)) in Nano function as plugins or extensions, executed only when explicitly added to
-Nano programmatically.
-This approach simplifies testing, as services and components can be tested independently without the need for mocking or
-stubbing.
-You execute only what you define, avoiding the pitfalls of auto-applying dependencies.
+**Services in Nano are Universal Connectors, Not Business Objects**
 
-### Flexible Object Mapping 🔄
+([Services](../../services/README.md)) in Nano function as **universal connectors** for external systems - databases, HTTP services, queues, and other technologies. They contain **no business logic** and are designed to be pure infrastructure adapters.
 
-Nano’s built-in `TypeConverter` eliminates the need for custom objects by enabling easy conversion of `JSON`, `XML`, and
-other simple Java objects.
-For example, HTTP requests can be converted to `TypeInfo`, `TypeMap` or `TypeList`, which lazily convert fields to
-the requested type. _See [TypeMap](https://github.com/YunaBraska/type-map) for more information._
-If an object cannot be converted, it is straightforward to register a custom type conversion.
-These [TypeMaps](https://github.com/YunaBraska/type-map) and TypeLists are used extensively, such as in events and the context.
+**Key Principles:**
+- **No Business Logic**: Services handle external integrations only - no domain logic
+- **Event-Driven**: Services communicate through events, not direct method calls
+- **Universal Design**: One service can handle multiple types of external systems
+- **Easy Testing**: Services can be easily replaced with fake implementations in tests
+- **Decoupled Architecture**: Business logic stays in static methods, infrastructure in services
+
+**Example Service Design:**
+```java
+public class DatabaseService extends Service {
+    
+    @Override
+    public void onEvent(Event<?, ?> event) {
+        // Handle different database operations through events
+        if (event.isEvent(EVENT_DATABASE_QUERY)) {
+            executeQuery(event.payloadAsMap());
+        } else if (event.isEvent(EVENT_DATABASE_INSERT)) {
+            insertRecord(event.payloadAsMap());
+        }
+        // No business logic here - just database operations!
+    }
+}
+```
+
+This approach simplifies testing, as services and components can be tested independently without the need for mocking or stubbing. You execute only what you define, avoiding the pitfalls of auto-applying dependencies.
+
+### TypeMap - The Heart of Data Handling 🔄
+
+**TypeMap eliminates the need for custom DTOs and complex object mapping!**
+
+Nano's built-in `TypeMap` system provides automatic type conversion and data transformation for `JSON`, `XML`, and any data format. This eliminates the need for custom DTOs, mappers, and complex object hierarchies.
+
+**How TypeMap Works:**
+- **Automatic Conversion**: HTTP requests, database results, and any data automatically convert to TypeMap
+- **Lazy Evaluation**: Fields are converted to the requested type only when accessed
+- **Type Safety**: Built-in type checking and conversion with fallback values
+- **Universal Format**: Same TypeMap format works across HTTP requests, database operations, and events
+
+**Example - No More DTOs Needed:**
+```java
+// ❌ Traditional approach with DTOs
+public class UserDto {
+    private String name;
+    private String email;
+    // getters, setters, constructors...
+}
+
+// ✅ Nano approach with TypeMap
+public static void handleUser(Event<HttpObject, HttpObject> event) {
+    event.payloadOpt()
+        .filter(HttpObject::isMethodPost)
+        .ifPresent(req -> {
+            final TypeMap userData = req.bodyAsJson().asMap();
+            
+            // Direct access with type conversion - no DTOs needed!
+            final String name = userData.asString("name");
+            final String email = userData.asString("email");
+            final int age = userData.asInt("age", 0); // with default value
+            
+            // Process user data...
+        });
+}
+```
+
+**TypeMap Benefits:**
+- **No DTOs**: Eliminate the need for custom data transfer objects
+- **No Mappers**: No manual mapping between different object types
+- **Type Safety**: Built-in type checking and conversion
+- **Performance**: Lazy evaluation and efficient memory usage
+- **Simplicity**: One format for all data handling
+
+_See [TypeMap](https://github.com/YunaBraska/type-map) for more information._
 
 ### Configuration Management ⚙️
 

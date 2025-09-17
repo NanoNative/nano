@@ -1,0 +1,388 @@
+# Nano Framework - LLM Instructions and Curated Content
+
+## Overview
+Nano is a revolutionary microservice framework that breaks away from traditional OOP patterns. Instead of creating complex object hierarchies with Controllers, Services, and Repositories, Nano uses **static event listeners** that react to events in a functional, stateless manner.
+
+## Core Philosophy
+- **Static Methods, Not Objects**: Business logic lives in static methods, not service objects
+- **Event-Driven Communication**: Everything communicates through events, not direct method calls
+- **Universal Services**: Services are generic connectors for external systems (databases, HTTP, queues) - no business logic
+- **TypeMap Everywhere**: Built-in type conversion and data transformation using TypeMap
+- **Global Error Handling**: Even errors are events that can be subscribed to and handled globally
+
+## Key Components
+
+### 1. Context - The Central Hub
+The Context object provides access to all core functionality:
+- **TypeMap Integration**: Automatic type conversion for JSON, XML, and any data format
+- **Built-in Logging**: No setup required - logging is automatically available
+- **Event Management**: Send and subscribe to events throughout your application
+- **Configuration**: Access all configuration values with type conversion
+- **Scheduling**: Run tasks and scheduled operations
+
+```java
+// Context usage examples
+final Context context = event.context();
+final int port = context.asInt("app_service_http_port", 8080);
+final String dbUrl = context.asString("app_config_database_url");
+context.info(() -> "Processing request on port {}", port);
+```
+
+### 2. Events - The Heart of Communication
+Events are the primary communication mechanism in Nano:
+- **Synchronous/Asynchronous**: Events can be sent sync or async
+- **Single Cast/Broadcast**: Send to one listener or broadcast to all
+- **Request-Response**: Get responses from event handlers
+- **Error Events**: Even errors are events that can be subscribed to
+
+```java
+// Event sending examples
+context.newEvent(EVENT_USER_CREATED)
+    .payload(Map.of("userId", 123, "name", "John Doe"))
+    .send();
+
+// Request-response pattern
+final Event<TypeMap, TypeMap> response = context.newEvent(EVENT_DATABASE_QUERY)
+    .payload(Map.of("query", "SELECT * FROM users WHERE id = ?", "params", Map.of("id", userId)))
+    .send();
+final TypeMap userData = response.response();
+```
+
+### 3. Services - Universal Connectors
+Services are pure infrastructure adapters with no business logic:
+- **Required Methods**: `start()`, `stop()`, `onEvent()`, `configure()`, `onFailure()`
+- **Event-Driven**: Services react to events, not direct method calls
+- **No Business Logic**: Only handle external integrations (database, HTTP, queues)
+- **Dynamic Configuration**: Can adapt to configuration changes on the fly
+
+```java
+public class DatabaseService extends Service {
+    @Override
+    public void onEvent(Event<?, ?> event) {
+        if (event.isEvent(EVENT_DATABASE_QUERY)) {
+            final TypeMap queryData = event.payloadAsMap();
+            // Execute database operation
+            event.reply(results);
+        }
+    }
+}
+```
+
+### 4. Schedulers - Background Task Management
+Nano provides powerful scheduling capabilities:
+- **Delayed Execution**: Run tasks after a specified delay
+- **Periodic Execution**: Run tasks repeatedly with fixed intervals
+- **Daily Execution**: Run tasks daily at specific times
+- **Weekly Execution**: Run tasks weekly on specific days and times
+
+```java
+// Scheduler examples
+context.run(() -> context.info(() -> "Task executed"), 5, TimeUnit.SECONDS);
+context.runDaily(() -> context.info(() -> "Daily backup"), LocalTime.of(2, 0, 0));
+context.runWeekly(() -> context.info(() -> "Weekly report"), DayOfWeek.MONDAY, LocalTime.of(9, 0, 0));
+```
+
+## Static Event Handling Pattern
+
+### Traditional Spring Boot vs Nano
+
+**❌ Traditional Spring Boot:**
+```java
+@RestController
+public class UserController {
+    @Autowired
+    private UserService userService;
+    
+    @PostMapping("/users")
+    public ResponseEntity<User> createUser(@RequestBody UserDto dto) {
+        return ResponseEntity.ok(userService.createUser(dto));
+    }
+}
+```
+
+**✅ Nano Approach:**
+```java
+public class UserController {
+    public static void handleCreateUser(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/users"))
+            .ifPresent(req -> {
+                final TypeMap userData = req.bodyAsJson().asMap();
+                event.context().sendEvent(EVENT_CREATE_USER, userData);
+                req.createResponse().statusCode(201).respond(event);
+            });
+    }
+}
+```
+
+## TypeMap - Data Handling Without DTOs
+
+TypeMap eliminates the need for custom DTOs and complex object mapping:
+
+```java
+// No DTOs needed - direct TypeMap usage
+final TypeMap userData = req.bodyAsJson().asMap();
+final String name = userData.asString("name");
+final int age = userData.asInt("age", 0); // with default value
+final boolean isActive = userData.asBoolean("isActive", false);
+final List<String> roles = userData.asList(String.class, "roles");
+```
+
+## Event-Driven Architecture Patterns
+
+### 1. Request-Response Pattern
+```java
+// Send event and wait for response
+final Event<TypeMap, TypeMap> response = context.newEvent(EVENT_DATABASE_QUERY)
+    .payload(Map.of("query", "SELECT * FROM users WHERE id = ?", "params", Map.of("id", userId)))
+    .send();
+final TypeMap userData = response.response();
+```
+
+### 2. Broadcast Pattern
+```java
+// Broadcast to multiple listeners
+context.broadcastEvent(EVENT_USER_UPDATED, Map.of(
+    "userId", 123,
+    "changes", Map.of("email", "new@example.com")
+));
+```
+
+### 3. Event Chaining
+```java
+// Chain multiple events
+context.newEvent(EVENT_VALIDATE_USER)
+    .payload(userData)
+    .async(validationResponse -> {
+        if (validationResponse.error() == null) {
+            context.newEvent(EVENT_CREATE_USER)
+                .payload(userData)
+                .async(createResponse -> {
+                    // Handle creation response
+                })
+                .send();
+        }
+    })
+    .send();
+```
+
+## Service Communication Patterns
+
+### Database Service Example
+```java
+public class DatabaseService extends Service {
+    @Override
+    public void onEvent(Event<?, ?> event) {
+        if (event.isEvent(EVENT_DATABASE_QUERY)) {
+            final TypeMap queryData = event.payloadAsMap();
+            final String sql = queryData.asString("query");
+            final TypeMap params = queryData.asMap("params");
+            
+            try {
+                final List<TypeMap> results = executeQuery(sql, params);
+                event.reply(results);
+            } catch (Exception e) {
+                event.error(e);
+            }
+        }
+    }
+}
+```
+
+### Email Service Example
+```java
+public class EmailService extends Service {
+    @Override
+    public void onEvent(Event<?, ?> event) {
+        if (event.isEvent(EVENT_SEND_EMAIL)) {
+            final TypeMap emailData = event.payloadAsMap();
+            final String to = emailData.asString("to");
+            final String subject = emailData.asString("subject");
+            final String body = emailData.asString("body");
+            
+            try {
+                smtpClient.sendEmail(to, subject, body);
+                event.reply(Map.of("success", true, "messageId", UUID.randomUUID().toString()));
+            } catch (Exception e) {
+                event.error(e);
+            }
+        }
+    }
+}
+```
+
+## Error Handling
+
+### Global Error Handling
+```java
+// Subscribe to error events
+context.subscribeError(EVENT_HTTP_REQUEST, event -> {
+    context.error(() -> "HTTP request failed: {}", event.error().getMessage());
+    event.payload().createResponse()
+        .statusCode(500)
+        .body(Map.of("error", "Internal server error"))
+        .respond(event);
+});
+```
+
+### Service Error Handling
+```java
+@Override
+public Object onFailure(Event<?, ?> error) {
+    context.error(() -> "Service {} failed: {}", name(), error.error().getMessage());
+    
+    // Implement retry logic
+    if (shouldRetry(error)) {
+        context.run(() -> restart(), 5, TimeUnit.SECONDS);
+    }
+    
+    return Map.of("retry", shouldRetry(error), "error", error.error().getMessage());
+}
+```
+
+## Configuration Management
+
+### Accessing Configuration
+```java
+// Basic configuration access
+final int port = context.asInt("app_service_http_port", 8080);
+final String dbUrl = context.asString("app_config_database_url");
+final boolean enableCaching = context.asBoolean("app_config_enable_caching", true);
+final List<String> allowedOrigins = context.asList(String.class, "app_cors_allowed_origins");
+```
+
+### Dynamic Configuration Updates
+```java
+@Override
+public void configure(TypeMapI<?> changes, TypeMapI<?> merged) {
+    if (changes.containsKey("app_config_database_url")) {
+        final String newUrl = merged.asString("app_config_database_url");
+        context.info(() -> "Database URL updated to: {}", newUrl);
+        restart();
+    }
+}
+```
+
+## Common Patterns and Best Practices
+
+### 1. Static Method Organization
+```java
+public class UserController {
+    // Static methods for business logic
+    public static void handleUserRegistration(Event<HttpObject, HttpObject> event) {
+        // Business logic here
+    }
+    
+    public static void handleUserLogin(Event<HttpObject, HttpObject> event) {
+        // Business logic here
+    }
+}
+```
+
+### 2. Event Registration
+```java
+public static void main(String[] args) {
+    final Nano nano = new Nano(args, new HttpServer());
+    
+    // Register static event listeners
+    nano.subscribeEvent(EVENT_HTTP_REQUEST, UserController::handleUserRegistration);
+    nano.subscribeEvent(EVENT_HTTP_REQUEST, UserController::handleUserLogin);
+    
+    // Global error handling
+    nano.subscribeError(EVENT_HTTP_REQUEST, UserController::handleError);
+}
+```
+
+### 3. Middleware Pattern
+```java
+// CORS middleware
+public static void handleCors(Event<HttpObject, HttpObject> event) {
+    event.payloadOpt()
+        .filter(HttpObject::isMethodOptions)
+        .ifPresent(req -> req.createCorsResponse().respond(event));
+}
+
+// Authentication middleware
+public static void handleAuth(Event<HttpObject, HttpObject> event) {
+    event.payloadOpt()
+        .filter(req -> req.pathMatch("/api/**"))
+        .filter(req -> !req.pathMatch("/api/auth/**"))
+        .ifPresent(req -> {
+            final String token = req.authToken();
+            if (!isValidToken(token)) {
+                req.createCorsResponse().failure(401, "Authentication required", null).respond(event);
+            }
+        });
+}
+```
+
+## Key Differences from Traditional Frameworks
+
+1. **No Annotations**: Everything is explicit and visible - no `@Controller`, `@Service`, `@Autowired`
+2. **No Dependency Injection**: Services communicate through events, not direct calls
+3. **No Complex Configuration**: Simple property-based setup through Context
+4. **Static Methods**: Business logic in static methods, not service objects
+5. **Universal Services**: Services are pure infrastructure connectors - no business logic
+6. **Event-Driven**: Everything flows through events - HTTP requests, database operations, errors
+7. **TypeMap Everywhere**: Automatic type conversion eliminates the need for DTOs and mappers
+
+## When to Use Nano
+
+- **Microservices**: Perfect for building lightweight, event-driven microservices
+- **API Development**: Great for REST APIs with clean, functional code
+- **Real-time Applications**: Event-driven architecture supports real-time features
+- **High Performance**: Minimal overhead and efficient resource usage
+- **GraalVM Native**: Can be compiled to native executables
+- **Testing**: Easy to test with fake services and event listeners
+
+## Common Mistakes to Avoid
+
+1. **Don't put business logic in services** - Services should only handle external integrations
+2. **Don't create service objects for business logic** - Use static methods instead
+3. **Don't ignore error handling** - Subscribe to error events for proper error management
+4. **Don't forget to acknowledge events** - Use `event.acknowledge()` when needed
+5. **Don't mix concerns** - Keep business logic in static methods, infrastructure in services
+
+## Resources
+
+- **GitHub**: https://github.com/nanonative/nano
+- **Documentation**: See docs/ folder for detailed guides
+- **Examples**: Check src/test/java/org/nanonative/nano/examples/ for working examples
+- **TypeMap**: https://github.com/YunaBraska/type-map for data handling details
+
+## Quick Start Template
+
+```java
+public class MyApp {
+    public static void main(String[] args) {
+        // Start Nano with services
+        final Nano nano = new Nano(args, new HttpServer(), new DatabaseService());
+        
+        // Register event listeners
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, MyController::handleRequest);
+        
+        // Global error handling
+        nano.subscribeError(EVENT_HTTP_REQUEST, MyController::handleError);
+    }
+}
+
+public class MyController {
+    public static void handleRequest(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/api/data"))
+            .ifPresent(req -> {
+                final TypeMap data = req.bodyAsJson().asMap();
+                // Process data
+                req.createResponse().statusCode(200).respond(event);
+            });
+    }
+    
+    public static void handleError(Event<?, ?> event) {
+        // Handle errors
+    }
+}
+```
+
+Remember: Nano is about **events, not objects**. Think functionally, use static methods for business logic, and let services handle external integrations only.

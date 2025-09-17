@@ -6,11 +6,14 @@ Welcome to Nano! This guide will help you understand Nano's philosophy and get y
 
 ## 🎯 What is Nano?
 
-Nano is a **lightweight, event-driven microservice framework** that helps you write clean, functional Java applications. Think of it as a minimal alternative to Spring Boot that focuses on:
+Nano is a **lightweight approach to microservice development** that breaks away from traditional OOP patterns. Instead of creating complex object hierarchies with Controllers, Services, and Repositories, Nano uses **static event listeners** that react to events in a functional, stateless manner.
 
-- **Simplicity**: No annotations, no magic, just plain Java
-- **Performance**: Built for GraalVM native compilation and virtual threads
-- **Flexibility**: Event-driven architecture that scales naturally
+**Key Philosophy:**
+- **Static Methods, Not Objects**: Business logic lives in static methods, not service objects
+- **Event-Driven Communication**: Everything communicates through events, not direct method calls
+- **Universal Services**: Services are generic connectors for external systems (databases, HTTP, queues) - no business logic
+- **TypeMap Everywhere**: Built-in type conversion and data transformation using TypeMap
+- **Global Error Handling**: Even errors are events that can be subscribed to and handled globally
 
 ## 🚀 Your First Nano Application
 
@@ -36,19 +39,35 @@ public class UserRegistrationApp {
 
 ## 🏗️ Nano's Architecture Philosophy
 
-### Services vs Controllers vs Static Methods
+### The Nano Way: Static Methods + Events + Universal Services
 
-In Nano, you don't need complex object hierarchies. Here's how to think about organizing your code:
+Nano fundamentally changes how you think about application architecture. Instead of complex object hierarchies, you use:
+
+1. **Static Methods for Business Logic** - No service objects needed
+2. **Events for Communication** - Everything flows through events
+3. **Universal Services for Infrastructure** - Services handle external systems only
 
 **❌ Traditional Spring-style approach:**
 ```java
+@RestController
+public class UserController {
+    @Autowired
+    private UserService userService;
+    
+    @PostMapping("/users")
+    public ResponseEntity<User> createUser(@RequestBody UserDto dto) {
+        return ResponseEntity.ok(userService.createUser(dto));
+    }
+}
+
 @Service
 public class UserService {
     @Autowired
     private UserRepository repository;
     
     public User createUser(UserDto dto) {
-        // business logic mixed with infrastructure
+        // Business logic mixed with infrastructure concerns
+        return repository.save(new User(dto));
     }
 }
 ```
@@ -70,19 +89,33 @@ public class UserController {
                 final String password = body.asString("password");
                 
                 // Send to database service
-                event.context().sendEvent(EVENT_DATABASE_QUERY, 
-                    Map.of("query", "INSERT INTO users...", "params", body));
+                event.context().sendEvent(EVENT_DATABASE_QUERY, Map.of("query", "INSERT INTO users...", "params", body));
             });
+    }
+}
+
+// Database Service - Universal Connector for external systems
+public class DatabaseService extends Service {
+    @Override
+    public void onEvent(Event<?, ?> event) {
+        if (event.isEvent(EVENT_CREATE_USER)) {
+            // Pure infrastructure - no business logic here!
+            final TypeMap userData = event.payloadAsMap();
+            final User user = createUser(userData);
+            event.respond(user);
+        }
     }
 }
 ```
 
 ### Key Principles
 
-1. **Static Methods for Business Logic**: Keep your domain logic in static methods
-2. **Services for Infrastructure**: Use services for external systems (database, HTTP, etc.)
-3. **Events for Communication**: Services communicate through events, not direct calls
-4. **Context for Everything**: Access configuration, logging, and utilities through the context
+1. **Static Methods for Business Logic**: Keep your domain logic in static methods - no service objects needed!
+2. **Universal Services for Infrastructure**: Services handle external systems only (database, HTTP, queues) - no business logic
+3. **Event-Driven Communication**: Everything communicates through events - HTTP requests, database operations, errors
+4. **TypeMap for Data Handling**: Automatic type conversion for JSON, XML, and any data format - no DTOs needed
+5. **Context for Everything**: Access configuration, logging, and utilities through the context
+6. **Global Error Handling**: Subscribe to error events for centralized error management
 
 ## 📡 Event-Driven Communication
 
@@ -274,11 +307,14 @@ public class MyApp {
 
 ## 🎯 Key Takeaways
 
-1. **Think Functionally**: Use static methods for business logic, not classes with state
-2. **Events Connect Everything**: Services communicate through events, not direct method calls
-3. **Context is Your Friend**: Access configuration, logging, and utilities through the context
-4. **Keep It Simple**: Nano is designed to reduce complexity, not add it
-5. **Test Everything**: Since everything is functional, testing is straightforward
+1. **Think Events, Not Objects**: Use static methods for business logic, not service objects with state
+2. **Universal Services**: Services are pure infrastructure connectors - no business logic mixed in
+3. **TypeMap Everywhere**: Automatic type conversion eliminates the need for DTOs and mappers
+4. **Event-Driven Everything**: HTTP requests, database operations, errors - all flow through events
+5. **Context is Your Friend**: Access configuration, logging, and utilities through the context
+6. **Global Error Handling**: Subscribe to error events for centralized error management
+7. **Keep It Simple**: Nano is designed to reduce complexity, not add it
+8. **Test Everything**: Since everything is functional, testing is straightforward
 
 ## 🚀 Next Steps
 
