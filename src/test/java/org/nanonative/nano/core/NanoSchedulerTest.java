@@ -49,7 +49,7 @@ class NanoSchedulerTest {
             final CountDownLatch hit = new CountDownLatch(1);
             final DayOfWeek today = LocalDate.now().getDayOfWeek();
             final LocalTime in50ms = LocalTime.now().plusNanos(50_000_000);
-            nano.context(this.getClass()).runWeekly(hit::countDown, today, in50ms);
+            nano.context(this.getClass()).runWeekly(hit::countDown, in50ms, today);
             assertThat(hit.await(SHORT_AWAIT_MS, MILLISECONDS)).isTrue();
         } finally {
             nano.stop(getClass()).waitForStop();
@@ -63,7 +63,7 @@ class NanoSchedulerTest {
             final CountDownLatch hit = new CountDownLatch(1);
             final DayOfWeek today = LocalDate.now().getDayOfWeek();
             final LocalTime in50ms = LocalTime.now().plusNanos(50_000_000);
-            nano.context(this.getClass()).runWeekly(hit::countDown, today, in50ms);
+            nano.context(this.getClass()).runWeekly(hit::countDown, in50ms, today);
             assertThat(hit.await(SHORT_AWAIT_MS, MILLISECONDS)).isTrue();
         } finally {
             nano.stop(getClass()).waitForStop();
