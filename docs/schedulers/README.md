@@ -66,12 +66,12 @@ Run a task weekly on a specific day and time:
 // Run every Monday at 9:00 AM
 context.runWeekly(() -> {
     context.info(() -> "Weekly maintenance started");
-}, DayOfWeek.MONDAY, LocalTime.of(9, 0, 0));
+}, LocalTime.of(9, 0, 0), DayOfWeek.MONDAY);
 
 // Run every Friday at 5:00 PM with stop condition
 context.runWeekly(() -> {
     context.info(() -> "Weekly summary generated");
-}, DayOfWeek.FRIDAY, LocalTime.of(17, 0, 0), () -> shouldStopWeeklyReports());
+}, LocalTime.of(17, 0, 0), () -> shouldStopWeeklyReports(), DayOfWeek.FRIDAY);
 ```
 
 ### 5. Advanced Scheduling
