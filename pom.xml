@@ -33,7 +33,6 @@
 
     <properties>
         <!-- PROPERTIES -->
-
         <java-version>21</java-version>
         <project.encoding>UTF-8</project.encoding>
         <project.build.sourceEncoding>${project.encoding}</project.build.sourceEncoding>
@@ -45,7 +44,7 @@
         <!-- TEST -->
         <junit.version>5.13.4</junit.version>
         <assertj-core.version>3.27.4</assertj-core.version>
-        <junit-launcher.version>1.12.0</junit-launcher.version>
+        <junit-launcher.version>1.13.4</junit-launcher.version>
 
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
