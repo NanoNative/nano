@@ -25,6 +25,7 @@ import static java.util.Arrays.asList;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.stream.Collectors.joining;
+import static org.nanonative.nano.core.model.Context.APP_NANO_NAME;
 import static org.nanonative.nano.core.model.Context.APP_PARAMS;
 import static org.nanonative.nano.core.model.Context.CONFIG_ENV_PROD;
 import static org.nanonative.nano.core.model.Context.CONFIG_OOM_SHUTDOWN_THRESHOLD;
@@ -115,11 +116,12 @@ public class Nano extends NanoServices<Nano> {
             // java.lang.IllegalStateException: Shutdown in progress
             Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(context(this.getClass()))));
             startServicesAndLogger(startupServices);
+            context.computeIfAbsent(APP_NANO_NAME, k -> generateNanoName("%s%.0s%.0s%.0s"));
             run(() -> context, () -> context.newEvent(EVENT_APP_HEARTBEAT).async(true).send(), 256, 256, MILLISECONDS, () -> false);
             run(() -> context, System::gc, 5, 5, SECONDS, () -> false);
             final long readyTime = System.nanoTime() - service_startUpTime;
             printActiveProfiles();
-            context.info(() -> "Started [{}] in [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(readyTime));
+            context.info(() -> "Started [{}] in [{}]", context.asString(APP_NANO_NAME), NanoUtils.formatDuration(readyTime));
             printSystemInfo();
 
             context.newEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "application.started.time", initTime, null)).async(true).send();
@@ -355,7 +357,7 @@ public class Nano extends NanoServices<Nano> {
      */
     protected Nano shutdown(final Context context) {
         if (isReady.compareAndSet(true, false)) {
-            context.info(() -> "Stop {} ...", this.getClass().getSimpleName());
+            context.info(() -> "Stop {} ...", context.asString(APP_NANO_NAME));
             final int exitCode = context.asIntOpt("_app_exit_code").orElse(0);
             final boolean exitCodeAllowed = context.asBooleanOpt(CONFIG_ENV_PROD).orElse(false);
             gracefulShutdown(context);
@@ -403,7 +405,7 @@ public class Nano extends NanoServices<Nano> {
                 shutdownServices(this.context);
                 this.shutdownThreads();
                 listeners.clear();
-                context.info(() -> "Stopped [{}] in [{}] with uptime [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(System.nanoTime() - startTimeMs), NanoUtils.formatDuration(System.nanoTime() - createdAtNs));
+                context.info(() -> "Stopped [{}] in [{}] with uptime [{}]", context.asString(APP_NANO_NAME), NanoUtils.formatDuration(System.nanoTime() - startTimeMs), NanoUtils.formatDuration(System.nanoTime() - createdAtNs));
                 schedulers.clear();
             }, Nano.class.getSimpleName() + " Shutdown-Hook");
             sequence.start();

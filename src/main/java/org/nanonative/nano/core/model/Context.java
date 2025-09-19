@@ -53,6 +53,7 @@ public class Context extends ConcurrentTypeMap {
     public static final String CONTEXT_CLASS_KEY = "app_core_context_class";
     public static final String CONTEXT_NANO_KEY = "app_core_context_nano";
     public static final String CONTEXT_LOG_QUEUE_KEY = "app_core_context_log_queue";
+    public static final String APP_NANO_NAME = "app_nano_name";
 
     // Register configurations
     public static final String APP_HELP = ConfigRegister.registerConfig("help", "Lists available config keys");
@@ -567,8 +568,8 @@ public class Context extends ConcurrentTypeMap {
      * Executes a task daily at the specified wall-clock time in the server's
      * default time zone. Runs indefinitely.
      *
-     * @param task    the task to execute
-     * @param atTime  the daily wall-clock time (hour, minute, second)
+     * @param task   the task to execute
+     * @param atTime the daily wall-clock time (hour, minute, second)
      * @return self for chaining
      */
     public Context runDaily(final ExRunnable task, final LocalTime atTime) {
@@ -579,9 +580,9 @@ public class Context extends ConcurrentTypeMap {
      * Executes a task daily at the specified wall-clock time in the server's
      * default time zone until the stop condition returns {@code true}.
      *
-     * @param task    the task to execute
-     * @param atTime  the daily wall-clock time (hour, minute, second)
-     * @param until   stop condition; when {@code true}, cancels further runs
+     * @param task   the task to execute
+     * @param atTime the daily wall-clock time (hour, minute, second)
+     * @param until  stop condition; when {@code true}, cancels further runs
      * @return self for chaining
      */
     public Context runDaily(final ExRunnable task, final LocalTime atTime, final BooleanSupplier until) {
@@ -593,27 +594,28 @@ public class Context extends ConcurrentTypeMap {
      * Executes a task weekly at the given day of week and wall-clock time
      * in the server's default time zone. Runs indefinitely.
      *
-     * @param task    the task to execute
-     * @param dow     the day of the week
-     * @param atTime  the weekly wall-clock time (hour, minute, second)
+     * @param task   the task to execute
+     * @param dow    the day of the week
+     * @param atTime the weekly wall-clock time (hour, minute, second)
      * @return self for chaining
      */
-    public Context runWeekly(final ExRunnable task, final DayOfWeek dow, final LocalTime atTime) {
-        return runWeekly(task, dow, atTime, null);
+    public Context runWeekly(final ExRunnable task, final LocalTime atTime, final DayOfWeek... dow) {
+        return runWeekly(task, atTime, null, dow);
     }
 
     /**
      * Executes a task weekly at the given day of week and wall-clock time
      * in the server's default time zone until the stop condition returns {@code true}.
      *
-     * @param task    the task to execute
-     * @param dow     the day of the week
-     * @param atTime  the weekly wall-clock time (hour, minute, second)
-     * @param until   stop condition; when {@code true}, cancels further runs
+     * @param task   the task to execute
+     * @param dow    the day of the week
+     * @param atTime the weekly wall-clock time (hour, minute, second)
+     * @param until  stop condition; when {@code true}, cancels further runs
      * @return self for chaining
      */
-    public Context runWeekly(final ExRunnable task, final DayOfWeek dow, final LocalTime atTime, final BooleanSupplier until) {
-        run(task, atTime, dow, ZoneId.systemDefault(), until);
+    public Context runWeekly(final ExRunnable task, final LocalTime atTime, final BooleanSupplier until, final DayOfWeek... dow) {
+        for (DayOfWeek dayOfWeek : dow)
+            run(task, atTime, dayOfWeek, ZoneId.systemDefault(), until);
         return this;
     }
 
@@ -621,11 +623,11 @@ public class Context extends ConcurrentTypeMap {
      * Core scheduling method for daily or weekly execution at a fixed wall-clock time.
      * Uses {@link ZonedDateTime} in the given zone to account for daylight saving changes.
      *
-     * @param task    the task to execute
-     * @param atTime  the wall-clock time (hour, minute, second)
-     * @param dow     optional day of week; if {@code null}, runs every day
-     * @param zone    the time zone (usually {@link ZoneId#systemDefault()})
-     * @param until   stop condition; when {@code true}, cancels further runs
+     * @param task   the task to execute
+     * @param atTime the wall-clock time (hour, minute, second)
+     * @param dow    optional day of week; if {@code null}, runs every day
+     * @param zone   the time zone (usually {@link ZoneId#systemDefault()})
+     * @param until  stop condition; when {@code true}, cancels further runs
      * @return self for chaining
      */
     public Context run(final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone, final BooleanSupplier until) {
