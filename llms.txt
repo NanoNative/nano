@@ -79,7 +79,7 @@ Nano provides powerful scheduling capabilities:
 // Scheduler examples
 context.run(() -> context.info(() -> "Task executed"), 5, TimeUnit.SECONDS);
 context.runDaily(() -> context.info(() -> "Daily backup"), LocalTime.of(2, 0, 0));
-context.runWeekly(() -> context.info(() -> "Weekly report"), DayOfWeek.MONDAY, LocalTime.of(9, 0, 0));
+context.runWeekly(() -> context.info(() -> "Weekly report"), LocalTime.of(9, 0, 0), DayOfWeek.MONDAY);
 ```
 
 ## Static Event Handling Pattern

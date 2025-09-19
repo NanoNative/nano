@@ -56,7 +56,7 @@ context.runDaily(() -> {
 // Run daily at 2:30 PM with stop condition
 context.runDaily(() -> {
     context.info(() -> "Daily report generated");
-}, LocalTime.of(14, 30, 0), () -> shouldStopDailyReports());
+}, () -> shouldStopDailyReports(), LocalTime.of(14, 30, 0));
 ```
 
 ### 4. Weekly Execution

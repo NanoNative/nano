@@ -572,8 +572,8 @@ public class Context extends ConcurrentTypeMap {
      * @param atTime the daily wall-clock time (hour, minute, second)
      * @return self for chaining
      */
-    public Context runDaily(final ExRunnable task, final LocalTime atTime) {
-        return runDaily(task, atTime, null);
+    public Context runDaily(final ExRunnable task, final LocalTime... atTime) {
+        return runDaily(task, null, atTime);
     }
 
     /**
@@ -581,12 +581,13 @@ public class Context extends ConcurrentTypeMap {
      * default time zone until the stop condition returns {@code true}.
      *
      * @param task   the task to execute
-     * @param atTime the daily wall-clock time (hour, minute, second)
      * @param until  stop condition; when {@code true}, cancels further runs
+     * @param atTime the daily wall-clock time (hour, minute, second)
      * @return self for chaining
      */
-    public Context runDaily(final ExRunnable task, final LocalTime atTime, final BooleanSupplier until) {
-        run(task, atTime, null, ZoneId.systemDefault(), until);
+    public Context runDaily(final ExRunnable task, final BooleanSupplier until, final LocalTime... atTime) {
+        for (LocalTime time : atTime)
+            run(task, time, null, ZoneId.systemDefault(), until);
         return this;
     }
 
@@ -609,8 +610,8 @@ public class Context extends ConcurrentTypeMap {
      *
      * @param task   the task to execute
      * @param dow    the day of the week
-     * @param atTime the weekly wall-clock time (hour, minute, second)
      * @param until  stop condition; when {@code true}, cancels further runs
+     * @param atTime the weekly wall-clock time (hour, minute, second)
      * @return self for chaining
      */
     public Context runWeekly(final ExRunnable task, final LocalTime atTime, final BooleanSupplier until, final DayOfWeek... dow) {
