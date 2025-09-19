@@ -161,6 +161,8 @@ jobs:
         id: "commit"
         run: |
           ./mvnw versions:set -DnewVersion="${{ steps.semver_info.outputs.clean_semver }}" -DgenerateBackupPoms=false -B -q
+          git config --global user.name 'Kira Bot'
+          git config --global user.email 'kira@noreply.github.com'
           git add .
           git commit -m "chore(⚕️): release [${{ steps.semver_info.outputs.clean_semver }}]"
           echo "latest_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
