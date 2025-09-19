@@ -18,11 +18,11 @@ public class HttpSend {
         final Context context = new Nano(args, new HttpServer()).context(HttpSend.class);
 
         // send request via event
-        final HttpObject response1 = context.sendEventR(EVENT_SEND_HTTP, () -> new HttpObject()
+        final HttpObject response1 = context.newEvent(EVENT_SEND_HTTP, () -> new HttpObject()
             .methodType(GET)
             .path("http://localhost:8080/hello")
             .body("Hello World")
-        ).response(HttpObject.class);
+        ).send().response();
 
         // send request via context
         final HttpObject response2 = new HttpObject()

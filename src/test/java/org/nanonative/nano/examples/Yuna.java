@@ -2,42 +2,53 @@ package org.nanonative.nano.examples;
 
 import org.junit.jupiter.api.Disabled;
 import org.nanonative.nano.core.Nano;
-import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.services.http.HttpServer;
-import org.nanonative.nano.services.http.model.HttpObject;
 
-import java.util.Date;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.logging.Level;
 
-import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
+import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_CERTS;
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
-import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Disabled
 public class Yuna {
 
-    public static void main(final String[] args) {
-        final Nano nano = new Nano(new HttpServer());
+    public static void main(final String[] args) throws Exception {
+        Path tempDirectory = Files.createTempDirectory("nano_test");
+        Path crt = Files.createTempFile(tempDirectory, "nano", ".crt");
+        Path key = Files.createTempFile(tempDirectory, "nano", ".key");
 
-        final Date myConfigValue = nano.context().asDate("unix-timestamp");
-        nano.context().info(() -> "Config value converted to date [{}]", myConfigValue);
+        final Nano nano = new Nano(Map.of(CONFIG_SERVICE_HTTPS_CERTS, tempDirectory), new HttpServer());
+        // CRT, KEY
+        // CRT, CA, KEY
+        // PEM
 
-        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
-            .filter(HttpObject::isMethodGet)
-            .filter(req -> req.pathMatch("/hello"))
-            .ifPresent(req -> req.corsResponse()
-                .statusCode(200)
-                .body(Map.of("Nano", "World"))
-                .respond(event))
-        );
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, (event, request) -> request.createCorsResponse().respond(event));
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadAck().createResponse().respond(event));
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadAck().respond(event, httpObject -> httpObject.statusCode(200)));
 
-        final Context context = nano.context(Yuna.class);
-        context.info(() -> "Hello World 1");
-        context.sendEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, Level.OFF));
-        context.info(() -> "Hello World 2");
-        nano.stop(context);
+
+//        System.exit(0);
+//
+//        final Date myConfigValue = nano.context().asDate("unix-timestamp");
+//        nano.context().info(() -> "Config value converted to date [{}]", myConfigValue);
+//
+//        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
+//            .filter(HttpObject::isMethodGet)
+//            .filter(req -> req.pathMatch("/hello"))
+//            .ifPresent(req -> req.corsResponse()
+//                .statusCode(200)
+//                .body(Map.of("Nano", "World"))
+//                .respond(event))
+//        );
+//
+//        final Context context = nano.context(Yuna.class);
+//        context.info(() -> "Hello World 1");
+//        context.sendEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, Level.OFF));
+//        context.info(() -> "Hello World 2");
+//        nano.stop(context);
 //
 //        // Nano with configuration
 //        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, LogLevel.INFO));
@@ -50,6 +61,7 @@ public class Yuna {
 //            .subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
 //                .filter(HttpObject::isMethodGet)
 //                .filter(request -> request.pathMatch("/hello"))
+
 //                .ifPresent(request -> request.response().body(System.getProperty("user.name")).send(event))
 //            );
 

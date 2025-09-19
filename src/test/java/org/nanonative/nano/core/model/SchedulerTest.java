@@ -12,7 +12,7 @@ class SchedulerTest {
         final Scheduler scheduler = new Scheduler("test");
         assertThat(scheduler).isNotNull();
         assertThat(scheduler.id()).isEqualTo("test");
-        assertThat(scheduler).hasToString("{\"id\":\"test\"}");
+        assertThat(scheduler).hasToString("{\"id\":\"test\",\"class\":\"Scheduler\"}");
     }
 
 }

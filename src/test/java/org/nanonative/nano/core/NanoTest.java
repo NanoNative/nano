@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -36,11 +35,10 @@ import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_PARENT_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_TRACE_ID_KEY;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SHUTDOWN;
-import static org.nanonative.nano.core.model.Context.EVENT_APP_UNHANDLED;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
-import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.model.TestService.TEST_EVENT;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 import static org.nanonative.nano.services.logging.model.LogLevel.INFO;
@@ -70,7 +68,7 @@ class NanoTest {
 
     @RepeatedTest(TEST_REPEAT)
     void stopViaEvent() {
-        final Context actual = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL)).context(this.getClass()).sendEvent(EVENT_APP_SHUTDOWN, () -> this);
+        final Context actual = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL)).context(this.getClass()).newEvent(EVENT_APP_SHUTDOWN).sendR();
         assertThat(actual).isNotNull();
         assertThat(actual.nano().stop(this.getClass()).waitForStop()).isNotNull().isEqualTo(actual.nano());
     }
@@ -91,16 +89,16 @@ class NanoTest {
         final CountDownLatch latch = new CountDownLatch(8);
 
         final Nano nano1 = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
         );
         final Nano nano2 = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, CONFIG_PARALLEL_SHUTDOWN, true),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+                new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
         );
         assertThat(nano1.stop(this.getClass())).isEqualTo(nano1);
         assertThat(nano2.stop(this.getClass())).isEqualTo(nano2);
@@ -129,7 +127,7 @@ class NanoTest {
     void constructorNoArgsTest() {
         final Nano nano = new Nano();
         assertThat(nano).isNotNull();
-        eventOf(nano.context, EVENT_CONFIG_CHANGE).payload(() -> Map.of(CONFIG_LOG_LEVEL, INFO)).send();
+        nano.context.newEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, INFO)).send();
         assertThat(nano.context.as(LogLevel.class, CONFIG_LOG_LEVEL)).isEqualTo(INFO);
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
@@ -139,7 +137,7 @@ class NanoTest {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
         assertThat(nano).isNotNull();
         assertThat(nano.context.as(LogLevel.class, CONFIG_LOG_LEVEL)).isEqualTo(TEST_LOG_LEVEL);
-        eventOf(nano.context, EVENT_CONFIG_CHANGE).payload(() -> Map.of(CONFIG_LOG_LEVEL, INFO)).broadcast(true).send();
+        nano.context.newEvent(EVENT_CONFIG_CHANGE, () -> Map.of(CONFIG_LOG_LEVEL, INFO)).broadcast(true).send();
         assertThat(nano.context.as(LogLevel.class, CONFIG_LOG_LEVEL)).isEqualTo(INFO);
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
@@ -189,40 +187,40 @@ class NanoTest {
         final Nano config = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, APP_PARAMS, true));
         assertThat(config).isNotNull();
         assertThat(config.toString()).contains(
-            "pid=",
-            "schedulers=", "services=", "listeners=",
-            "cores=", "usedMemory=",
-            "threadsNano=", "threadsActive=", "threadsOther=",
-            "java=", "arch=", "os="
+                "pid=",
+                "schedulers=", "services=", "listeners=",
+                "cores=", "usedMemory=",
+                "threadsNano=", "threadsActive=", "threadsOther=",
+                "java=", "arch=", "os="
         );
         assertThat(config.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
     @RepeatedTest(TEST_REPEAT)
     void sendEvent_Sync() throws InterruptedException {
-        final TestService service = new TestService().doOnEvent(event -> event.ifPresentAck(TEST_EVENT, evt -> {}));
+        final TestService service = new TestService().doOnEvent(event -> event.channel(TEST_EVENT).ifPresent(e -> e.respond(e.payload())));
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), service);
 
         // send to first service
         final CountDownLatch latch1 = new CountDownLatch(1);
-        nano.sendEvent(eventOf(nano.context(this.getClass()), TEST_EVENT).payload(() -> 11111111).async(response -> latch1.countDown()));
-        assertThat(service.getEvent(TEST_EVENT, event -> event.payload(Integer.class) == 11111111)).isNotNull();
+        nano.context(this.getClass()).newEvent(TEST_EVENT, () -> 11111111).async(response -> latch1.countDown()).send();
+        assertThat(service.getEvent(TEST_EVENT, event -> event.payloadOpt().filter(Integer.class::isInstance).map(Integer.class::cast).map(i -> i.equals(11111111)).isPresent())).isNotNull();
         assertThat(latch1.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
 
         // send to first listener (listeners have priority)
         service.resetEvents();
         final CountDownLatch latch2 = new CountDownLatch(1);
-        nano.subscribeEvent(TEST_EVENT, Event::acknowledge);
-        eventOf(nano.context(this.getClass()), TEST_EVENT).payload(() -> 22222222).async(response -> latch2.countDown()).send();
+        nano.subscribeEvent(TEST_EVENT, e -> e.acknowledge());
+        nano.context(this.getClass()).newEvent(TEST_EVENT, () -> 22222222).async(response -> latch2.countDown()).send();
         assertThat(latch2.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         assertThatThrownBy(() -> service.getEvent(TEST_EVENT, 64)).isInstanceOf(AssertionError.class);
 
         // send to all (listener and services)
         service.resetEvents();
         final CountDownLatch latch3 = new CountDownLatch(1);
-        eventOf(nano.context(this.getClass()), TEST_EVENT).payload(() -> 33333333).async(response -> latch3.countDown()).broadcast(true).send();
+        nano.context(this.getClass()).newEvent(TEST_EVENT, () -> 33333333).async(response -> latch3.countDown()).broadcast(true).send();
         assertThat(latch3.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
-        assertThat(service.getEvent(TEST_EVENT, event -> event.payload(Integer.class) == 33333333)).isNotNull();
+        assertThat(service.getEvent(TEST_EVENT, event -> ((Integer) 33333333).equals(event.payloadAck()))).isNotNull();
 
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
@@ -233,15 +231,15 @@ class NanoTest {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, LogLevel.OFF), service);
 
         service.doOnEvent(event -> {
-            if (event.channelId() == TEST_EVENT)
+            if (event.channel(TEST_EVENT).isPresent())
                 throw new RuntimeException("Nothing to see here, just a test exception");
         });
 
         final Context context = nano.contextEmpty(this.getClass());
         assertThat(context).hasSize(4).containsKeys(CONTEXT_NANO_KEY, CONTEXT_TRACE_ID_KEY, CONTEXT_CLASS_KEY, CONTEXT_PARENT_KEY);
 
-        nano.sendEvent(eventOf(context, TEST_EVENT).payload(() -> 44444444).async(true));
-        assertThat(service.getEvent(EVENT_APP_UNHANDLED, event -> event.payload(Integer.class) != null && event.payload(Integer.class) == 44444444)).isNotNull();
+        context.newEvent(TEST_EVENT, () -> 44444444).async(true).send();
+        assertThat(service.getEvent(EVENT_APP_ERROR, event -> event.channel(TEST_EVENT).get().payload().equals(44444444))).isNotNull();
         assertThat(service.startCount()).isEqualTo(1);
         assertThat(service.stopCount()).isZero();
         assertThat(service.failures()).isNotEmpty();
@@ -255,18 +253,19 @@ class NanoTest {
     @RepeatedTest(TEST_REPEAT)
     void addAndRemoveEventListener() {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
-        final Consumer<Event> listener = event -> {};
+        final Consumer<Event<Object, Object>> listener = event -> {};
 
-        assertThat(nano.listeners().get(TEST_EVENT)).isNull();
+        assertThat(nano.listeners().get(TEST_EVENT.id())).isNull();
         nano.subscribeEvent(TEST_EVENT, listener);
-        assertThat(nano.listeners().get(TEST_EVENT)).hasSize(1);
-        nano.unsubscribeEvent(TEST_EVENT, listener);
-        assertThat(nano.listeners().get(TEST_EVENT)).isEmpty();
+        assertThat(nano.listeners().get(TEST_EVENT.id())).hasSize(1);
+        nano.unsubscribeEvent(TEST_EVENT.id(), listener);
+        assertThat(nano.listeners().get(TEST_EVENT.id())).isEmpty();
 
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(32) // custom repeats as they are time heavy tests
+    @RepeatedTest(32)
+        // custom repeats as they are time heavy tests
     void runSchedulers() throws InterruptedException {
         final long timer = 64;
         final CountDownLatch scheduler1Triggered = new CountDownLatch(1);
@@ -281,32 +280,37 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(32) // custom repeats as they are time heavy tests
+    @RepeatedTest(32) // still time-heavy, but quick per run
     void schedulerRunDayOfWeek() throws InterruptedException {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
+        try {
+            final DayOfWeek today = LocalDateTime.now().getDayOfWeek();
 
-        // Schedule next time
-        final AtomicBoolean scheduled = new AtomicBoolean(false);
-        nano.run(
-            null,
-            () -> scheduled.set(true),
-            LocalTime.now().minusHours(1),
-            LocalDateTime.now().getDayOfWeek(),
-            () -> false
-        );
-        Thread.sleep(24);
-        assertThat(scheduled.get()).isFalse();
+            // 1) Past time today => should NOT run now (next occurrence is next week)
+            final CountDownLatch shouldNotFire = new CountDownLatch(1);
+            nano.run(
+                    nano::context,
+                    shouldNotFire::countDown,
+                    LocalTime.now().minusHours(1), // past
+                    today,
+                    () -> false
+            );
+            // Give a short window; it must NOT fire
+            assertThat(shouldNotFire.await(120, MILLISECONDS)).isFalse();
 
-        // Schedule now
-        final CountDownLatch latch = new CountDownLatch(1);
-        nano.run(
-            null,
-            latch::countDown,
-            LocalTime.now().plusNanos(64 * 1000),
-            LocalDateTime.now().getDayOfWeek(),
-            () -> false
-        );
-        assertThat(latch.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
+            // 2) Near-future time today => should run once, soon
+            final CountDownLatch shouldFire = new CountDownLatch(1);
+            nano.run(
+                    nano::context,
+                    shouldFire::countDown,
+                    LocalTime.now().plusNanos(50_000_000), // ~50ms
+                    today,
+                    () -> false
+            );
+            assertThat(shouldFire.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
+        } finally {
+            nano.stop(this.getClass()).waitForStop();
+        }
     }
 
     @RepeatedTest(TEST_REPEAT)
@@ -327,13 +331,13 @@ class NanoTest {
         }, timer, timer * 2, MILLISECONDS, () -> false);
 
         assertThat(trigger.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
-        assertThat(service.getEvent(EVENT_APP_UNHANDLED, event -> event.payload() != null)).isNotNull();
+        assertThat(service.getEvent(EVENT_APP_ERROR, event -> event.payload() != null)).isNotNull();
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
     @RepeatedTest(TEST_REPEAT)
     void errorHandlerTest() {
-        final TestService service = new TestService().doOnEvent(event -> event.ifPresentAck(TEST_EVENT, evt -> {}));
+        final TestService service = new TestService().doOnEvent(event -> event.channel(TEST_EVENT).ifPresent(e -> e.respond(true)));
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), service);
 
         // Execution with error
@@ -341,7 +345,7 @@ class NanoTest {
             throw new RuntimeException("Nothing to see here, just a test exception");
         });
 
-        assertThat(service.getEvent(EVENT_APP_UNHANDLED)).isNotNull();
+        assertThat(service.getEvent(EVENT_APP_ERROR)).isNotNull();
         service.resetEvents();
 
         // Event with error
@@ -350,9 +354,9 @@ class NanoTest {
         });
 
         // Trigger error
-        nano.context(NanoTest.class).sendEvent(TEST_EVENT, () -> "test");
+        nano.context(NanoTest.class).newEvent(TEST_EVENT, () -> "test").send();
 
-        assertThat(service.getEvent(EVENT_APP_UNHANDLED)).isNotNull();
+        assertThat(service.getEvent(EVENT_APP_ERROR)).isNotNull();
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 

@@ -3,10 +3,11 @@ package org.nanonative.nano.model;
 import berlin.yuna.typemap.model.TypeMapI;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Service;
-import org.nanonative.nano.helper.event.EventChannelRegister;
+import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,43 +25,45 @@ public class TestService extends Service {
 
     private final AtomicInteger startCount = new AtomicInteger(0);
     private final AtomicInteger stopCount = new AtomicInteger(0);
-    private final List<Event> failures = new CopyOnWriteArrayList<>();
-    private final List<Event> events = new CopyOnWriteArrayList<>();
-    private final AtomicReference<Consumer<Event>> doOnEvent = new AtomicReference<>();
-    private final AtomicReference<Consumer<Event>> failureConsumer = new AtomicReference<>();
+    private final List<Event<?, ?>> failures = new CopyOnWriteArrayList<>();
+    private final List<Event<?, ?>> events = new CopyOnWriteArrayList<>();
+    private final AtomicReference<Consumer<Event<?, ?>>> doOnEvent = new AtomicReference<>();
+    private final AtomicReference<Consumer<Event<?, ?>>> failureConsumer = new AtomicReference<>();
     private final AtomicReference<Consumer<Context>> startConsumer = new AtomicReference<>();
     private final AtomicReference<Consumer<Context>> stopConsumer = new AtomicReference<>();
     private long startTime = System.currentTimeMillis();
-    public static int TEST_EVENT = EventChannelRegister.registerChannelId("TEST_EVENT");
+    public static Channel<Object, Object> TEST_EVENT = Channel.registerChannelId("TEST_EVENT", Object.class, Object.class);
 
     public TestService resetEvents() {
         events.clear();
         return this;
     }
 
-    public List<Event> events(final int channelId) {
-        getEvent(channelId);
-        return events.stream().filter(event -> event.channelId() == channelId).toList();
+    public <C, R> List<Event<C, R>> events(final Channel<C, R> channel) {
+        getEvent(channel);
+        return events.stream().map(event -> event.channel(channel)).filter(Optional::isPresent).map(Optional::get).toList();
     }
 
-    public Event getEvent(final int channelId) {
-        return getEvent(channelId, null, 2000);
+    public <C, R> Event<C, R> getEvent(final Channel<C, R> channel) {
+        return getEvent(channel, null, 2000);
     }
 
-    public Event getEvent(final int channelId, final Function<Event, Boolean> condition) {
-        return getEvent(channelId, condition, TEST_TIMEOUT);
+    public <C, R> Event<C, R> getEvent(final Channel<C, R> channel, final Function<Event<C, R>, Boolean> condition) {
+        return getEvent(channel, condition, TEST_TIMEOUT);
     }
 
-    public Event getEvent(final int channelId, final long timeoutMs) {
-        return getEvent(channelId, null, timeoutMs);
+    public <C, R> Event<C, R> getEvent(final Channel<C, R> channel, final long timeoutMs) {
+        return getEvent(channel, null, timeoutMs);
     }
 
-    public Event getEvent(final int channelId, final Function<Event, Boolean> condition, final long timeoutMs) {
-        final AtomicReference<Event> result = new AtomicReference<>();
+    public <C, R> Event<C, R> getEvent(final Channel<C, R> channel, final Function<Event<C, R>, Boolean> condition, final long timeoutMs) {
+        final AtomicReference<Event<C, R>> result = new AtomicReference<>();
         waitForCondition(
             () -> {
-                final Event event1 = events.stream()
-                    .filter(event -> event.channelId() == channelId)
+                final Event<C, R> event1 = events.stream()
+                    .map(event -> event.channel(channel))
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
                     .filter(event -> condition != null ? condition.apply(event) : true)
                     .findFirst()
                     .orElse(null);
@@ -72,8 +75,8 @@ public class TestService extends Service {
         );
         if (result.get() == null)
             throw new AssertionError("Event not found"
-                + " channel [" + EventChannelRegister.eventNameOf(channelId) + "]"
-                + " events [" + lineSeparator() + events.stream().filter(event -> event.channelId() != EVENT_APP_HEARTBEAT).map(Event::toString).collect(Collectors.joining(lineSeparator())) + lineSeparator() + "]"
+                + " channel [" + channel.name() + "]"
+                + " events [" + lineSeparator() + events.stream().filter(event -> event.channel() != EVENT_APP_HEARTBEAT).map(Event::toString).collect(Collectors.joining(lineSeparator())) + lineSeparator() + "]"
             );
         return result.get();
     }
@@ -86,28 +89,28 @@ public class TestService extends Service {
         return stopCount.get();
     }
 
-    public List<Event> failures() {
+    public List<Event<?, ?>> failures() {
         return failures;
     }
 
-    public List<Event> events() {
+    public List<Event<?, ?>> events() {
         return events;
     }
 
-    public Consumer<Event> doOnEvent() {
+    public Consumer<Event<?, ?>> doOnEvent() {
         return doOnEvent.get();
     }
 
-    public TestService doOnEvent(final Consumer<Event> onEvent) {
+    public TestService doOnEvent(final Consumer<Event<?, ?>> onEvent) {
         this.doOnEvent.set(onEvent);
         return this;
     }
 
-    public Consumer<Event> doOnFailure() {
+    public Consumer<Event<?, ?>> doOnFailure() {
         return failureConsumer.get();
     }
 
-    public TestService doOnFailure(final Consumer<Event> onFailure) {
+    public TestService doOnFailure(final Consumer<Event<?, ?>> onFailure) {
         this.failureConsumer.set(onFailure);
         return this;
     }
@@ -151,14 +154,14 @@ public class TestService extends Service {
     }
 
     @Override
-    public Object onFailure(final Event error) {
+    public Object onFailure(final Event<?, ?> error) {
         failures.add(error);
         ofNullable(failureConsumer.get()).ifPresent(consumer -> consumer.accept(error));
         return null;
     }
 
     @Override
-    public void onEvent(final Event event) {
+    public void onEvent(final Event<?, ?> event) {
         events.add(event);
         ofNullable(doOnEvent.get()).ifPresent(consumer -> consumer.accept(event));
     }

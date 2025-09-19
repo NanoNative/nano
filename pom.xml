@@ -42,8 +42,9 @@
         <type-map.version>2025.09.2560708</type-map.version>
 
         <!-- TEST -->
-        <junit-jupiter-api.version>5.13.4</junit-jupiter-api.version>
+        <junit.version>5.13.4</junit.version>
         <assertj-core.version>3.27.5</assertj-core.version>
+        <junit-launcher.version>1.13.4</junit-launcher.version>
 
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
@@ -68,7 +69,19 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
-            <version>${junit-jupiter-api.version}</version>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <version>${junit-launcher.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -99,7 +112,9 @@
                     <threadCount>2</threadCount>
                     <useUnlimitedThreads>false</useUnlimitedThreads>
                     <!-- Flag to test exit code in NanoTest (https://stackoverflow.com/questions/76151072/error-during-sbt-launcher-java-lang-unsupportedoperationexception-the-security) -->
-                    <argLine>${argLine} -Djava.security.manager=allow</argLine>
+                    <argLine>${argLine} --add-exports java.base/sun.security.x509=ALL-UNNAMED --add-opens
+                        java.base/sun.security.x509=ALL-UNNAMED
+                    </argLine>
                     <!--                    <forkedProcessExitTimeoutInSeconds>240</forkedProcessExitTimeoutInSeconds>-->
                 </configuration>
             </plugin>

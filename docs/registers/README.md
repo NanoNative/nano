@@ -83,13 +83,13 @@ uses `TypeMap`, `TypeList` or `TypeInfo`. _See [TypeMap](https://github.com/Yuna
 import berlin.yuna.typemap.logic.TypeConverter;
 
 static {
-    // Register type conversion from String to LogLevel
+    // Register payload conversion from String to LogLevel
     registerTypeConvert(String.class, LogLevel.class, LogLevel::nanoLogLevelOf);
 
-    // Register type conversion from LogLevel to String
+    // Register payload conversion from LogLevel to String
     registerTypeConvert(LogLevel.class, String.class, Enum::name);
 
-    // Manual type conversion
+    // Manual payload conversion
     TypeConverter.convertObj("INFO", LogLevel.class);
 }
 ```

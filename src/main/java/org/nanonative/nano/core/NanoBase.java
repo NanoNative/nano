@@ -2,6 +2,7 @@ package org.nanonative.nano.core;
 
 import berlin.yuna.typemap.logic.ArgsDecoder;
 import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.logging.LogService;
 
@@ -9,13 +10,15 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.LinkedHashSet;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import java.util.logging.LogRecord;
 import java.util.stream.Collectors;
 
@@ -25,6 +28,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.INFO;
 import static org.nanonative.nano.core.model.Context.APP_HELP;
 import static org.nanonative.nano.core.model.Context.CONFIG_ENV_PROD;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.addConfig;
 import static org.nanonative.nano.helper.NanoUtils.readConfigFiles;
@@ -33,19 +37,19 @@ import static org.nanonative.nano.helper.NanoUtils.resolvePlaceHolders;
 /**
  * The abstract base class for {@link Nano} framework providing the core functionalities.
  *
- * @param <T> The type of the {@link NanoBase} implementation, used for method chaining.
+ * @param <T> The payload of the {@link NanoBase} implementation, used for method chaining.
  */
 @SuppressWarnings({"unused", "UnusedReturnValue", "java:S2386"})
 public abstract class NanoBase<T extends NanoBase<T>> {
 
     protected final Context context;
-    protected final long createdAtMs;
+    protected final long createdAtNs;
     protected final LogService logService;
-    protected final Map<Integer, Set<Consumer<Event>>> listeners = new ConcurrentHashMap<>();
+    protected final Map<Integer, Set<Consumer<? super Event<?, ?>>>> listeners = new ConcurrentHashMap<>();
     protected final AtomicBoolean isReady = new AtomicBoolean(true);
     protected final AtomicInteger eventCount = new AtomicInteger(0);
     @SuppressWarnings("java:S2386")
-    public static final Map<Integer, String> EVENT_TYPES = new ConcurrentHashMap<>();
+    public static final Map<Integer, Channel<?, ?>> EVENT_CHANNELS = new ConcurrentHashMap<>();
     public static final Map<String, String> CONFIG_KEYS = new ConcurrentHashMap<>();
     public static final AtomicInteger EVENT_ID_COUNTER = new AtomicInteger(0);
 
@@ -56,7 +60,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @param args    Command line arguments.
      */
     protected NanoBase(final Map<Object, Object> configs, final String... args) {
-        this.createdAtMs = System.currentTimeMillis();
+        this.createdAtNs = System.nanoTime();
         this.context = readConfigs(args);
         if (configs != null)
             configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(value).orElse("")));
@@ -66,7 +70,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         this.logService.start();
         this.logService.isReadyState().set(true);
         displayHelpMenu();
-        subscribeEvent(EVENT_CONFIG_CHANGE, event -> event.payloadOpt(Map.class).map(this::putAll).ifPresent(nano -> event.acknowledge()));
+        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.acknowledge().payload()));
     }
 
     /**
@@ -80,24 +84,19 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     /**
      * Sends an event to {@link Nano#listeners} and {@link Nano#services}.
      *
-     * @param event The {@link Event} object that encapsulates the event's context, type, and payload. use {@link Event#eventOf(Context, int)} or {@link Event#asyncEventOf(Context, int)}  to create an instance.
+     * @param event The {@link Event} object that encapsulates the event's context, payload, and payload. use {@link Context#newEvent(Channel, Supplier)} to create an instance.
      * @return Self for chaining
      */
-    abstract T sendEvent(final Event event);
+    abstract T sendEvent(final Event<?, ?> event);
 
     /**
      * Processes an event with the given parameters and decides on the execution path based on the presence of a response listener and the broadcast flag.
      * If a response listener is provided, the event is processed asynchronously; otherwise, it is processed in the current thread. This method creates an {@link Event} instance and triggers the appropriate event handling logic.
      *
-     * @param event The {@link Event} object that encapsulates the event's context, type, and payload. use {@link Event#eventOf(Context, int)} or {@link Event#asyncEventOf(Context, int)}  to create an instance.
+     * @param event The {@link Event} object that encapsulates the event's context, payload, and payload. use {@link Context#newEvent(Channel, Supplier)} to create an instance.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    abstract Event sendEventR(final Event event);
-
-    public NanoBase<T> putAll(final Map<?, ?> map) {
-        context.putAll(map);
-        return this;
-    }
+    abstract <C, R> Event<C, R> sendEventR(final Event<C, R> event);
 
     /**
      * Initiates the shutdown process for the {@link Nano} instance.
@@ -120,33 +119,79 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      *
      * @return A map of event types to their respective listeners.
      */
-    public Map<Integer, Set<Consumer<Event>>> listeners() {
+    public Map<Integer, Set<Consumer<? super Event<?, ?>>>> listeners() {
         return listeners;
     }
 
     /**
-     * Registers an event listener for a specific event type.
+     * Registers an event listener with a typed payload.
      *
-     * @param channelId The integer identifier of the event type.
-     * @param listener  The consumer function that processes the {@link Event}.
+     * @param channel  The channel to be subscribed.
+     * @param listener The bi-consumer to receive the {@link Event} and its payload.
+     * @param <C>      The payload
+     * @param <R>      The return payload
      * @return Self for chaining
      */
     @SuppressWarnings({"unchecked"})
-    public T subscribeEvent(final int channelId, final Consumer<Event> listener) {
-        listeners.computeIfAbsent(channelId, value -> new LinkedHashSet<>()).add(listener);
+    public <C, R> T subscribeEvent(final Channel<C, R> channel, final Consumer<? super Event<C, R>> listener) {
+        if (channel != null && listener != null)
+            listeners.computeIfAbsent(channel.id(), value -> ConcurrentHashMap.newKeySet()).add((Consumer<? super Event<?, ?>>) listener);
         return (T) this;
     }
 
     /**
-     * Removes a registered event listener for a specific event type.
+     * Registers an event listener with a typed payload.
      *
-     * @param channelId The integer identifier of the event type.
+     * @param channel  The channel to be subscribed.
+     * @param listener The bi-consumer to receive the {@link Event} and its payload.
+     * @param <C>      The payload
+     * @param <R>      The return payload
+     * @return A consumer function that can be used to unsubscribe the listener later.
+     */
+    @SuppressWarnings({"unchecked", "java:S116"})
+    public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<? super Event<C, R>, C> listener) {
+        final Consumer<? super Event<C, R>> wrapped = event ->
+                event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
+        listeners.computeIfAbsent(channel.id(), value -> ConcurrentHashMap.newKeySet()).add((Consumer<? super Event<?, ?>>) wrapped);
+        return (Consumer<Event<C, R>>) wrapped;
+    }
+
+    /**
+     * Registers for global error handling.
+     *
+     * @param channel  The channel which should be handled on error.
+     * @param listener The bi-consumer to receive the {@link Event} and its payload.
+     * @param <C>      The payload
+     * @param <R>      The return payload
+     * @return A consumer function that can be used to unsubscribe the listener later.
+     */
+    public <C, R> Consumer<Event<Object, Void>> subscribeError(final Channel<C, R> channel, final Consumer<Event<C, R>> listener) {
+        final Consumer<Event<Object, Void>> wrapped = event -> event.channel(channel).ifPresent(listener);
+        subscribeEvent(EVENT_APP_ERROR, wrapped);
+        return wrapped;
+    }
+
+    /**
+     * Registers for global error handling.
+     *
+     * @param listener The consumer to receive the {@link Event} and its payload.
+     * @return A consumer function that can be used to unsubscribe the listener later.
+     */
+    public <C, R> Consumer<Event<Object, Void>> subscribeError(final Consumer<Event<Object, Void>> listener) {
+        subscribeEvent(EVENT_APP_ERROR, listener);
+        return listener;
+    }
+
+    /**
+     * Removes a registered event listener for a specific event payload.
+     *
+     * @param channelId The integer identifier of the event payload.
      * @param listener  The consumer function to be removed.
      * @return Self for chaining
      */
     @SuppressWarnings({"unchecked"})
-    public T unsubscribeEvent(final int channelId, final Consumer<Event> listener) {
-        listeners.computeIfAbsent(channelId, value -> new LinkedHashSet<>()).remove(listener);
+    public <C, R> T unsubscribeEvent(final int channelId, final Consumer<Event<C, R>> listener) {
+        listeners.getOrDefault(channelId, Collections.emptySet()).remove(listener);
         return (T) this;
     }
 
@@ -185,7 +230,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @return The timestamp of creation in milliseconds.
      */
     public long createdAtMs() {
-        return createdAtMs;
+        return createdAtNs;
     }
 
     /**
@@ -197,6 +242,11 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         return isReady.get();
     }
 
+    /**
+     * Performs the eventCount operation.
+     *
+     * @return the result
+     */
     public int eventCount() {
         return eventCount.get();
     }
@@ -240,12 +290,12 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings("java:S3358") // Ternary operator should not be nested
     public static String standardiseKey(final Object key) {
         return key == null ? null : convertObj(key, String.class)
-            .replace('.', '_')
-            .replace('-', '_')
-            .replace('+', '_')
-            .replace(':', '_')
-            .trim()
-            .toLowerCase();
+                .replace('.', '_')
+                .replace('-', '_')
+                .replace('+', '_')
+                .replace(':', '_')
+                .trim()
+                .toLowerCase();
     }
 
 }

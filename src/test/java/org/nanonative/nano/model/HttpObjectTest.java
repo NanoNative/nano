@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpPrincipal;
 import org.junit.jupiter.api.Test;
+import org.nanonative.nano.core.Nano;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.http.model.HttpHeaders;
@@ -27,7 +28,6 @@ import java.util.Map;
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static java.util.Locale.ENGLISH;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_JSON;
 import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PDF;
@@ -56,19 +56,19 @@ class HttpObjectTest {
     @Test
     void browserRequestTest() {
         final HttpObject httpObject = new HttpObject()
-            .methodType(HttpMethod.GET)
-            .path("/notifications/indicator")
-            .header("Accept", "application/json")
-            .header("Accept-Encoding", "gzip, deflate")
-            .header("Accept-Language", "en-GB,en;q=0.9")
-            .header("Connection", "keep-alive")
-            .header("Host", "example.com")
-            .header("Referer", "https://example.com/test")
-            .header("Sec-Fetch-Dest", "empty")
-            .header("Sec-Fetch-Mode", "cors")
-            .header("Sec-Fetch-Site", "same-origin")
-            .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15")
-            .header("X-Requested-With", "XMLHttpRequest");
+                .methodType(HttpMethod.GET)
+                .path("/notifications/indicator")
+                .header("Accept", "application/json")
+                .header("Accept-Encoding", "gzip, deflate")
+                .header("Accept-Language", "en-GB,en;q=0.9")
+                .header("Connection", "keep-alive")
+                .header("Host", "example.com")
+                .header("Referer", "https://example.com/test")
+                .header("Sec-Fetch-Dest", "empty")
+                .header("Sec-Fetch-Mode", "cors")
+                .header("Sec-Fetch-Site", "same-origin")
+                .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15")
+                .header("X-Requested-With", "XMLHttpRequest");
         assertThat(httpObject.methodType()).isEqualTo(HttpMethod.GET);
         assertThat(httpObject.path()).isEqualTo("/notifications/indicator");
         assertThat(httpObject.accepts()).containsExactly(APPLICATION_JSON);
@@ -81,167 +81,167 @@ class HttpObjectTest {
     }
 
     @Test
-    void testRespondResponse() {
-        final Event event = eventOf(Context.createRootContext(HttpObjectTest.class), EVENT_HTTP_REQUEST).payload(() -> new HttpObject().methodType(HttpMethod.GET).path("/create"));
+    void testRespondCreateCreateResponse() {
+        final Event<HttpObject, HttpObject> event = Context.createRootContext(HttpObjectTest.class).newEvent(EVENT_HTTP_REQUEST).payload(() -> new HttpObject().methodType(HttpMethod.GET).path("/create"));
 
-        event.payloadOpt(HttpObject.class)
-            .filter(HttpObject::isMethodGet)
-            .filter(request -> request.pathMatch("/create"))
-            .ifPresent(request -> request.response().statusCode(201).body("success").respond(event));
+        event.payloadOpt()
+                .filter(HttpObject::isMethodGet)
+                .filter(request -> request.pathMatch("/create"))
+                .ifPresent(request -> request.createResponse().statusCode(201).body("success").respond(event));
 
-        assertThat(event.responseOpt(HttpObject.class)).isPresent();
-        assertThat(event.response(HttpObject.class).statusCode()).isEqualTo(201);
-        assertThat(event.response(HttpObject.class).bodyAsString()).isEqualTo("success");
+        assertThat(event.responseOpt()).isPresent();
+        assertThat(event.response().statusCode()).isEqualTo(201);
+        assertThat(event.response().bodyAsString()).isEqualTo("success");
     }
 
     @Test
-    void testCorsResponse() {
+    void testCorsCreateCreateResponse() {
         final HttpObject request = new HttpObject().header("origin", "aa.bb.cc");
 
         // DEFAULT
-        assertThat(new HttpObject().response(true).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
-            ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(new HttpObject().createResponse(true).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+                ACCESS_CONTROL_ALLOW_METHODS, "GET",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(new HttpObject().corsResponse().headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
-            ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(new HttpObject().createCorsResponse().headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+                ACCESS_CONTROL_ALLOW_METHODS, "GET",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(new HttpObject().header("host", "aa.bb.cc").response(true).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
-            ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(new HttpObject().header("host", "aa.bb.cc").createResponse(true).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+                ACCESS_CONTROL_ALLOW_METHODS, "GET",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(request.response(true).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
-            ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(request.createResponse(true).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+                ACCESS_CONTROL_ALLOW_METHODS, "GET",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
         // CUSTOM
-        assertThat(request.corsResponse("*").headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
-            ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("*").headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+                ACCESS_CONTROL_ALLOW_METHODS, "GET",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc").headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
-            ACCESS_CONTROL_ALLOW_METHODS, "GET",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("aa.bb.cc").headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+                ACCESS_CONTROL_ALLOW_METHODS, "GET",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF").headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF").headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "Content-Type, Accept, Authorization, X-Requested-With",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II").headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II").headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", -99).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "86400",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", -99).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "86400",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "99",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "99",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "99",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "99",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "99",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "99",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("*", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "99",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("*", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "99",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("*", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "*",
-            ACCESS_CONTROL_MAX_AGE, "99",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("*", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "*",
+                ACCESS_CONTROL_MAX_AGE, "99",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "99",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, true).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "true",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "99",
+                VARY, "Origin"
         ));
 
-        assertThat(request.corsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
-            ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
-            ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
-            ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
-            ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
-            ACCESS_CONTROL_MAX_AGE, "99",
-            VARY, "Origin"
+        assertThat(request.createCorsResponse("11.22.33, aa.bb.cc", "DD, EE, FF", "GG, HH, II", 99, false).headerMap()).containsAllEntriesOf(Map.of(
+                ACCESS_CONTROL_ALLOW_CREDENTIALS, "false",
+                ACCESS_CONTROL_ALLOW_HEADERS, "GG, HH, II",
+                ACCESS_CONTROL_ALLOW_METHODS, "DD, EE, FF",
+                ACCESS_CONTROL_ALLOW_ORIGIN, "aa.bb.cc",
+                ACCESS_CONTROL_MAX_AGE, "99",
+                VARY, "Origin"
         ));
     }
 
@@ -282,10 +282,10 @@ class HttpObjectTest {
     @Test
     void testBuilder() {
         final HttpObject httpObject = new HttpObject()
-            .methodType(HttpMethod.GET)
-            .path("/test")
-            .statusCode(-99)
-            .contentType(APPLICATION_JSON);
+                .methodType(HttpMethod.GET)
+                .path("/test")
+                .statusCode(-99)
+                .contentType(APPLICATION_JSON);
 
         assertThat(httpObject.methodType()).isEqualTo(HttpMethod.GET);
         assertThat(httpObject.path()).isEqualTo("/test");
@@ -301,8 +301,8 @@ class HttpObjectTest {
         headers.add("Accept", "application/json");
         final TypeMap typeMap = HttpObject.convertHeaders(headers);
         assertThat(typeMap)
-            .containsEntry("content-type", Collections.singletonList("application/json"))
-            .containsEntry("accept", Collections.singletonList("application/json"));
+                .containsEntry("content-type", Collections.singletonList("application/json"))
+                .containsEntry("accept", Collections.singletonList("application/json"));
     }
 
     @Test
@@ -447,6 +447,8 @@ class HttpObjectTest {
         assertThat(nullTest.bodyAsJson()).isEqualTo(new TypeList().addR(""));
         assertThat(nullTest.bodyAsXml()).isNotNull();
         assertThat(nullTest.bodyAsJson().asString("key")).isNull();
+        assertThat(nullTest.bodyAsMap().asString("key")).isNull();
+        assertThat(nullTest.bodyAsList().asString("key")).isNull();
 
         // Byte[] body
         final HttpObject byteTest = new HttpObject().body(bodyString.getBytes(Charset.defaultCharset()));
@@ -455,6 +457,8 @@ class HttpObjectTest {
         assertThat(byteTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(byteTest.bodyAsXml()).isNotNull();
         assertThat(byteTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // String body
         final HttpObject stringTest = new HttpObject().body(bodyString);
@@ -463,6 +467,8 @@ class HttpObjectTest {
         assertThat(stringTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(stringTest.bodyAsXml()).isNotNull();
         assertThat(stringTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // JSON body
         final HttpObject jsonTest = new HttpObject().body(bodyJson);
@@ -471,6 +477,8 @@ class HttpObjectTest {
         assertThat(jsonTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(jsonTest.bodyAsXml()).isNotNull();
         assertThat(jsonTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // HttpExchange body
         final HttpObject exchangeTest = new HttpObject(createMockHttpExchange("GET", "/test", new Headers(), bodyString));
@@ -479,6 +487,8 @@ class HttpObjectTest {
         assertThat(exchangeTest.bodyAsJson()).isEqualTo(bodyJson);
         assertThat(exchangeTest.bodyAsXml()).isNotNull();
         assertThat(exchangeTest.bodyAsJson().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsMap().asString("key")).isEqualTo("value");
+        assertThat(byteTest.bodyAsList().asString("key")).isNull();
 
         // General
         assertThat(new HttpObject().bodyAsJson()).isEqualTo(new TypeList().addR(""));
@@ -556,18 +566,18 @@ class HttpObjectTest {
 
         // set headers map
         final HttpObject httpObject2 = new HttpObject().headerMap(Map.of(
-            "Content-Type", "Application/Json, TexT/Plain",
-            "Accept", List.of(APPLICATION_PDF, APPLICATION_JSON.value()),
-            "myNumber", "123"
+                "Content-Type", "Application/Json, TexT/Plain",
+                "Accept", List.of(APPLICATION_PDF, APPLICATION_JSON.value()),
+                "myNumber", "123"
         ));
 
         // add headers
         final HttpObject httpObject3 = new HttpObject()
-            .header("Content-Type", "Application/Json, TexT/Plain")
-            .header("Accept", List.of(APPLICATION_PDF, APPLICATION_JSON.value()))
-            .header("myNumber", "123")
-            .header(null, "aa")
-            .header("bb", null);
+                .header("Content-Type", "Application/Json, TexT/Plain")
+                .header("Accept", List.of(APPLICATION_PDF, APPLICATION_JSON.value()))
+                .header("myNumber", "123")
+                .header(null, "aa")
+                .header("bb", null);
 
         for (final HttpObject httpObject : List.of(httpObject1, httpObject2, httpObject3)) {
             assertThat(httpObject.headerMap()).hasSize(3);
@@ -591,20 +601,20 @@ class HttpObjectTest {
     void testComputeHeaders() {
         final Map<String, List<String>> request = new HttpObject().computedHeaders(true);
         assertThat(request)
-            .containsEntry(ACCEPT_ENCODING, List.of("gzip, deflate"))
-            .containsEntry(ACCEPT, List.of(WILDCARD.value()))
-            .containsEntry(CACHE_CONTROL, List.of("no-cache"))
-            .containsEntry(CONTENT_TYPE, List.of(TEXT_PLAIN.value()))
-            .containsEntry(CONTENT_LENGTH, List.of("0"))
+                .containsEntry(ACCEPT_ENCODING, List.of("gzip, deflate"))
+                .containsEntry(ACCEPT, List.of(WILDCARD.value()))
+                .containsEntry(CACHE_CONTROL, List.of("no-cache"))
+                .containsEntry(CONTENT_TYPE, List.of(TEXT_PLAIN.value()))
+                .containsEntry(CONTENT_LENGTH, List.of("0"))
         ;
 
         final Map<String, List<String>> response = new HttpObject().computedHeaders(false);
         assertThat(response)
-            .doesNotContainKey(ACCEPT_ENCODING)
-            .doesNotContainKey(ACCEPT)
-            .containsEntry(CACHE_CONTROL, List.of("no-cache"))
-            .containsEntry(CONTENT_TYPE, List.of(TEXT_PLAIN.value()))
-            .containsEntry(CONTENT_LENGTH, List.of("0"))
+                .doesNotContainKey(ACCEPT_ENCODING)
+                .doesNotContainKey(ACCEPT)
+                .containsEntry(CACHE_CONTROL, List.of("no-cache"))
+                .containsEntry(CONTENT_TYPE, List.of(TEXT_PLAIN.value()))
+                .containsEntry(CONTENT_LENGTH, List.of("0"))
         ;
     }
 
@@ -699,14 +709,24 @@ class HttpObjectTest {
     }
 
     @Test
+    void testSendWithoutConsumer() {
+        final Nano nano = new Nano();
+        final HttpObject response = new HttpObject().send(nano.context());
+        assertThat(response).isNotNull();
+        assertThat(response.statusCode()).isEqualTo(-99);
+        assertThat(response.bodyAsString()).isEqualTo("Failed to send HTTP request - maybe no [HttpClient] was configured?");
+        nano.stop(this.getClass()).waitForStop();
+    }
+
+    @Test
     void testHashCode() {
         final HttpObject httpObject1 = new HttpObject();
         httpObject1.statusCode(200)
-            .body("Sample body".getBytes());
+                .body("Sample body".getBytes());
 
         final HttpObject httpObject2 = new HttpObject();
         httpObject2.statusCode(200)
-            .body("Sample body".getBytes());
+                .body("Sample body".getBytes());
 
         assertThat(httpObject1.hashCode()).doesNotHaveSameHashCodeAs(httpObject2.hashCode());
         assertThat(httpObject1.equals(httpObject2)).isFalse();
@@ -718,10 +738,10 @@ class HttpObjectTest {
     void testToString() {
         final HttpObject httpObject = new HttpObject();
         httpObject
-            .statusCode(200)
-            .methodType(HttpMethod.GET)
-            .path("/test")
-            .body("Sample body");
+                .statusCode(200)
+                .methodType(HttpMethod.GET)
+                .path("/test")
+                .body("Sample body");
 
         assertThat(httpObject).hasToString("HttpObject[statusCode=200, path=/test, method=GET, headers=null, body=Sample body]");
     }

@@ -27,17 +27,57 @@
 
 **Back to basics and forget about frameworks!**
 
-Nano is a lightweight concept which makes it easier for developer to write microservices in
-**functional, fluent, chaining, plain, modern java** with a nano footprint.
-Nano is also designed to be fully compilable with [GraalVM](https://www.graalvm.org) to create native executables.
-To enhance efficiency and performance, Nano utilizes non-blocking virtual threads from [Project Loom](https://jdk.java.net/loom/).
+Nano is a lightweight approach which makes it easier for developer to write microservices in
+**functional, fluent, chaining, plain, modern java** with a nano footprint. It breaks away from traditional OOP patterns. Instead of creating complex object hierarchies with Controllers, Services, and Repositories, Nano uses **static event listeners** that react to events in a functional, stateless manner.
+
+**Key Philosophy:**
+- **Static Methods, Not Objects**: Business logic lives in static methods, not in service objects
+- **Event-Driven Communication**: Everything communicates through events, not direct method calls
+- **Universal Services**: Services are generic connectors for external systems (databases, HTTP, queues) - no business logic
+- **TypeMap Everywhere**: Built-in type conversion and data transformation using TypeMap
+- **Global Error Handling**: Even errors are events that can be subscribed to and handled globally
+
+Nano is designed to be fully compilable with [GraalVM](https://www.graalvm.org) to create native executables and utilizes non-blocking virtual threads from [Project Loom](https://jdk.java.net/loom/) for maximum performance.
 
 ## 📐 Core Concept
 
-Nano handles threads for you and provides a basic construct for event driven architecture.
-It's providing a simple way to write microservices in a functional fluent and chaining style.
-**Objects are less needed** thanks to the underlying [TypeMap](https://github.com/YunaBraska/type-map).
-Nano provides full access to all internal components, resulting in very few private methods or fields.
+**Think Events, Not Objects!**
+
+Nano revolutionizes microservice development by eliminating the need for complex object hierarchies. Instead of creating Controllers, Services, and Repositories, you simply **listen to events** and react with static methods.
+
+**How It Works:**
+1. **Events Flow Through Everything**: HTTP requests, database operations, errors - all are events
+2. **Static Listeners React**: Your business logic lives in static methods that subscribe to events
+3. **Services Are Universal Connectors**: Services handle external integrations (HTTP, databases, queues) - no business logic
+4. **TypeMap Handles Data**: Automatic type conversion for JSON, XML, and any data format
+5. **Global Error Handling**: Subscribe to error events for centralized error management
+
+**Example - Traditional vs Nano:**
+```java
+// ❌ Traditional Spring Boot
+@RestController
+public class UserController {
+    @Autowired private UserService userService;
+    @PostMapping("/users")
+    public ResponseEntity<User> createUser(@RequestBody UserDto dto) {
+        return ResponseEntity.ok(userService.createUser(dto));
+    }
+}
+
+// ✅ Nano - Static Event Handling
+public class UserController {
+    public static void handleCreateUser(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/users"))
+            .ifPresent(req -> {
+                // Business logic here - no objects needed!
+                event.context().sendEvent(EVENT_CREATE_USER, req.bodyAsJson().asMap());
+                req.createResponse().statusCode(200).respond(event);
+            });
+    }
+}
+```
 
 [Read more...](docs/info/concept/README.md)
 
@@ -52,31 +92,52 @@ Nano provides full access to all internal components, resulting in very few priv
 ```mermaid
 flowchart LR
     nano(((Nano))) --> context[Context]
-    context --> events[Events]
-    events --> services[Services]
-    services --> schedulers[Schedulers]
+    context --> ch[Channels]
+    nano --> services[Services]
+    context --> schedulers[Schedulers]
+    ch -->|sendEvent| listeners[Listeners]
+    services -->|ack/reply| responses[(Responses)]
+    listeners -->|ack/reply| responses[(Responses)]
     
     style nano fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style context fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
-    style events fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
+    style ch fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
+    style listeners fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
+    style responses fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style services fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
     style schedulers fill:#90CAF9,stroke:#1565C0,stroke-width:1px,color:#1A237E,rx:2%,ry:2%
 ```
 
 ## ⚙️ Mechanics
 
+**The Nano Way: Static, Event-Driven, and Stateless**
+
+Nano's architecture is fundamentally different from traditional frameworks:
+
+**🏗️ Architecture Principles:**
+- **Static Methods for Business Logic**: No need for service objects - just static methods that react to events
+- **Services as Universal Connectors**: Services handle external integrations only (databases, HTTP, queues) - no business logic
+- **Event-Driven Communication**: Everything flows through events - HTTP requests, database operations, errors
+- **TypeMap for Data Handling**: Automatic type conversion and transformation for JSON, XML, and any data format
+- **Global Error Handling**: Subscribe to error events for centralized error management
+- **Built-in Logging**: Context automatically provides logging - no setup required
+
+**🔄 How It All Connects:**
+1. **HTTP Request** → **Event** → **Static Listener** → **Business Logic**
+2. **Database Operation** → **Event** → **Database Service** → **Response Event**
+3. **Error Occurs** → **Error Event** → **Global Error Handler** → **Error Response**
+
 * [Error Handling](docs/info/errorhandling/README.md)
 * [Registers](docs/registers/README.md) _(ConfigRegister, TypeConversionRegister, LogFormatRegister,
   EventChannelRegister)_
 * [Integrations](docs/integrations/README.md) _(🌱 Spring Boot, 🧑‍🚀 Micronaut, 🐸 Quarkus)_
-* [Code Examples](src/test/java/berlin/yuna/nano/examples)
+* [Code Examples](src/test/java/org/nanonative/nano/examples)
 
 ## 📚 Getting Started
 
 Maven example
 
 ```xml
-
 <dependency>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
@@ -92,24 +153,61 @@ dependencies {
 }
 ```
 
-Simple Nano example with [HttpServer](docs/services/httpserver/README.md) _(a default service)_
+### Quick Start
+
+**New to Nano?** Start with our [Quick Start Guide](docs/quickstart/README.md) for a complete walkthrough.
+
+**Want to see examples?** Check out our [Examples & Common Solutions](docs/examples/README.md) with real-world patterns.
+
+**Building a web API?** Check out our [HTTP Service Guide](docs/services/httpserver/README.md) with real-world examples.
+
+**Need architecture guidance?** See our [Core Concepts](docs/info/concept/README.md) for best practices.
+
+**Looking for documentation?** Browse our [Complete Documentation Index](docs/README.md) for all guides.
+
+### Simple Example
+
+Here's a basic HTTP server with Nano showing the event-driven approach:
 
 ```java
 public static void main(final String[] args) {
     // Start Nano with HttpServer
     final Nano app = new Nano(args, new HttpServer());
 
-    // listen to /hello
-    app.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt(HttpObject.class)
-        .filter(HttpObject::isMethodGet)
-        .filter(request -> request.pathMatch("/hello"))
-        .ifPresent(request -> request.response().body(Map.of("Hello", System.getProperty("user.name"))).respond(event)));
+    // Static method handles GET /hello - no @Controller needed!
+    app.subscribeEvent(EVENT_HTTP_REQUEST, MyController::handleHello);
 
-    // Override error handling for HTTP requests
-    app.subscribeEvent(EVENT_APP_UNHANDLED, event -> event.payloadOpt(HttpObject.class).ifPresent(request ->
-        request.response().body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500).respond(event)));
+    // Global error handling - even errors are events!
+    app.subscribeError(EVENT_HTTP_REQUEST, MyController::handleError);
+}
+
+public class MyController {
+    // Static method for business logic - no objects, no state!
+    public static void handleHello(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodGet)
+            .filter(request -> request.pathMatch("/hello"))
+            .ifPresent(request -> request.createResponse()
+                .body(Map.of("Hello", System.getProperty("user.name")))
+                .respond(event));
+    }
+    
+    // Global error handling - subscribe to error events!
+    public static void handleError(Event<?, ?> event) {
+        event.payloadAck()
+            .createResponse()
+            .body("Internal Server Error [" + event.error().getMessage() + "]")
+            .statusCode(500)
+            .respond(event);
+    }
 }
 ```
+
+### Real-World Examples
+
+- **Complete Examples**: See our [Examples & Common Solutions](docs/examples/README.md) for comprehensive patterns
+- **User Management**: Check out our [Simple User API Example](src/test/java/org/nanonative/nano/examples/SimpleUserApi.java)
+- **More Examples**: Browse all examples in [src/test/java/org/nanonative/nano/examples/](src/test/java/org/nanonative/nano/examples/)
 
 ## 🔨 Build Nano
 
@@ -151,22 +249,28 @@ add the native-image profile to your `pom.xml` and run `mvn package -Pnative-ima
 
 ## ✨ Benefits of Nano:
 
-* 🧩 **Modular Design**: Nano's architecture is modular, making it easy to understand, extend, and maintain.
-* 🧵 **Concurrency Management**: Efficiently handle asynchronous tasks using advanced thread management.
-* 📡 **Event-Driven Architecture**: Robust event handling that simplifies communication between different parts of your
-  application.
-* ⚙️ **Flexible Configuration**: Configure your application using environment variables, system properties, or
-  command-line
-  arguments.
-* 📊 **Robust Logging and Error Handling**: Integrated logging and comprehensive error handling mechanisms for reliable
-  operation.
-* 🚀 **Scalable and Performant**: Designed with scalability and performance in mind to handle high-concurrency scenarios.
-* 🪶 **Lightweight & Fast**: Starts in milliseconds, uses ~10MB memory.
-* 🌿 **Pure Java, Pure Simplicity**: No reflections, no regex, no unnecessary magic.
-* ⚡ **GraalVM Ready**: For ahead-of-time compilation and faster startup.
-* 🔒 **Minimal Dependencies**: Reduces CVE risks and simplifies updates.
-* 🌊 **Fluent & Stateless**: Intuitive API design for easy readability and maintenance.
-* 🛠️ **Rapid Service Development**: Build real services in minutes.
+**🎯 Revolutionary Approach:**
+* 🚫 **No More Object Hierarchies**: Forget Controllers, Services, Repositories - just static methods and events!
+* 📡 **Event-Driven Everything**: HTTP requests, database operations, errors - all flow through events
+* 🔧 **Universal Services**: Services are generic connectors for external systems - no business logic mixed in
+* 🗺️ **TypeMap Magic**: Automatic type conversion for JSON, XML, and any data format - no manual mapping needed
+* 🛡️ **Global Error Handling**: Subscribe to error events for centralized error management
+* 📝 **Built-in Logging**: Context automatically provides logging - no setup, no configuration needed
+
+**⚡ Performance & Simplicity:**
+* 🪶 **Lightweight & Fast**: Starts in milliseconds, uses ~10MB memory
+* 🌿 **Pure Java, Pure Simplicity**: No reflections, no regex, no unnecessary magic
+* ⚡ **GraalVM Ready**: For ahead-of-time compilation and faster startup
+* 🔒 **Minimal Dependencies**: Reduces CVE risks and simplifies updates
+* 🧵 **Virtual Threads**: Built-in support for Project Loom's virtual threads
+* 🚀 **Scalable and Performant**: Designed for high-concurrency scenarios
+
+**🛠️ Developer Experience:**
+* 🌊 **Fluent & Stateless**: Intuitive API design for easy readability and maintenance
+* 🧩 **Modular Design**: Easy to understand, extend, and maintain
+* ⚙️ **Flexible Configuration**: Environment variables, system properties, command-line arguments
+* 🧪 **Test-Friendly**: Easy to test with fake services and event listeners
+* 🛠️ **Rapid Development**: Build real services in minutes, not hours
 
 ## 🤝 Contributing
 

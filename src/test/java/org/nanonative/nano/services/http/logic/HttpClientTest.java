@@ -51,8 +51,6 @@ import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 @Execution(ExecutionMode.CONCURRENT)
 public class HttpClientTest {
 
-    //TODO: event testing instead of direct method calls
-
     protected static String serverUrl;
     protected static Nano nano;
 
@@ -64,7 +62,7 @@ public class HttpClientTest {
             TEST_LOG_LEVEL, CONFIG_HTTP_CLIENT_MAX_RETRIES, 1,
             CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS, 128,
             CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS, 128
-            ), server, new HttpClient()).subscribeEvent(EVENT_HTTP_REQUEST, HttpClientTest::mimicRequest);
+        ), server, new HttpClient()).subscribeEvent(EVENT_HTTP_REQUEST, HttpClientTest::mimicRequest);
         serverUrl = "http://localhost:" + server.port();
     }
 
@@ -87,6 +85,13 @@ public class HttpClientTest {
         server = new Nano(Map.of(CONFIG_HTTP_CLIENT_VERSION, HTTP_1_1), new HttpClient());
         client = server.service(HttpClient.class);
         assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_VERSION, HTTP_1_1));
+        assertThat(client.version()).isEqualTo(HTTP_1_1);
+        assertWorkingHttpClient(client);
+        server.stop(server.context(this.getClass()));
+
+        server = new Nano(Map.of(CONFIG_HTTP_CLIENT_VERSION, 0), new HttpClient());
+        client = server.service(HttpClient.class);
+        assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_VERSION, 0));
         assertThat(client.version()).isEqualTo(HTTP_1_1);
         assertWorkingHttpClient(client);
         server.stop(server.context(this.getClass()));
@@ -145,9 +150,8 @@ public class HttpClientTest {
         assertThat(client.context()).contains(Map.entry(CONFIG_HTTP_CLIENT_FOLLOW_REDIRECTS, true));
         assertThat(client.followRedirects()).isTrue();
         assertWorkingHttpClient(client);
-        assertThat(client).hasToString("{\"version\":\"HTTP_2\",\"retries\":3,\"followRedirects\":true,\"readTimeoutMs\":10000,\"connectionTimeoutMs\":5000}");
+        assertThat(client).hasToString("{\"version\":\"HTTP_2\",\"retries\":3,\"followRedirects\":true,\"readTimeoutMs\":10000,\"connectionTimeoutMs\":5000,\"class\":\"HttpClient\"}");
         server.stop(server.context(this.getClass()));
-
     }
 
     @RepeatedTest(TEST_REPEAT)
@@ -156,7 +160,7 @@ public class HttpClientTest {
             .newEvent(EVENT_SEND_HTTP)
             .payload(() -> new HttpObject().path(serverUrl).body("{Hällo Wörld?!}"))
             .send()
-            .response(HttpObject.class);
+            .response();
 
         assertThat(response).isNotNull();
         assertThat(response.failure()).isNull();
@@ -172,7 +176,7 @@ public class HttpClientTest {
             .newEvent(EVENT_SEND_HTTP)
             .payload(() -> new HttpObject().path("http://localhost/invalid/url"))
             .send()
-            .response(HttpObject.class);
+            .response();
 
         assertThat(response.failure()).isExactlyInstanceOf(ConnectException.class);
         assertThat(response.header(CONTENT_TYPE)).isEqualTo(APPLICATION_PROBLEM_JSON.value());
@@ -248,7 +252,7 @@ public class HttpClientTest {
         response = client.send(new HttpObject());
         assertThat(response.failure()).isExactlyInstanceOf(IllegalArgumentException.class);
         assertThat(response.header(CONTENT_TYPE)).isEqualTo(APPLICATION_PROBLEM_JSON.value());
-        assertThat((LinkedTypeMap) response.bodyAsJson()).contains(
+        assertThat(response.bodyAsJson().asMap()).contains(
             entry("instance", ""),
             entry("status", -1L),
             entry("title", "URI with undefined scheme"),
@@ -259,8 +263,7 @@ public class HttpClientTest {
         response = client.send(null);
         assertThat(response.failure()).isExactlyInstanceOf(IllegalArgumentException.class);
         assertThat(response.header(CONTENT_TYPE)).isEqualTo(APPLICATION_PROBLEM_JSON.value());
-        assertThat((LinkedTypeMap) response.bodyAsJson()).contains(
-            entry("instance", null),
+        assertThat(response.bodyAsJson().asMap()).contains(
             entry("status", 400L),
             entry("title", "Invalid request [null]"),
             entry("type", "https://github.com/nanonative/nano")
@@ -270,13 +273,13 @@ public class HttpClientTest {
         assertThat(client.onFailure(null)).isNull();
     }
 
-    public static void mimicRequest(final Event event) {
-        event.payloadOpt(HttpObject.class).ifPresent(request -> {
+    public static void mimicRequest(final Event<HttpObject, HttpObject> event) {
+        event.payloadOpt().ifPresent(request -> {
             // Answer only to incoming requests
             if (request instanceof final HttpObject httpObject && httpObject.exchange() == null)
                 return;
 
-            final HttpObject response = request.response();
+            final HttpObject response = request.createResponse();
             final AtomicInteger status = new AtomicInteger(200);
             final String[] paths = Arrays.stream(request.path().split("/", -1)).filter(NanoUtils::hasText).toArray(String[]::new);
             for (int i = 1; i < paths.length; i += 2) {

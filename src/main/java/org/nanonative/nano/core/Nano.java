@@ -6,19 +6,17 @@ import org.nanonative.nano.core.model.NanoThread;
 import org.nanonative.nano.core.model.Scheduler;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.NanoUtils;
+import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.logging.LogService;
 import org.nanonative.nano.services.metric.model.MetricUpdate;
 
 import java.lang.management.ManagementFactory;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -27,6 +25,7 @@ import static java.util.Arrays.asList;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static java.util.stream.Collectors.joining;
+import static org.nanonative.nano.core.model.Context.APP_NANO_NAME;
 import static org.nanonative.nano.core.model.Context.APP_PARAMS;
 import static org.nanonative.nano.core.model.Context.CONFIG_ENV_PROD;
 import static org.nanonative.nano.core.model.Context.CONFIG_OOM_SHUTDOWN_THRESHOLD;
@@ -37,9 +36,8 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_OOM;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SERVICE_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SHUTDOWN;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_START;
+import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.NanoUtils.generateNanoName;
-import static org.nanonative.nano.helper.event.EventChannelRegister.eventNameOf;
-import static org.nanonative.nano.helper.event.model.Event.eventOf;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
 import static org.nanonative.nano.services.metric.logic.MetricService.EVENT_METRIC_UPDATE;
 import static org.nanonative.nano.services.metric.model.MetricType.GAUGE;
@@ -108,31 +106,35 @@ public class Nano extends NanoServices<Nano> {
         // INIT CONTEXT
         context.put(CONTEXT_NANO_KEY, this);
         context.put(CONTEXT_CLASS_KEY, this.getClass());
-        final long initTime = System.currentTimeMillis() - createdAtMs;
+        final long initTime = System.nanoTime() - createdAtNs;
         context.trace(() -> "Init [{}] in [{}]", this.getClass().getSimpleName(), NanoUtils.formatDuration(initTime));
         printParameters();
 
-        final long service_startUpTime = System.currentTimeMillis();
+        final long service_startUpTime = System.nanoTime();
         // INIT SHUTDOWN HOOK
         try {
             // java.lang.IllegalStateException: Shutdown in progress
             Runtime.getRuntime().addShutdownHook(new Thread(() -> shutdown(context(this.getClass()))));
             startServicesAndLogger(startupServices);
-            run(() -> context, () -> eventOf(context, EVENT_APP_HEARTBEAT).payload(() -> this).async(true).send(), 256, 256, MILLISECONDS, () -> false);
+            context.computeIfAbsent(APP_NANO_NAME, k -> generateNanoName("%s%.0s%.0s%.0s"));
+            run(() -> context, () -> context.newEvent(EVENT_APP_HEARTBEAT).async(true).send(), 256, 256, MILLISECONDS, () -> false);
             run(() -> context, System::gc, 5, 5, SECONDS, () -> false);
-            final long readyTime = System.currentTimeMillis() - service_startUpTime;
+            final long readyTime = System.nanoTime() - service_startUpTime;
             printActiveProfiles();
-            context.info(() -> "Started [{}] in [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(readyTime));
+            context.info(() -> "Started [{}] in [{}]", context.asString(APP_NANO_NAME), NanoUtils.formatDuration(readyTime));
             printSystemInfo();
 
-            eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.started.time", initTime, null)).async(true).send();
-            eventOf(context(), EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(GAUGE, "application.ready.time", readyTime, null)).async(true).send();
-            subscribeEvent(EVENT_APP_SHUTDOWN, event -> event.acknowledge(() -> CompletableFuture.runAsync(() -> shutdown(event.context()))));
+            context.newEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "application.started.time", initTime, null)).async(true).send();
+            context.newEvent(EVENT_METRIC_UPDATE, () -> new MetricUpdate(GAUGE, "application.ready.time", readyTime, null)).async(true).send();
+            subscribeEvent(EVENT_APP_SHUTDOWN, event -> {
+                GLOBAL_THREAD_POOL.submit(() -> shutdown(event.context()));
+                event.acknowledge();
+            });
             // INIT CLEANUP TASK - just for safety
             subscribeEvent(EVENT_APP_HEARTBEAT, this::cleanUps);
-            eventOf(context, EVENT_APP_START).payload(() -> this).broadcast(true).async(true).send();
+            context.newEvent(EVENT_APP_START).broadcast(true).async(true).send();
         } catch (final Exception e) {
-            context.error(e, () -> "Failed to start [{}] in [{}]", this.getClass().getSimpleName(), NanoUtils.formatDuration(System.currentTimeMillis() - service_startUpTime));
+            context.error(e, () -> "Failed to start [{}] in [{}]", this.getClass().getSimpleName(), NanoUtils.formatDuration(System.nanoTime() - service_startUpTime));
             shutdown(context);
         }
     }
@@ -187,7 +189,7 @@ public class Nano extends NanoServices<Nano> {
      */
     @Override
     public Nano stop(final Context context) {
-        eventOf(context != null ? context : context(this.getClass()), EVENT_APP_SHUTDOWN).broadcast(true).async(true).send();
+        (context != null ? context : context(this.getClass())).newEvent(EVENT_APP_SHUTDOWN).broadcast(true).async(true).send();
         return this;
     }
 
@@ -210,9 +212,9 @@ public class Nano extends NanoServices<Nano> {
             final List<String> secrets = List.of("secret", "token", "pass", "pwd", "bearer", "auth", "private", "ssn");
             final int keyLength = context.keySet().stream().map(String::valueOf).mapToInt(String::length).max().orElse(0);
             context.info(() -> "Configs: " + lineSeparator() + context.entrySet().stream()
-                .sorted((o1, o2) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(o1.getKey()), String.valueOf(o2.getKey())))
-                .map(config -> String.format("%-" + keyLength + "s  %s", config.getKey(), secrets.stream().anyMatch(s -> String.valueOf(config.getKey()).toLowerCase().contains(s)) ? "****" : config.getValue()))
-                .collect(joining(lineSeparator())))
+                    .sorted((o1, o2) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(o1.getKey()), String.valueOf(o2.getKey())))
+                    .map(config -> String.format("%-" + keyLength + "s  %s", config.getKey(), secrets.stream().anyMatch(s -> String.valueOf(config.getKey()).toLowerCase().contains(s)) ? "****" : config.getValue()))
+                    .collect(joining(lineSeparator())))
             ;
         }
     }
@@ -220,10 +222,10 @@ public class Nano extends NanoServices<Nano> {
     /**
      * Sends an event with the specified parameters, either broadcasting it to all listeners or sending it to a targeted listener asynchronously if a response listener is provided.
      *
-     * @param event The {@link Event} object that encapsulates the event's context, type, and payload. use {@link Event#eventOf(Context, int)} to create an instance.
+     * @param event The {@link Event} object that encapsulates the event's context, payload, and payload. use {@link Context#newEvent(Channel, Supplier)} to create an instance.
      * @return The {@link Nano} instance, allowing for method chaining.
      */
-    public Nano sendEvent(final Event event) {
+    public Nano sendEvent(final Event<?, ?> event) {
         sendEventR(event);
         return this;
     }
@@ -232,10 +234,10 @@ public class Nano extends NanoServices<Nano> {
      * Processes an event with the given parameters and decides on the execution path based on the presence of a response listener and the broadcast flag.
      * If a response listener is provided, the event is processed asynchronously; otherwise, it is processed in the current thread. This method creates an {@link Event} instance and triggers the appropriate event handling logic.
      *
-     * @param event The {@link Event} object that encapsulates the event's context, type, and payload. use {@link Event#eventOf(Context, int)} to create an instance.
+     * @param event The {@link Event} object that encapsulates the event's context, payload, and payload. use {@link Context#newEvent(Channel, Supplier)} to create an instance.
      * @return An instance of {@link Event} that represents the event being processed. This object can be used for further operations or tracking.
      */
-    public Event sendEventR(final Event event) {
+    public <C, R> Event<C, R> sendEventR(final Event<C, R> event) {
         if (!event.isAsync()) {
             sendEventSameThread(event);
         } else {
@@ -247,19 +249,19 @@ public class Nano extends NanoServices<Nano> {
 
     /**
      * Sends an event on the same thread and determines whether to process it to the first listener.
-     * Used {@link Context#sendEvent(int, Supplier)} from {@link Nano#context(Class)} instead of the core method.
+     * Used {@link Context#newEvent(Channel, Supplier)} from {@link Nano#context(Class)} instead of the core method.
      *
      * @param event The event to be processed.
      * @return self for chaining
      */
-    @SuppressWarnings({"ResultOfMethodCallIgnored", "java:S2201"})
-    public Nano sendEventSameThread(final Event event) {
+    @SuppressWarnings({"java:S2201"})
+    public Nano sendEventSameThread(final Event<?, ?> event) {
         if (event.asBooleanOpt("send").orElse(false))
-            throw new IllegalStateException("Event already send. Channel [" + event.channel() + "] ack [" + event.isAcknowledged() + "]", event.error());
+            throw new IllegalStateException("Event already send. Channel [" + event.channel() + "] ack [" + event.acknowledge() + "]", event.error());
         event.put("send", true);
         eventCount.incrementAndGet();
         event.context().tryExecute(() -> {
-            boolean match = listeners.getOrDefault(event.channelId(), Collections.emptySet()).stream().anyMatch(listener -> {
+            boolean match = listeners.getOrDefault(event.channel().id(), Collections.emptySet()).stream().anyMatch(listener -> {
                 event.context().tryExecute(() -> listener.accept(event), throwable -> event.context().sendEventError(event, throwable));
                 return !event.isBroadcast() && event.isAcknowledged();
             });
@@ -270,7 +272,7 @@ public class Nano extends NanoServices<Nano> {
                 });
             }
             // LOGGING FALLBACK
-            if (event.channelId() == EVENT_LOGGING && !match)
+            if (event.channel() == EVENT_LOGGING && !match)
                 logService.onEvent(event);
         });
         eventCount.decrementAndGet();
@@ -288,12 +290,17 @@ public class Nano extends NanoServices<Nano> {
         return this;
     }
 
-    protected void cleanUps(final Event event) {
+    /**
+     * Performs the cleanUps operation like memory.
+     *
+     * @param event the event
+     */
+    protected void cleanUps(final Event<?, ?> event) {
         // WARN ON HEAP USAGE
         final double usage = heapMemoryUsage();
         final int threshold = context.asIntOpt(CONFIG_OOM_SHUTDOWN_THRESHOLD).orElse(98);
-        if (threshold > 0 && usage > (threshold / 100d) && !context.sendEventR(EVENT_APP_OOM, () -> usage).isAcknowledged()) {
-            context.warn(() -> "Out of mana aka memory [{}] threshold [{}] event [{}] shutting down", usage, threshold, eventNameOf(EVENT_APP_OOM));
+        if (threshold > 0 && usage > (threshold / 100d) && !context.newEvent(EVENT_APP_OOM, () -> usage).send().isAcknowledged()) {
+            context.warn(() -> "Out of mana aka memory [{}] threshold [{}] event [{}] shutting down", usage, threshold, EVENT_APP_OOM.name());
             context.put("_app_exit_code", 127);
             shutdown(context);
         }
@@ -302,24 +309,32 @@ public class Nano extends NanoServices<Nano> {
         new HashSet<>(schedulers).stream().filter(scheduler -> scheduler.isShutdown() || scheduler.isTerminated()).forEach(schedulers::remove);
     }
 
+    /**
+     * Performs the printActiveProfiles operation.
+     */
     protected void printActiveProfiles() {
         final List<String> list = context.asList(String.class, "_scanned_profiles");
         if (!list.isEmpty()) {
             context.debug(() -> "Profiles [{}] Services [{}]",
-                list.stream().sorted().collect(joining(", ")),
-                services().stream().collect(Collectors.groupingBy(Service::name, Collectors.counting())).entrySet().stream().map(entry -> entry.getValue() > 1 ? "(" + entry.getValue() + ") " + entry.getKey() : entry.getKey()).collect(joining(", "))
+                    list.stream().sorted().collect(joining(", ")),
+                    services().stream().collect(Collectors.groupingBy(Service::name, Collectors.counting())).entrySet().stream().map(entry -> entry.getValue() > 1 ? "(" + entry.getValue() + ") " + entry.getKey() : entry.getKey()).collect(joining(", "))
             );
         }
     }
 
+    /**
+     * Starts and initializes required components.
+     *
+     * @param startupServices the startupServices
+     */
     @SuppressWarnings("SlowListContainsAll")
     protected void startServicesAndLogger(final FunctionOrNull<Context, List<Service>> startupServices) {
+        if (startupServices == null || services.stream().noneMatch(LogService.class::isInstance))
+            // Use default logger
+            this.context.newEvent(EVENT_APP_SERVICE_REGISTER, () -> logService).broadcast(true).send();
         if (startupServices != null) {
             final List<Service> services = startupServices.apply(context);
             if (services != null) {
-                // Use default logger
-                if (services.stream().noneMatch(LogService.class::isInstance))
-                    this.context.broadcastEvent(EVENT_APP_SERVICE_REGISTER, () -> logService);
                 // Start services
                 context.debug(() -> "Init [{}] services [{}]", services.size(), services.stream().map(Service::name).distinct().collect(joining(", ")));
                 context.runAwait(services.toArray(Service[]::new));
@@ -342,7 +357,7 @@ public class Nano extends NanoServices<Nano> {
      */
     protected Nano shutdown(final Context context) {
         if (isReady.compareAndSet(true, false)) {
-            context.info(() -> "Stop {} ...", this.getClass().getSimpleName());
+            context.info(() -> "Stop {} ...", context.asString(APP_NANO_NAME));
             final int exitCode = context.asIntOpt("_app_exit_code").orElse(0);
             final boolean exitCodeAllowed = context.asBooleanOpt(CONFIG_ENV_PROD).orElse(false);
             gracefulShutdown(context);
@@ -352,16 +367,6 @@ public class Nano extends NanoServices<Nano> {
         return this;
     }
 
-    public String hostname() {
-        return String.valueOf(context.computeIfAbsent("app_hostname", value -> {
-            try {
-                return InetAddress.getLocalHost().getHostName();
-            } catch (final UnknownHostException e) {
-                return "Localhost";
-            }
-        }));
-    }
-
     /**
      * Prints system information for diagnostic purposes. Similar to {@link Nano#toString()}
      *
@@ -369,35 +374,38 @@ public class Nano extends NanoServices<Nano> {
      */
     public Nano printSystemInfo() {
         final long activeThreads = NanoThread.activeCarrierThreads();
-        context.debug(() -> "pid [{}] schedulers [{}] services [{}] listeners [{}] cores [{}] usedMemory [{}mb] threadsNano [{}], threadsActive [{}] threadsOther [{}] java [{}] arch [{}] os [{}] host [{}]",
-            pid(),
-            schedulers.size(),
-            services.size(),
-            listeners.values().stream().mapToLong(Collection::size).sum(),
-            Runtime.getRuntime().availableProcessors(),
-            usedMemoryMB(),
-            NanoThread.activeNanoThreads(),
-            activeThreads,
-            ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads,
-            System.getProperty("java.version"),
-            System.getProperty("os.arch"),
-            System.getProperty("os.name") + " - " + System.getProperty("os.version"),
-            hostname()
+        context.debug(() -> "pid [{}] schedulers [{}] services [{}] listeners [{}] cores [{}] usedMemory [{}mb] threadsNano [{}], threadsActive [{}] threadsOther [{}] java [{}] arch [{}] os [{}]",
+                pid(),
+                schedulers.size(),
+                services.size(),
+                listeners.values().stream().mapToLong(Collection::size).sum(),
+                Runtime.getRuntime().availableProcessors(),
+                usedMemoryMB(),
+                NanoThread.activeNanoThreads(),
+                activeThreads,
+                ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads,
+                System.getProperty("java.version"),
+                System.getProperty("os.arch"),
+                System.getProperty("os.name") + " - " + System.getProperty("os.version")
         );
         return this;
     }
 
+    /**
+     * Performs the gracefulShutdown operation.
+     *
+     * @param context the context
+     */
     protected void gracefulShutdown(final Context context) {
         try {
             final Thread sequence = new Thread(() -> {
-                final long startTimeMs = System.currentTimeMillis();
-                printSystemInfo();
+                final long startTimeMs = System.nanoTime();
+                // printSystemInfo();  during shutdown, calls like printSystemInfo(), which asks the JVM for live thread details occasionally crashes there. JVM dies mid-shutdown. Can cause "random" failures.
                 context.debug(() -> "Shutdown Services count [{}] services [{}]", services.size(), services.stream().map(Service::getClass).map(Class::getSimpleName).distinct().collect(joining(", ")));
                 shutdownServices(this.context);
                 this.shutdownThreads();
                 listeners.clear();
-                printSystemInfo();
-                context.info(() -> "Stopped [{}] in [{}] with uptime [{}]", generateNanoName("%s%.0s%.0s%.0s"), NanoUtils.formatDuration(System.currentTimeMillis() - startTimeMs), NanoUtils.formatDuration(System.currentTimeMillis() - createdAtMs));
+                context.info(() -> "Stopped [{}] in [{}] with uptime [{}]", context.asString(APP_NANO_NAME), NanoUtils.formatDuration(System.nanoTime() - startTimeMs), NanoUtils.formatDuration(System.nanoTime() - createdAtNs));
                 schedulers.clear();
             }, Nano.class.getSimpleName() + " Shutdown-Hook");
             sequence.start();
@@ -407,6 +415,12 @@ public class Nano extends NanoServices<Nano> {
         }
     }
 
+    /**
+     * Performs the exit operation.
+     *
+     * @param context  the context
+     * @param exitCode the exitCode
+     */
     protected void exit(final Context context, final int exitCode) {
         try {
             final Thread thread = new Thread(() -> {
@@ -424,23 +438,27 @@ public class Nano extends NanoServices<Nano> {
         }
     }
 
+    /**
+     * Performs the toString operation.
+     *
+     * @return the result
+     */
     @Override
     public String toString() {
         final long activeThreads = NanoThread.activeCarrierThreads();
         return "Nano{" +
-            "pid=" + pid() +
-            ", schedulers=" + schedulers.size() +
-            ", services=" + services.size() +
-            ", listeners=" + listeners.values().stream().mapToLong(Collection::size).sum() +
-            ", cores=" + Runtime.getRuntime().availableProcessors() +
-            ", usedMemory=" + usedMemoryMB() + "mb" +
-            ", threadsActive=" + NanoThread.activeNanoThreads() +
-            ", threadsNano=" + activeThreads +
-            ", threadsOther=" + (ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads) +
-            ", java=" + System.getProperty("java.version") +
-            ", arch=" + System.getProperty("os.arch") +
-            ", os=" + System.getProperty("os.name") + " - " + System.getProperty("os.version") +
-            ", host=" + hostname() +
-            '}';
+                "pid=" + pid() +
+                ", schedulers=" + schedulers.size() +
+                ", services=" + services.size() +
+                ", listeners=" + listeners.values().stream().mapToLong(Collection::size).sum() +
+                ", cores=" + Runtime.getRuntime().availableProcessors() +
+                ", usedMemory=" + usedMemoryMB() + "mb" +
+                ", threadsActive=" + NanoThread.activeNanoThreads() +
+                ", threadsNano=" + activeThreads +
+                ", threadsOther=" + (ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads) +
+                ", java=" + System.getProperty("java.version") +
+                ", arch=" + System.getProperty("os.arch") +
+                ", os=" + System.getProperty("os.name") + " - " + System.getProperty("os.version") +
+                '}';
     }
 }
