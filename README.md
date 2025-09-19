@@ -157,11 +157,13 @@ dependencies {
 
 **New to Nano?** Start with our [Quick Start Guide](docs/quickstart/README.md) for a complete walkthrough.
 
+**Want to see examples?** Check out our [Examples & Common Solutions](docs/examples/README.md) with real-world patterns.
+
 **Building a web API?** Check out our [HTTP Service Guide](docs/services/httpserver/README.md) with real-world examples.
 
-**Need architecture guidance?** See our [Architecture Patterns](docs/architecture/README.md) for best practices.
+**Need architecture guidance?** See our [Core Concepts](docs/info/concept/README.md) for best practices.
 
-**Having issues?** Our [Troubleshooting Guide](docs/troubleshooting/README.md) covers common problems and solutions.
+**Looking for documentation?** Browse our [Complete Documentation Index](docs/README.md) for all guides.
 
 ### Simple Example
 
@@ -201,9 +203,11 @@ public class MyController {
 }
 ```
 
-### Real-World Example
+### Real-World Examples
 
-For a complete user management system, see our [Simple User API Example](src/test/java/org/nanonative/nano/examples/SimpleUserApi.java).
+- **Complete Examples**: See our [Examples & Common Solutions](docs/examples/README.md) for comprehensive patterns
+- **User Management**: Check out our [Simple User API Example](src/test/java/org/nanonative/nano/examples/SimpleUserApi.java)
+- **More Examples**: Browse all examples in [src/test/java/org/nanonative/nano/examples/](src/test/java/org/nanonative/nano/examples/)
 
 ## 🔨 Build Nano
 
