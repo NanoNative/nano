@@ -132,7 +132,7 @@ public class NanoManager implements ApplicationEventListener<ServerShutdownEvent
     }
 
     @Override
-    public void onApplicationEvent(final ServerShutdownEvent event) {
+    public void onApplicationEvent(final ServerShutdownEvent<?,?> event) {
         nano.stop(); // Trigger Nano's shutdown process
     }
 }

@@ -14,6 +14,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -24,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -42,35 +45,53 @@ public class NanoUtils {
         {"NanoNinja", "NanoNoodle", "GraalGuru", "JavaJester", "MicroMaverick", "ByteBender", "NanoNaut", "GraalGoblin", "JavaJuggernaut", "CodeComedian", "NanoNomad", "GraalGazelle", "JavaJinx", "MicroMagician", "ByteBandit", "NanoNimbus", "GraalGambler", "JavaJester", "MicroMaestro", "ByteBarracuda", "NanoNebula"},
         {"Swift Swiper", "Master", "Joker", "Rebel", "Twister", "Navigator", "Mischievous", "Unstoppable", "Laughs", "Wanderer", "Graceful", "Bringer", "Wizard", "Stealer", "Cloud Surfer", "Betting", "Prankster", "Conductor", "Feisty Fish", "Galactic Guardian"},
         {"of Requests", "of Native Magic", "in the Microservice Deck", "in the Server Space", "of Bytes", "of the Nano Cosmos", "Microservice Minion", "Force of the JVM", "in Lambda Expressions", "in the Backend Wilderness", "GraalVM Gazelle", "Bringer of Backend Blessings", "of the Microservice Realm", "of Server Secrets", "of the Nanoverse", "on Backend Brilliance", "in the Programming Playground", "of the Microservice Orchestra", "in the Server Sea", "of Microservices", "of Nano Power", "in Nano Land", "near Nano Destiny"}};
+    public static final List<String> IGNORED_TRACE = List.of(
+        "java.", "javax.", "sun.", "jdk.", "com.sun.",
+        "org.junit.", "org.testng.", "org.gradle.", "org.apache.", "kotlin.", "scala."
+    );
+    // TIME UNITS
+    public static final long NS = 1L;
+    public static final long US = 1_000L;
+    public static final long MS = 1_000_000L;
+    public static final long S  = 1_000_000_000L;
+    public static final long M  = 60L * S;
+    public static final long H  = 60L * M;
+    public static final long D  = 24L * H;
+    public static final long W  = 7L * D;
+    public static final long MO = 30L * D;   // calendar-agnostic
+    public static final long Y  = 365L * D;
+    public static final long[] UNIT_NS   = { Y,   MO,  W,  D,  H,  M,  S,  MS,  US,  NS };
+    public static final String[] UNIT_SY = { "y", "mo","w","d","h","m","s","ms","µs","ns" };
 
     public static boolean hasText(final String str) {
         return (str != null && !str.isEmpty() && containsText(str));
     }
 
-    public static String formatDuration(final long milliseconds) {
-        final long years = TimeUnit.MILLISECONDS.toDays(milliseconds) / 365;
-        long remainder = milliseconds - TimeUnit.DAYS.toMillis(years * 365);
-        final long months = TimeUnit.MILLISECONDS.toDays(remainder) / 30;
-        remainder -= TimeUnit.DAYS.toMillis(months * 30);
-        final long days = TimeUnit.MILLISECONDS.toDays(remainder);
-        remainder -= TimeUnit.DAYS.toMillis(days);
-        final long hours = TimeUnit.MILLISECONDS.toHours(remainder);
-        remainder -= TimeUnit.HOURS.toMillis(hours);
-        final long minutes = TimeUnit.MILLISECONDS.toMinutes(remainder);
-        remainder -= TimeUnit.MINUTES.toMillis(minutes);
-        final long seconds = TimeUnit.MILLISECONDS.toSeconds(remainder);
-        remainder -= TimeUnit.SECONDS.toMillis(seconds);
+    public static String formatDuration(final long nanos) {
+        if (nanos <= 0) return "0ns";
 
-        final StringBuilder sb = new StringBuilder();
-        if (years > 0) sb.append(years).append("y ");
-        if (months > 0) sb.append(months).append("mo ");
-        if (days > 0) sb.append(days).append("d ");
-        if (hours > 0) sb.append(hours).append("h ");
-        if (minutes > 0) sb.append(minutes).append("m ");
-        if (seconds > 0) sb.append(seconds).append("s ");
-        if (remainder > 0) sb.append(remainder).append("ms");
+        long remaining = nanos;
 
-        return sb.toString().trim();
+        // Find the primary unit
+        int idx = 0;
+        while (idx < UNIT_NS.length && remaining < UNIT_NS[idx]) idx++;
+        if (idx == UNIT_NS.length) return "0ns"; // shouldn’t happen
+
+        final long primaryVal = remaining / UNIT_NS[idx];
+
+        // For ns/µs/ms: standalone (no second unit)
+        if (UNIT_NS[idx] <= MS) {
+            return primaryVal + UNIT_SY[idx];
+        }
+
+        // For seconds and above: include exactly one lower unit (if non-zero)
+        remaining -= primaryVal * UNIT_NS[idx];
+        final int lowerIdx = Math.min(idx + 1, UNIT_NS.length - 1);
+        final long lowerVal = remaining / UNIT_NS[lowerIdx];
+
+        return lowerVal > 0
+            ? primaryVal + UNIT_SY[idx] + " " + lowerVal + UNIT_SY[lowerIdx]
+            : primaryVal + UNIT_SY[idx];
     }
 
 
@@ -175,7 +196,7 @@ public class NanoUtils {
             scannedProfiles.add(profile);
         result.put("_scanned_profiles", scannedProfiles);
 
-        for (final String directory : new String[]{
+        for (final String directory : new String[] {
             "",
             ".",
             "config/",
@@ -330,6 +351,36 @@ public class NanoUtils {
                 consumer.accept(exception);
             }
         }
+    }
+
+    public static Stream<Path> listFiles(final Path path) {
+        if (Files.isDirectory(path)) {
+            try {
+                return Files.list(path);
+            } catch (final IOException ignored) {
+                // ignored
+            }
+        }
+        return Stream.of(path);
+    }
+
+    public static <T extends Throwable> T reduceSte(final T throwable) {
+        if (throwable == null)
+            return null;
+        final String[] lastMethodKey = {null};
+        final StackTraceElement[] original = throwable.getStackTrace();
+        final StackTraceElement[] filtered = stream(throwable.getStackTrace())
+            .filter(ste -> IGNORED_TRACE.stream().anyMatch(ste.getClassName()::startsWith))
+            .filter(ste -> {
+                final String methodKey = ste.getClassName() + "#" + ste.getMethodName();
+                if (!methodKey.equals(lastMethodKey[0])) {
+                    lastMethodKey[0] = methodKey;
+                    return true;
+                }
+                return false;
+            }).toArray(StackTraceElement[]::new);
+        throwable.setStackTrace(filtered.length == 0 && original.length > 0 ? new StackTraceElement[]{original[0]} : filtered);
+        return throwable;
     }
 
     private NanoUtils() {

@@ -7,13 +7,24 @@
 
 # Context
 
-The [Context](../context/README.md) object is the main and overwhelming object that is passed around in Nano and accessible at any time.
-It is used to interact with the core
-components: [LogService](../services/logger/README.md), [Events](../events/README.md) , [Services](../services/README.md), [Schedulers](../schedulers/README.md),
-traces and
-[configuration](#configuration).
-There is **no need to create any custom config** class as the [Context](../context/README.md) contains all needed
-information including type conversion.
+**Context - The Central Hub of Nano**
+
+The [Context](../context/README.md) object is the central hub of Nano that provides access to all core components and functionality. It's designed to eliminate the need for complex configuration objects and dependency injection.
+
+**What Context Provides:**
+- **TypeMap Integration**: Automatic type conversion and data transformation
+- **Built-in Logging**: No setup required - logging is automatically available
+- **Event Management**: Send and subscribe to events throughout your application
+- **Service Access**: Interact with all services and external integrations
+- **Configuration**: Access all configuration values with type conversion
+- **Scheduling**: Run tasks and scheduled operations
+- **Tracing**: Built-in tracing and monitoring capabilities
+
+**Key Philosophy:**
+- **No Custom Config Classes**: Context contains all needed information including type conversion
+- **TypeMap Everywhere**: All data flows through TypeMap for consistent handling
+- **Automatic Logging**: Context automatically provides logging for the class it's initialized with
+- **Event-Driven**: Everything communicates through events, not direct method calls
 
 ```mermaid
 flowchart TD
@@ -32,28 +43,106 @@ flowchart TD
 
 ### Examples
 
-#### Access Configs
+#### TypeMap Integration - The Heart of Data Handling
 
+Context provides seamless TypeMap integration for all data handling, eliminating the need for DTOs and complex object mapping:
+
+```java
+public static void handleUserRequest(Event<HttpObject, HttpObject> event) {
+    final Context context = event.context();
+    
+    // Access configuration with automatic type conversion
+    final int port = context.asInt("app_service_http_port", 8080);
+    final String dbUrl = context.asString("app_config_database_url");
+    final List<String> allowedOrigins = context.asList(String.class, "app_cors_allowed_origins");
+    final Map<String, Object> userSettings = context.asMap(String.class, Object.class, "app_user_settings");
+    
+    // Built-in logging - no setup required!
+    context.info(() -> "Processing user request on port {}", port);
+    context.debug(() -> "Database URL: {}", dbUrl);
+    context.warn(() -> "Allowed origins: {}", allowedOrigins);
+    
+    // TypeMap data handling
+    final TypeMap requestData = event.payloadAsMap();
+    final String userId = requestData.asString("userId");
+    final int age = requestData.asInt("age", 0); // with default value
+    final boolean isActive = requestData.asBoolean("isActive", false);
+    final List<String> roles = requestData.asList(String.class, "roles");
+    
+    // Create new context for specific class (automatic logging setup)
+    final Context userContext = context.newContext(UserController.class);
+    userContext.info(() -> "User request processed successfully");
+}
+```
+
+#### Event Management
+
+```java
+public static void processUserData(Event<HttpObject, HttpObject> event) {
+    final Context context = event.context();
+    
+    // Send events with TypeMap data
+    context.sendEvent(EVENT_CREATE_USER, Map.of("name", "John", "email", "john@example.com"));
+    
+    // Subscribe to events
+    context.subscribeEvent(EVENT_USER_CREATED, UserController::handleUserCreated);
+    
+    // Broadcast events
+    context.broadcastEvent(EVENT_USER_UPDATED, userData);
+    
+    // Create and send complex events
+    final Event<TypeMap, TypeMap> dbEvent = context.newEvent(EVENT_DATABASE_QUERY)
+        .payload(Map.of(
+            "query", "SELECT * FROM users WHERE id = ?",
+            "params", Map.of("id", userId),
+            "timeout", 5000
+        ))
+        .send();
+    
+    // Get response
+    final TypeMap result = dbEvent.response();
+}
+```
+
+#### Configuration Access
+
+**Basic Configuration:**
 * `context.asInt("app_config_key")` - Get a configuration value as an Integer
-* `context.asList(Integer.class, "app_config_key")` - Get a configuration value as a List of Integers
-* `context.asMap(String.class, Integer.class, "app_config_key")` - Get a configuration value as a Map of Strings to Integers
+* `context.asInt("app_config_key", 42)` - Get with default value
+* `context.asString("app_config_key")` - Get as String
+* `context.asBoolean("app_config_key", false)` - Get as Boolean with default
+* `context.asLong("app_config_key", 0L)` - Get as Long with default
+
+**Collection Configuration:**
+* `context.asList(Integer.class, "app_config_key")` - Get as List of Integers
+* `context.asSet(String.class, "app_config_key")` - Get as Set of Strings
+* `context.asMap(String.class, Integer.class, "app_config_key")` - Get as Map of Strings to Integers
+
+**Advanced TypeMap Operations:**
+* `context.as(TypeMap.class, "complex_data")` - Get as TypeMap
+* `context.as(MyClass.class, "custom_object")` - Get as custom class (with type conversion)
+* `context.asOpt(String.class, "optional_key")` - Get as Optional (returns empty if not found)
+
+#### Logging and Tracing
+
+**Built-in Logging:**
 * `context.traceId()` - Get the trace id of the current [Context](../context/README.md)
 * `context.logLevel()` - Get the log level of the current [Context](../context/README.md)
-* `context.info(() -> "Hello {}", "World")` - Log a message with the [LogService](../services/logger/README.md) at the info
-  level
-* `context.newContext(MyClass.class)` - Create a new [Context](../context/README.md) with
-  a [LogService](../services/logger/README.md) for the specific class
+* `context.info(() -> "Hello {}", "World")` - Log at info level
+* `context.debug(() -> "Debug info: {}", data)` - Log at debug level
+* `context.warn(() -> "Warning: {}", message)` - Log at warning level
+* `context.error(() -> "Error: {}", error)` - Log at error level
+
+**Context Creation:**
+* `context.newContext(MyClass.class)` - Create a new [Context](../context/README.md) with a [LogService](../services/logger/README.md) for the specific class
 
 #### Events
 
-* `context.registerChannelId("MyEventName")` - Register a new [Event](../events/README.md)  type and get the event id
-* `context.newEvent(channelId).payload(MyPayloadObject).send()` - Send an [Event](../events/README.md)  with a payload
-* `context.subscribeEvent(channelId, event -> System.out.println(event))` - Subscribe to an [Event](../events/README.md)
-  and execute the lambda
-  when the event is triggered
+**Event Registration and Handling:**
+* `context.registerChannelId("MyEventName")` - Register a new [Event](../events/README.md) type and get the event id
+* `context.newEvent(channelId).payload(MyPayloadObject).send()` - Send an [Event](../events/README.md) with a payload
+* `context.subscribeEvent(channelId, event -> System.out.println(event))` - Subscribe to an [Event](../events/README.md) and execute the lambda when the event is triggered
 * `context.broadcastEvent(channelId, MyPayloadObject)` - Broadcast an [Event](../events/README.md) with a payload
-* `context.eventNameOf(channelId)` - Get the name of an [Event](../events/README.md) from the event id
-* `context.channelIdOf(eventName)` - Get the id of an [Event](../events/README.md) from the event name
 
 #### Executors
 
@@ -121,16 +210,16 @@ Example: `test.placeholder.value=${placeholder_value:fallback}`
 
 ## Default Events
 
-| In 🔲 <br/> Out 🔳 | [Event](../events/README.md)     | Payload                       | Response | Description                                                                                                                                        |
-|--------------------|----------------------------------|-------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| 🔲                 | `EVENT_APP_START`                | `Nano`                        | `N/A`    | Triggered when the Application is started                                                                                                          |
-| 🔲                 | `EVENT_APP_SHUTDOWN`             | `null`                        | `N/A`    | Triggered when the Application shuts down, can be also manually produced to shut down the Application                                              |
-| 🔲                 | `EVENT_APP_SERVICE_REGISTER`     | `Service`                     | `N/A`    | Triggered when a [Service](../services/README.md) is started                                                                                       |
-| 🔲                 | `EVENT_APP_SERVICE_UNREGISTER`   | `Service`                     | `N/A`    | Triggered when a [Service](../services/README.md) is stopped                                                                                       |
-| 🔲                 | `EVENT_APP_SCHEDULER_REGISTER`   | `Scheduler`                   | `N/A`    | Triggered when a [Scheduler](../schedulers/README.md) is started                                                                                   |
-| 🔲                 | `EVENT_APP_SCHEDULER_UNREGISTER` | `Scheduler`                   | `N/A`    | Triggered when a [Scheduler](../schedulers/README.md) is stopped                                                                                   |
-| 🔲                 | `EVENT_APP_UNHANDLED`            | `Unhandled`, `HttpObject`,... | `N/A`    | Triggered when an unhandled error happened within the context                                                                                      |
-| 🔲                 | `EVENT_APP_OOM`                  | `Double`                      | `N/A`    | Triggered when the Application reached out of memory. When the event is not handled, the App will shutdown see config `app_oom_shutdown_threshold` |
-| 🔲                 | `EVENT_APP_HEARTBEAT`            | `Nano`                        | `N/A`    | Send every 256ms                                                                                                                                   |
-| 🔳                 | `EVENT_CONFIG_CHANGE`            | `TypeMap`                     | `N/A`    | Used to change configs on the fly                                                                                                                  |
+| In 🔲 <br/> Out 🔳 | [Event](../events/README.md)     | Payload     | Response | Description                                                                                                                                        |
+|--------------------|----------------------------------|-------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| 🔲                 | `EVENT_APP_START`                | `Nano`      | `N/A`    | Triggered when the Application is started                                                                                                          |
+| 🔲                 | `EVENT_APP_SHUTDOWN`             | `null`      | `N/A`    | Triggered when the Application shuts down, can be also manually produced to shut down the Application                                              |
+| 🔲                 | `EVENT_APP_SERVICE_REGISTER`     | `Service`   | `N/A`    | Triggered when a [Service](../services/README.md) is started                                                                                       |
+| 🔲                 | `EVENT_APP_SERVICE_UNREGISTER`   | `Service`   | `N/A`    | Triggered when a [Service](../services/README.md) is stopped                                                                                       |
+| 🔲                 | `EVENT_APP_SCHEDULER_REGISTER`   | `Scheduler` | `N/A`    | Triggered when a [Scheduler](../schedulers/README.md) is started                                                                                   |
+| 🔲                 | `EVENT_APP_SCHEDULER_UNREGISTER` | `Scheduler` | `N/A`    | Triggered when a [Scheduler](../schedulers/README.md) is stopped                                                                                   |
+| 🔲                 | `EVENT_APP_UNHANDLED`            | `Unhandled` | `N/A`    | Triggered when an event was not handled                                                                                                            |
+| 🔲                 | `EVENT_APP_OOM`                  | `Double`    | `N/A`    | Triggered when the Application reached out of memory. When the event is not handled, the App will shutdown see config `app_oom_shutdown_threshold` |
+| 🔲                 | `EVENT_APP_HEARTBEAT`            | `Nano`      | `N/A`    | Send every 256ms                                                                                                                                   |
+| 🔳                 | `EVENT_CONFIG_CHANGE`            | `TypeMap`   | `N/A`    | Used to change configs on the fly                                                                                                                  |
 

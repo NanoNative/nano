@@ -11,6 +11,7 @@ import com.sun.net.httpserver.HttpExchange;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.http.HttpClient;
 
 import java.io.InputStream;
 import java.net.InetAddress;
@@ -34,6 +35,7 @@ import java.util.Optional;
 import java.util.StringJoiner;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -47,6 +49,9 @@ import static java.util.Optional.ofNullable;
 import static java.util.zip.GZIPInputStream.GZIP_MAGIC;
 import static org.nanonative.nano.helper.NanoUtils.hasText;
 import static org.nanonative.nano.services.http.HttpClient.EVENT_SEND_HTTP;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
+import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST_UNHANDLED;
+import static org.nanonative.nano.services.http.model.ContentType.APPLICATION_PROBLEM_JSON;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_ENCODING;
 import static org.nanonative.nano.services.http.model.HttpHeaders.ACCEPT_LANGUAGE;
@@ -110,6 +115,7 @@ public class HttpObject extends HttpRequest {
             path(exchange.getRequestURI().getPath());
             methodType(exchange.getRequestMethod());
             headerMap(exchange.getRequestHeaders());
+            queryParamsOf(exchange.getRequestURI().getQuery());
         }
     }
 
@@ -153,7 +159,7 @@ public class HttpObject extends HttpRequest {
     /**
      * Retrieves the first content types specified in the {@link HttpHeaders#CONTENT_TYPE} header.
      *
-     * @return the primary {@link ContentType} of the request, or {@code null} if no content type is set.
+     * @return the primary {@link ContentType} of the request, or {@code null} if no content payload is set.
      */
     public ContentType contentType() {
         return contentTypes().getFirst();
@@ -162,7 +168,7 @@ public class HttpObject extends HttpRequest {
     /**
      * Retrieves a list of all content types specified in the {@link HttpHeaders#CONTENT_TYPE} header.
      *
-     * @return a list of {@link ContentType} objects representing each content type specified.
+     * @return a list of {@link ContentType} objects representing each content payload specified.
      */
     public List<ContentType> contentTypes() {
         final List<ContentType> contentTypes = splitHeaderValue(headerMap().asList(String.class, CONTENT_TYPE), ContentType::fromValue);
@@ -172,7 +178,7 @@ public class HttpObject extends HttpRequest {
     /**
      * Sets the {@link HttpHeaders#CONTENT_TYPE} header without specifying a {@link Charset}.
      *
-     * @param contentType array of content type strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
+     * @param contentType array of content payload strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
      * @return this {@link HttpObject} to allow method chaining.
      */
     public HttpObject contentType(final String... contentType) {
@@ -182,7 +188,7 @@ public class HttpObject extends HttpRequest {
     /**
      * Sets the {@link HttpHeaders#CONTENT_TYPE} header without specifying a {@link Charset}.
      *
-     * @param contentType array of content type strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
+     * @param contentType array of content payload strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
      * @return this {@link HttpObject} to allow method chaining.
      */
     public HttpObject contentType(final ContentType... contentType) {
@@ -193,7 +199,7 @@ public class HttpObject extends HttpRequest {
      * Sets the {@link HttpHeaders#CONTENT_TYPE} header with specifying a {@link Charset}.
      *
      * @param charset     the {@link Charset} to set for body encoding.
-     * @param contentType array of content type strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
+     * @param contentType array of content payload strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
      * @return this {@link HttpObject} to allow method chaining.
      */
     public HttpObject contentType(final Charset charset, final String... contentType) {
@@ -204,14 +210,14 @@ public class HttpObject extends HttpRequest {
      * Sets the {@link HttpHeaders#CONTENT_TYPE} header with specifying a {@link Charset}.
      *
      * @param charset     the {@link Charset} to set for body encoding.
-     * @param contentType array of content type strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
+     * @param contentType array of content payload strings to be set in the {@link HttpHeaders#CONTENT_TYPE} header.
      * @return this {@link HttpObject} to allow method chaining.
      */
     public HttpObject contentType(final Charset charset, final ContentType... contentType) {
         headerMap().put(CONTENT_TYPE, Arrays.stream(contentType)
-            .filter(Objects::nonNull)
-            .map(ContentType::value)
-            .collect(Collectors.joining(", ")) + (charset == null ? "" : "; charset=" + charset.name()));
+                .filter(Objects::nonNull)
+                .map(ContentType::value)
+                .collect(Collectors.joining(", ")) + (charset == null ? "" : "; charset=" + charset.name()));
         return this;
     }
 
@@ -226,18 +232,18 @@ public class HttpObject extends HttpRequest {
 
     public HttpObject accept(final String... contentType) {
         headerMap().put(HttpHeaders.ACCEPT, Arrays.stream(contentType)
-            .map(ContentType::fromValue)
-            .filter(Objects::nonNull)
-            .map(ContentType::value)
-            .collect(Collectors.joining(", ")));
+                .map(ContentType::fromValue)
+                .filter(Objects::nonNull)
+                .map(ContentType::value)
+                .collect(Collectors.joining(", ")));
         return this;
     }
 
     public HttpObject accept(final ContentType... contentType) {
         headerMap().put(HttpHeaders.ACCEPT, Arrays.stream(contentType)
-            .filter(Objects::nonNull)
-            .map(ContentType::value)
-            .collect(Collectors.joining(", ")));
+                .filter(Objects::nonNull)
+                .map(ContentType::value)
+                .collect(Collectors.joining(", ")));
         return this;
     }
 
@@ -300,8 +306,8 @@ public class HttpObject extends HttpRequest {
             headerMap().remove(HttpHeaders.ACCEPT_LANGUAGE);
         } else {
             final String acceptLanguageValue = IntStream.range(0, locales.length)
-                .mapToObj(i -> locales[i].toLanguageTag() + ";q=" + Math.max(0.1, 1.1 - ((i + 1d) / 10)))
-                .collect(Collectors.joining(", "));
+                    .mapToObj(i -> locales[i].toLanguageTag() + ";q=" + Math.max(0.1, 1.1 - ((i + 1d) / 10)))
+                    .collect(Collectors.joining(", "));
             headerMap().put(HttpHeaders.ACCEPT_LANGUAGE, acceptLanguageValue);
         }
         return this;
@@ -342,13 +348,31 @@ public class HttpObject extends HttpRequest {
     }
 
     /**
-     * Returns a string representation of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
+     * Returns a {@link TypeInfo} representation of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
      *
      * @return the body as a json.
      */
-    @SuppressWarnings("java:S1452") // generic wildcard type
+    @SuppressWarnings("java:S1452") // generic wildcard payload
     public TypeInfo<?> bodyAsJson() {
         return JsonDecoder.jsonTypeOf(bodyAsString());
+    }
+
+    /**
+     * Returns {@link LinkedTypeMap} of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
+     *
+     * @return the body as a map.
+     */
+    public LinkedTypeMap bodyAsMap() {
+        return bodyAsJson().asMap();
+    }
+
+    /**
+     * Returns {@link TypeList} of the {@link HttpObject#body()}, decoded using the {@link Charset} from {@link HttpObject#encoding()} specified in the {@link HttpHeaders#CONTENT_TYPE} header.
+     *
+     * @return the body as a list.
+     */
+    public TypeList bodyAsList() {
+        return bodyAsJson().asList();
     }
 
     /**
@@ -356,7 +380,7 @@ public class HttpObject extends HttpRequest {
      *
      * @return the body as a xml.
      */
-    @SuppressWarnings("java:S1452") // generic wildcard type
+    @SuppressWarnings("java:S1452") // generic wildcard payload
     public TypeInfo<?> bodyAsXml() {return XmlDecoder.xmlTypeOf(bodyAsString());}
 
     /**
@@ -619,17 +643,17 @@ public class HttpObject extends HttpRequest {
      */
     public String[] authTokens() {
         return ofNullable(header(HttpHeaders.AUTHORIZATION))
-            .map(value -> {
-                if (value.startsWith("Bearer ")) {
-                    return new String[]{value.substring("Bearer ".length())};
-                }
-                if (value.startsWith("Basic ")) {
-                    final String decode = new String(Base64.getDecoder().decode(value.substring("Basic ".length())));
-                    return decode.contains(":") ? NanoUtils.split(decode, ":") : new String[]{decode};
-                }
-                return new String[]{value};
-            })
-            .orElse(new String[0]);
+                .map(value -> {
+                    if (value.startsWith("Bearer ")) {
+                        return new String[]{value.substring("Bearer ".length())};
+                    }
+                    if (value.startsWith("Basic ")) {
+                        final String decode = new String(Base64.getDecoder().decode(value.substring("Basic ".length())));
+                        return decode.contains(":") ? NanoUtils.split(decode, ":") : new String[]{decode};
+                    }
+                    return new String[]{value};
+                })
+                .orElse(new String[0]);
     }
 
     /**
@@ -690,7 +714,7 @@ public class HttpObject extends HttpRequest {
      * - {@link HttpHeaders#ACCEPT}: Default "*\/*".
      * - {@link HttpHeaders#CACHE_CONTROL}: Ensures fresh content by specifying "no-cache" and overrides with "max-age=0, private, must-revalidate" for more specific caching rules.
      * - {@link HttpHeaders#ACCEPT_ENCODING}: Lists the acceptable encodings the server can handle, defaults to "gzip, deflate".
-     * - {@link HttpHeaders#CONTENT_TYPE}: Determined by {@code contentTypes()} method to set the correct media type of the response.
+     * - {@link HttpHeaders#CONTENT_TYPE}: Determined by {@code contentTypes()} method to set the correct media payload of the response.
      * - {@link HttpHeaders#CONTENT_LENGTH}: Calculates the length of the response body to inform the client of the size of the response.
      * - {@link HttpHeaders#DATE}: Sets the current date and time formatted according to RFC 7231.
      * </p>
@@ -754,8 +778,8 @@ public class HttpObject extends HttpRequest {
      */
     public long size() {
         return Math.max(
-            body().length,
-            headers == null ? -1L : headers.asStringOpt(CONTENT_RANGE).map(s -> s.replace("bytes 0-0/", "")).map(s -> convertObj(s, Long.class)).orElse(-1L)
+                body().length,
+                headers == null ? -1L : headers.asStringOpt(CONTENT_RANGE).map(s -> s.replace("bytes 0-0/", "")).map(s -> convertObj(s, Long.class)).orElse(-1L)
         );
     }
 
@@ -797,18 +821,18 @@ public class HttpObject extends HttpRequest {
     protected TypeMap queryParamsOf(final String query) {
         if (queryParams == null) {
             queryParams = ofNullable(query)
-                .map(q -> {
-                    final TypeMap result = new TypeMap();
-                    Arrays.stream(NanoUtils.split(q, "&"))
-                        .map(param -> NanoUtils.split(param, "="))
-                        .forEach(keyValue -> {
-                            final String key = URLDecoder.decode(keyValue[0], UTF_8);
-                            final String value = keyValue.length > 1 ? URLDecoder.decode(keyValue[1], UTF_8) : "";
-                            result.put(key, value);
-                        });
-                    return result;
-                })
-                .orElseGet(TypeMap::new);
+                    .map(q -> {
+                        final TypeMap result = new TypeMap();
+                        Arrays.stream(NanoUtils.split(q, "&"))
+                                .map(param -> NanoUtils.split(param, "="))
+                                .forEach(keyValue -> {
+                                    final String key = URLDecoder.decode(keyValue[0], UTF_8);
+                                    final String value = keyValue.length > 1 ? URLDecoder.decode(keyValue[1], UTF_8) : "";
+                                    result.put(key, value);
+                                });
+                        return result;
+                    })
+                    .orElseGet(TypeMap::new);
         }
         return queryParams;
     }
@@ -869,7 +893,7 @@ public class HttpObject extends HttpRequest {
      *
      * @return a new, empty {@link HttpObject}.
      */
-    public HttpObject response() {
+    public HttpObject createResponse() {
         return new HttpObject();
     }
 
@@ -879,8 +903,8 @@ public class HttpObject extends HttpRequest {
      *
      * @return a new {@link HttpObject}, CORS-enabled.
      */
-    public HttpObject corsResponse() {
-        return response(true);
+    public HttpObject createCorsResponse() {
+        return createResponse(true);
     }
 
     /**
@@ -890,8 +914,8 @@ public class HttpObject extends HttpRequest {
      * @param cors if true, generates a CORS-enabled response.
      * @return a new {@link HttpObject}, optionally CORS-enabled.
      */
-    public HttpObject response(final boolean cors) {
-        return cors ? corsResponse(null) : new HttpObject();
+    public HttpObject createResponse(final boolean cors) {
+        return cors ? createCorsResponse(null) : new HttpObject();
     }
 
     /**
@@ -901,8 +925,8 @@ public class HttpObject extends HttpRequest {
      * @param origin comma separated list of whitelisted origins, or null for default.
      * @return a new {@link HttpObject} with CORS handling.
      */
-    public HttpObject corsResponse(final String origin) {
-        return corsResponse(origin, null);
+    public HttpObject createCorsResponse(final String origin) {
+        return createCorsResponse(origin, null);
     }
 
     /**
@@ -913,8 +937,8 @@ public class HttpObject extends HttpRequest {
      * @param methods the allowed HTTP methods, or null to use the current method.
      * @return a new {@link HttpObject} with CORS handling.
      */
-    public HttpObject corsResponse(final String origin, final String methods) {
-        return corsResponse(origin, methods, null);
+    public HttpObject createCorsResponse(final String origin, final String methods) {
+        return createCorsResponse(origin, methods, null);
     }
 
     /**
@@ -926,8 +950,8 @@ public class HttpObject extends HttpRequest {
      * @param headers the allowed HTTP headers, or null to default headers.
      * @return a new {@link HttpObject} with CORS handling.
      */
-    public HttpObject corsResponse(final String origin, final String methods, final String headers) {
-        return corsResponse(origin, methods, headers, -1);
+    public HttpObject createCorsResponse(final String origin, final String methods, final String headers) {
+        return createCorsResponse(origin, methods, headers, -1);
     }
 
     /**
@@ -940,8 +964,8 @@ public class HttpObject extends HttpRequest {
      * @param maxAge  the max age for caching preflight responses, or -1 for default (86400 seconds).
      * @return a new {@link HttpObject} with CORS handling.
      */
-    public HttpObject corsResponse(final String origin, final String methods, final String headers, final int maxAge) {
-        return corsResponse(origin, methods, headers, maxAge, false);
+    public HttpObject createCorsResponse(final String origin, final String methods, final String headers, final int maxAge) {
+        return createCorsResponse(origin, methods, headers, maxAge, false);
     }
 
     /**
@@ -956,22 +980,22 @@ public class HttpObject extends HttpRequest {
      * @return a new {@link HttpObject} with CORS handling.
      */
     @SuppressWarnings("java:S3358")
-    public HttpObject corsResponse(
-        final String origin,
-        final String methods,
-        final String headers,
-        final int maxAge,
-        final boolean credentials
+    public HttpObject createCorsResponse(
+            final String origin,
+            final String methods,
+            final String headers,
+            final int maxAge,
+            final boolean credentials
     ) {
         final String resultOrigin = origin(origin, credentials);
         return new HttpObject()
-            .header(ACCESS_CONTROL_ALLOW_ORIGIN, resultOrigin)
-            .header(ACCESS_CONTROL_ALLOW_METHODS, hasText(methods) ? methods : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_METHOD).orElse(method())))
-            .header(ACCESS_CONTROL_ALLOW_HEADERS, hasText(headers) ? headers : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_HEADERS).orElse("Content-Type, Accept, Authorization, X-Requested-With")))
-            .header(ACCESS_CONTROL_ALLOW_CREDENTIALS, String.valueOf(credentials))
-            .header(ACCESS_CONTROL_MAX_AGE, String.valueOf(maxAge > 0 ? maxAge : 86400))
-            .statusCode(resultOrigin.equals("null") ? 403 : (isMethodOptions() ? 204 : 200)) // 403 if origin doesn't match, 204 for preflight, 200 otherwise
-            .header(VARY, "Origin"); // Ensure the response is cached based on the Origin header
+                .header(ACCESS_CONTROL_ALLOW_ORIGIN, resultOrigin)
+                .header(ACCESS_CONTROL_ALLOW_METHODS, hasText(methods) ? methods : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_METHOD).orElse(method())))
+                .header(ACCESS_CONTROL_ALLOW_HEADERS, hasText(headers) ? headers : (headerMap().asStringOpt(ACCESS_CONTROL_REQUEST_HEADERS).orElse("Content-Type, Accept, Authorization, X-Requested-With")))
+                .header(ACCESS_CONTROL_ALLOW_CREDENTIALS, String.valueOf(credentials))
+                .header(ACCESS_CONTROL_MAX_AGE, String.valueOf(maxAge > 0 ? maxAge : 86400))
+                .statusCode(resultOrigin.equals("null") ? 403 : (isMethodOptions() ? 204 : 200)) // 403 if origin doesn't match, 204 for preflight, 200 otherwise
+                .header(VARY, "Origin"); // Ensure the response is cached based on the Origin header
     }
 
     /**
@@ -1000,8 +1024,8 @@ public class HttpObject extends HttpRequest {
     public String origin(final String origin, final boolean credentials) {
         final String requestOrigin = headerMap().asStringOpt(ORIGIN).or(() -> headerMap().asString(HOST)).orElseGet(() -> credentials ? "null" : "*");
         return hasText(origin) && !(credentials && origin.equals("*"))
-            ? origin.equals("*") ? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
-            : requestOrigin;
+                ? origin.equals("*") ? origin : Arrays.stream(origin.split(",")).map(String::trim).filter(requestOrigin::equalsIgnoreCase).findFirst().orElse("null")
+                : requestOrigin;
     }
 
     /**
@@ -1024,14 +1048,30 @@ public class HttpObject extends HttpRequest {
 
     /**
      * Sends an HTTP response using the current {@link HttpObject} as the response context.
+     * This should be called after {@link HttpObject#createResponse()}
      * This method utilizes the provided {@link Event} to carry the response back to the event handler or processor.
      * The {@link HttpObject} is attached to the event as its response payload, allowing further processing or handling.
      *
      * @param event the event to which this {@link HttpObject} should be attached as a response.
      * @return the event after attaching this {@link HttpObject} as a response, facilitating chaining and further manipulation.
      */
-    public Event respond(final Event event) {
-        return event.response(this);
+    public <C, R> Event<C, R> respond(final Event<C, R> event) {
+        event.channel(EVENT_HTTP_REQUEST).or(() -> event.channel(EVENT_HTTP_REQUEST_UNHANDLED)).ifPresent(request -> request.respond(this));
+        return event;
+    }
+
+    /**
+     * Sends an HTTP response using the current {@link HttpObject} as the response context.
+     * This should be called after {@link HttpObject#createResponse()}
+     * This method utilizes the provided {@link Event} to carry the response back to the event handler or processor.
+     * The {@link HttpObject} is attached to the event as its response payload, allowing further processing or handling.
+     *
+     * @param event    the event to which this {@link HttpObject} should be attached as a response.
+     * @param response a function that create a new {@link HttpObject} as response and returns it.
+     * @return the event after attaching this {@link HttpObject} as a response, facilitating chaining and further manipulation.
+     */
+    public <C, R> Event<C, R> respond(final Event<C, R> event, final UnaryOperator<HttpObject> response) {
+        return response.apply(createCorsResponse()).respond(event);
     }
 
     /**
@@ -1055,11 +1095,10 @@ public class HttpObject extends HttpRequest {
         if (context == null)
             return null;
 
-        return context.newEvent(EVENT_SEND_HTTP)
-            .payload(() -> this)
-            .putR("callback", callback)
-            .send()
-            .response(HttpObject.class);
+        final HttpObject response = context.newEvent(EVENT_SEND_HTTP, () -> this).putR("callback", callback).send().response();
+        if (callback == null && response == null)
+            return createResponse().path(this.path()).statusCode(-99).body("Failed to send HTTP request - maybe no [" + HttpClient.class.getSimpleName() + "] was configured?");
+        return response;
     }
 
     /**
@@ -1070,7 +1109,7 @@ public class HttpObject extends HttpRequest {
      * @return true if an exception or failure is indicated in the headers, false otherwise.
      */
     public boolean hasFailed() {
-        return !is2xxSuccessful() || (headers != null && (headers.containsValue(ContentType.APPLICATION_PROBLEM_JSON.value()) || headers.containsValue(ContentType.APPLICATION_PROBLEM_XML.value()) || headers.containsValue(HTTP_EXCEPTION_HEADER)));
+        return !is2xxSuccessful() || (headers != null && (headers.containsValue(APPLICATION_PROBLEM_JSON.value()) || headers.containsValue(ContentType.APPLICATION_PROBLEM_XML.value()) || headers.containsValue(HTTP_EXCEPTION_HEADER)));
     }
 
     /**
@@ -1098,21 +1137,36 @@ public class HttpObject extends HttpRequest {
      * This method allows an exception to be attached to the HTTP object,
      * potentially for logging purposes or for transmitting error information back to a client or server.
      *
-     * @param throwable the {@link Throwable} exception to store in the headers.
+     * @param statusCode the HTTP status code to set for the failure.
+     * @param throwable  the {@link Throwable} exception to store in the headers.
      * @return this {@link HttpObject} to allow for method chaining.
      */
     public HttpObject failure(final int statusCode, final Throwable throwable) {
         header(HTTP_EXCEPTION_HEADER, throwable);
-        header(CONTENT_TYPE, ContentType.APPLICATION_PROBLEM_JSON.value());
+        return failure(statusCode, ofNullable(throwable.getMessage()).orElse(throwable.getClass().getSimpleName()), convertObj(throwable, String.class));
+    }
+
+    /**
+     * Stores a failure exception within the HTTP headers. RFC 7807 To The Rescue!
+     * This method allows an exception to be attached to the HTTP object,
+     * potentially for logging purposes or for transmitting error information back to a client or server.
+     *
+     * @param statusCode the HTTP status code to set for the failure.
+     * @param title      the failure title to store in the headers.
+     * @param detail     the failure detail message to store in the headers.
+     * @return this {@link HttpObject} to allow for method chaining.
+     */
+    public HttpObject failure(final int statusCode, final String title, final String detail) {
+        contentType(APPLICATION_PROBLEM_JSON);
         statusCode(statusCode);
-        body(new TypeMap()
-            .putR("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
-            .putR("type", "https://github.com/nanonative/nano")
-            .putR("title", ofNullable(throwable.getMessage()).orElse(throwable.getClass().getSimpleName()))
-            .putR("status", statusCode)
-            .putR("instance", path())
-            .putR("detail", convertObj(throwable, String.class))
-            .putR("timestamp", Instant.now().toEpochMilli())
+        body(new LinkedTypeMap()
+                .putR("id", NanoUtils.generateNanoName("%s_%s_%s_%s").toLowerCase().replace(".", "").replace(" ", "_"))
+                .putR("type", "https://github.com/nanonative/nano")
+                .putR("title", title)
+                .putR("status", statusCode)
+                .putR("instance", path())
+                .putR("detail", detail)
+                .putR("timestamp", Instant.now().toEpochMilli())
         );
         return this;
     }
@@ -1127,10 +1181,10 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isFrontendCall() {
         return ofNullable(headers)
-            .map(header -> header.asString(HttpHeaders.USER_AGENT))
-            .map(String::toLowerCase)
-            .filter(agent -> (Stream.of(USER_AGENT_BROWSERS).anyMatch(agent::contains)))
-            .isPresent();
+                .map(header -> header.asString(HttpHeaders.USER_AGENT))
+                .map(String::toLowerCase)
+                .filter(agent -> (Stream.of(USER_AGENT_BROWSERS).anyMatch(agent::contains)))
+                .isPresent();
     }
 
     /**
@@ -1141,10 +1195,10 @@ public class HttpObject extends HttpRequest {
      */
     public boolean isMobileCall() {
         return ofNullable(headers)
-            .map(header -> header.asString(HttpHeaders.USER_AGENT))
-            .map(String::toLowerCase)
-            .filter(agent -> (Stream.of(USER_AGENT_MOBILE).anyMatch(agent::contains)))
-            .isPresent();
+                .map(header -> header.asString(HttpHeaders.USER_AGENT))
+                .map(String::toLowerCase)
+                .filter(agent -> (Stream.of(USER_AGENT_MOBILE).anyMatch(agent::contains)))
+                .isPresent();
     }
 
     /**
@@ -1154,7 +1208,7 @@ public class HttpObject extends HttpRequest {
      */
     public String host() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getHostName()))
-            .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
+                .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":")[0])).orElse(null);
     }
 
     /**
@@ -1164,11 +1218,11 @@ public class HttpObject extends HttpRequest {
      */
     public int port() {
         return ofNullable(fromExchange(httpExchange -> httpExchange.getRemoteAddress().getPort()))
-            .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
-                .filter(a -> a.length > 1)
-                .map(a -> a[1])
-                .map(s -> convertObj(s, Integer.class))
-            ).orElse(-1);
+                .or(() -> ofNullable(headers).map(header -> header.asString(HttpHeaders.HOST)).map(value -> NanoUtils.split(value, ":"))
+                        .filter(a -> a.length > 1)
+                        .map(a -> a[1])
+                        .map(s -> convertObj(s, Integer.class))
+                ).orElse(-1);
     }
 
     /**
@@ -1198,12 +1252,12 @@ public class HttpObject extends HttpRequest {
      */
     public Charset encoding() {
         return Arrays.stream(ofNullable(header(CONTENT_TYPE)).map(s -> NanoUtils.split(s, ";")).orElse(new String[0]))
-            .map(String::trim)
-            .filter(part -> part.toLowerCase().startsWith("charset="))
-            .map(charset -> charset.substring(8).trim())
-            .map(charset -> convertObj(charset, Charset.class))
-            .filter(Objects::nonNull)
-            .findFirst().orElse(Charset.defaultCharset());
+                .map(String::trim)
+                .filter(part -> part.toLowerCase().startsWith("charset="))
+                .map(charset -> charset.substring(8).trim())
+                .map(charset -> convertObj(charset, Charset.class))
+                .filter(Objects::nonNull)
+                .findFirst().orElse(Charset.defaultCharset());
     }
 
     public boolean hasContentType(final String... contentTypes) {
@@ -1391,12 +1445,12 @@ public class HttpObject extends HttpRequest {
     @Override
     public String toString() {
         return new StringJoiner(", ", HttpObject.class.getSimpleName() + "[", "]")
-            .add("statusCode=" + statusCode)
-            .add("path=" + path)
-            .add("method=" + method())
-            .add("headers=" + headers)
-            .add("body=" + bodyAsString())
-            .toString();
+                .add("statusCode=" + statusCode)
+                .add("path=" + path)
+                .add("method=" + method())
+                .add("headers=" + headers)
+                .add("body=" + bodyAsString())
+                .toString();
     }
 
     // ########## STATICS ##########
@@ -1422,11 +1476,11 @@ public class HttpObject extends HttpRequest {
         if (value.size() != 1)
             return value.stream().map(mapper).toList();
         return Arrays.stream(NanoUtils.split(value.iterator().next(), ","))
-            .map(s -> NanoUtils.split(s, ";q="))
-            .sorted(Comparator.comparing(parts -> parts.length > 1 ? Double.parseDouble(parts[1].trim()) : 1.0, Comparator.reverseOrder()))
-            .map(parts -> mapper.apply(parts[0].trim()))
-            .filter(Objects::nonNull)
-            .toList();
+                .map(s -> NanoUtils.split(s, ";q="))
+                .sorted(Comparator.comparing(parts -> parts.length > 1 ? Double.parseDouble(parts[1].trim()) : 1.0, Comparator.reverseOrder()))
+                .map(parts -> mapper.apply(parts[0].trim()))
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     public static boolean isMethod(final HttpObject request, final HttpMethod method) {
@@ -1441,13 +1495,13 @@ public class HttpObject extends HttpRequest {
      */
     public static TypeMap convertHeaders(final Map<String, ?> headers) {
         return headers.entrySet().stream()
-            .filter(entry -> entry.getKey() != null && entry.getValue() != null)
-            .collect(Collectors.toMap(
-                entry -> entry.getKey().toLowerCase(),
-                Map.Entry::getValue,
-                (v1, v2) -> v1,
-                TypeMap::new
-            ));
+                .filter(entry -> entry.getKey() != null && entry.getValue() != null)
+                .collect(Collectors.toMap(
+                        entry -> entry.getKey().toLowerCase(),
+                        Map.Entry::getValue,
+                        (v1, v2) -> v1,
+                        TypeMap::new
+                ));
     }
 
     public static String removeLast(final String input, final String removable) {
@@ -1470,9 +1524,9 @@ public class HttpObject extends HttpRequest {
     public boolean isZipCompressed(final byte[] body) {
         final int ZIP_MAGIC = 0x504B0304;
         return body.length > 3
-            && (body[0] & 0xFF) == ((ZIP_MAGIC >> 24) & 0xFF)
-            && (body[1] & 0xFF) == ((ZIP_MAGIC >> 16) & 0xFF)
-            && (body[2] & 0xFF) == ((ZIP_MAGIC >> 8) & 0xFF)
-            && (body[3] & 0xFF) == (ZIP_MAGIC & 0xFF);
+                && (body[0] & 0xFF) == ((ZIP_MAGIC >> 24) & 0xFF)
+                && (body[1] & 0xFF) == ((ZIP_MAGIC >> 16) & 0xFF)
+                && (body[2] & 0xFF) == ((ZIP_MAGIC >> 8) & 0xFF)
+                && (body[3] & 0xFF) == (ZIP_MAGIC & 0xFF);
     }
 }

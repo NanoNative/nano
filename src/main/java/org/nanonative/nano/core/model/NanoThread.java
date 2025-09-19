@@ -1,7 +1,7 @@
 package org.nanonative.nano.core.model;
 
+import berlin.yuna.typemap.model.LinkedTypeMap;
 import org.nanonative.nano.helper.ExRunnable;
-import org.nanonative.nano.helper.LockedBoolean;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
@@ -13,35 +13,41 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import static java.util.Optional.ofNullable;
-import static org.nanonative.nano.core.NanoThreads.runAsync;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 
 public class NanoThread {
 
-    protected final List<BiConsumer<NanoThread, Throwable>> onCompleteCallbacks = new CopyOnWriteArrayList<>();
-    protected final LockedBoolean isComplete = new LockedBoolean();
+    protected final List<BiConsumer<NanoThread, Throwable>> listeners = new CopyOnWriteArrayList<>();
+    protected final AtomicBoolean isComplete = new AtomicBoolean();
 
     public static final ExecutorService GLOBAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
     protected static final AtomicLong activeNanoThreadCount = new AtomicLong(0);
+    private volatile Future<?> future;
 
     public boolean isComplete() {
         return isComplete.get();
     }
 
-    public NanoThread onComplete(final BiConsumer<NanoThread, Throwable> onComplete) {
-        isComplete.run(state -> {
-            if (Boolean.TRUE.equals(state)) {
-                onComplete.accept(this, null);
-            } else {
-                onCompleteCallbacks.add(onComplete);
-            }
-        });
+    public NanoThread onComplete(final BiConsumer<NanoThread, Throwable> listener) {
+        // If already done, invoke immediately, but never while holding any lock.
+        if (isComplete.get()) {
+            listener.accept(this, null);
+            return this;
+        }
+        listeners.add(listener);
+        // Edge race: if completion happened between get() and add(), check again.
+        if (isComplete.get()) {
+            // Best effort to notify late subscribers promptly.
+            listener.accept(this, null);
+        }
         return this;
     }
 
@@ -55,23 +61,43 @@ public class NanoThread {
 
     @SuppressWarnings("java:S1181") // Throwable is caught
     public NanoThread run(final Supplier<Context> context, final ExRunnable task) {
-        runAsync(() -> {
+        future = GLOBAL_THREAD_POOL.submit(() -> {
             try {
                 activeNanoThreadCount.incrementAndGet();
                 task.run();
-                isComplete.set(true, state -> onCompleteCallbacks.forEach(onComplete -> onComplete.accept(this, null)));
+                markComplete(null);
             } catch (final Throwable error) {
                 handleJavaError(context, error);
-                isComplete.set(true, state -> {
-                    if (!onCompleteCallbacks.isEmpty())
-                        onCompleteCallbacks.forEach(onComplete -> onComplete.accept(this, error));
-                    else
-                        ofNullable(context).map(Supplier::get).ifPresent(ctx -> ctx.sendEventError(task, error));
-                });
+                markComplete(error);
+                ofNullable(context).map(Supplier::get)
+                    .ifPresent(ctx -> ctx.sendEventError(task, error));
             } finally {
                 activeNanoThreadCount.decrementAndGet();
             }
         });
+        return this;
+    }
+
+    private void markComplete(final Throwable error) {
+        if (isComplete.compareAndSet(false, true)) {
+            // Invoke user callbacks outside any lock, once.
+            for (final BiConsumer<NanoThread, Throwable> l : listeners) {
+                try {
+                    l.accept(this, error);
+                } catch (final Exception ignored) {
+                    // ignored
+                }
+            }
+            listeners.clear();
+        }
+    }
+
+    public Future<?> future() {
+        return future;
+    }
+
+    public NanoThread future(final Future<?> future) {
+        this.future = future;
         return this;
     }
 
@@ -86,6 +112,7 @@ public class NanoThread {
             .filter(Objects::nonNull)
             .filter(info -> (info.getThreadName() != null && info.getThreadName().startsWith("CarrierThread"))
                 || (info.getLockName() != null && info.getLockName().startsWith("java.lang.VirtualThread"))
+                || (info.getLockName() != null && info.getLockName().startsWith("nano-thread-"))
                 || (info.getLockOwnerName() != null && info.getLockName().startsWith("nano-thread-"))
             )
             .count();
@@ -117,23 +144,21 @@ public class NanoThread {
      * @return The same array of {@link NanoThread} instances, allowing for method chaining or further processing.
      */
     public static NanoThread[] waitFor(final Runnable onComplete, final NanoThread... threads) {
-
         final CountDownLatch latch = new CountDownLatch(threads.length);
         for (final NanoThread thread : threads) {
             thread.onComplete((nt, error) -> {
                 latch.countDown();
-                if (!(error instanceof Error) && latch.getCount() <= 0 && onComplete != null) {
-                    onComplete.run();
-                }
+                if (!(error instanceof Error) && latch.getCount() == 0 && onComplete != null) onComplete.run();
             });
         }
-
         if (onComplete == null) {
+            // Wait up to configurable timeout; if it expires, dump diagnostics then block a bit longer
             try {
-                //TODO configurable timeout
-                final boolean completed = latch.await(10, TimeUnit.SECONDS);
-                if (!completed) {
-                    System.err.println(new Date() + " [FATAL] Threads did no complete");
+                if (!latch.await(10000L, TimeUnit.MILLISECONDS)) {
+                    System.err.println(new Date() + " [FATAL] Threads did not complete in " + 10000L + "ms");
+                    for (final NanoThread t : threads) {
+                        if (t.future() != null) t.future().cancel(true); // cooperative cancel
+                    }
                 }
             } catch (final InterruptedException ignored) {
                 Thread.currentThread().interrupt();
@@ -144,9 +169,10 @@ public class NanoThread {
 
     @Override
     public String toString() {
-        return this.getClass().getSimpleName() + "{" +
-            "onCompleteCallbacks=" + onCompleteCallbacks.size() +
-            ", isComplete=" + isComplete() +
-            '}';
+        return new LinkedTypeMap()
+            .putR("class", this.getClass().getSimpleName())
+            .putR("listener", listeners.size())
+            .putR("isComplete", isComplete.get())
+            .toJson();
     }
 }

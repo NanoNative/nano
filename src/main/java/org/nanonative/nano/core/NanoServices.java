@@ -13,11 +13,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Optional.ofNullable;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_SERVICE_REGISTER;
+import static org.nanonative.nano.core.model.Context.EVENT_APP_SERVICE_UNREGISTER;
 
 /**
  * The abstract base class for {@link Nano} framework providing {@link Service} handling functionalities.
  *
- * @param <T> The type of the {@link NanoServices} implementation, used for method chaining.
+ * @param <T> The payload of the {@link NanoServices} implementation, used for method chaining.
  */
 @SuppressWarnings({"unused", "UnusedReturnValue"})
 public abstract class NanoServices<T extends NanoServices<T>> extends NanoThreads<T> {
@@ -33,14 +35,14 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
     protected NanoServices(final Map<Object, Object> config, final String... args) {
         super(config, args);
         this.services = new CopyOnWriteArrayList<>();
-        subscribeEvent(Context.EVENT_APP_SERVICE_REGISTER, event -> event.payloadOpt(Service.class).map(this::registerService).ifPresent(nano -> event.acknowledge()));
-        subscribeEvent(Context.EVENT_APP_SERVICE_UNREGISTER, event -> event.payloadOpt(Service.class).map(service -> unregisterService(event.context(), service)).ifPresent(nano -> event.acknowledge()));
+        subscribeEvent(EVENT_APP_SERVICE_REGISTER, event -> registerService(event.payloadAck()));
+        subscribeEvent(EVENT_APP_SERVICE_UNREGISTER, event -> unregisterService(event.context(), event.payloadAck()));
     }
 
     /**
-     * Retrieves a {@link Service} of a specified type.
+     * Retrieves a {@link Service} of a specified payload.
      *
-     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
+     * @param <S>          The payload of the service to retrieve, which extends {@link Service}.
      * @param serviceClass The class of the {@link Service} to retrieve.
      * @return The first instance of the specified {@link Service}, or null if not found.
      */
@@ -49,9 +51,9 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
     }
 
     /**
-     * Retrieves a {@link Service} of a specified type.
+     * Retrieves a {@link Service} of a specified payload.
      *
-     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
+     * @param <S>          The payload of the service to retrieve, which extends {@link Service}.
      * @param serviceClass The class of the {@link Service} to retrieve.
      * @return The first instance of the specified {@link Service}, or null if not found.
      */
@@ -64,11 +66,11 @@ public abstract class NanoServices<T extends NanoServices<T>> extends NanoThread
     }
 
     /**
-     * Retrieves a list of services of a specified type.
+     * Retrieves a list of services of a specified payload.
      *
-     * @param <S>          The type of the service to retrieve, which extends {@link Service}.
+     * @param <S>          The payload of the service to retrieve, which extends {@link Service}.
      * @param serviceClass The class of the service to retrieve.
-     * @return A list of services of the specified type. If no services of this type are found,
+     * @return A list of services of the specified payload. If no services of this payload are found,
      * an empty list is returned.
      */
     public <S extends Service> List<S> services(final Class<S> serviceClass) {

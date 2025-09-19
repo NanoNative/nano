@@ -3,17 +3,140 @@
 > / [Services](../../services/README.md)
 > / [**HttpServer**](README.md)
 
-* [Usage](#usage)
-    * [Start HTTP Service](#start-http-service)
-    * [Handle HTTP Requests](#handle-http-requests)
+* [Overview](#overview)
+* [Quick Start](#quick-start)
 * [Configuration](#configuration)
 * [Events](#events)
 
-# Http Service
+# HTTP Service
 
-Is a default [Services](../../services/README.md) of Nano which is responsible for handling basic HTTP requests.
-Each request is processed in its own Thread.
-Support for Https/SSL is coming soon.
+The `HttpServer` is Nano's built-in HTTP service that handles web requests and responses. It's designed to be simple, fast, and flexible - perfect for building REST APIs, web applications, and microservices.
+
+## Overview
+
+Nano's HTTP service provides:
+- **Non-blocking request handling** using virtual threads
+- **Built-in CORS support** with automatic origin handling
+- **Flexible request/response processing** through events
+- **SSL/TLS support** with multiple certificate formats
+- **Type-safe request parsing** with automatic JSON conversion
+- **Comprehensive error handling** at multiple levels
+
+## Quick Start
+
+Here's a complete example of a user registration API:
+
+```java
+public class UserApi {
+    public static void main(String[] args) {
+        final Nano nano = new Nano(args, new HttpServer());
+        
+        // CORS handling (must be first)
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleCors);
+        
+        // Authentication middleware
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleAuth);
+        
+        // API endpoints
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleRegister);
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, UserApi::handleLogin);
+        
+        // Global error handling
+        nano.subscribeError(EVENT_HTTP_REQUEST, UserApi::handleError);
+    }
+    
+    // CORS handling
+    private static void handleCors(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodOptions)
+            .ifPresent(req -> req.createCorsResponse().respond(event));
+    }
+    
+    // Authentication middleware
+    private static void handleAuth(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(req -> req.pathMatch("/api/**"))
+            .filter(req -> !req.pathMatch("/api/auth/**")) // Skip auth for login/register
+            .filter(req -> !isValidToken(req.authToken()))
+            .ifPresent(req -> req.createResponse()
+                .statusCode(401)
+                .body(Map.of("error", "Unauthorized"))
+                .respond(event));
+    }
+    
+    // User registration
+    private static void handleRegister(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/api/auth/register"))
+            .ifPresent(req -> {
+                final TypeMap body = req.bodyAsJson().asMap();
+                final String email = body.asString("email");
+                final String password = body.asString("password");
+                
+                // Validate input
+                if (email == null || password == null) {
+                    req.createResponse()
+                        .statusCode(400)
+                        .body(Map.of("error", "Email and password required"))
+                        .respond(event);
+                    return;
+                }
+                
+                // Process registration
+                try {
+                    final User user = createUser(email, password);
+                    req.createResponse()
+                        .statusCode(201)
+                        .body(Map.of("id", user.getId(), "email", user.getEmail()))
+                        .respond(event);
+                } catch (ValidationException e) {
+                    req.createResponse()
+                        .statusCode(400)
+                        .body(Map.of("error", e.getMessage()))
+                        .respond(event);
+                }
+            });
+    }
+    
+    // User login
+    private static void handleLogin(Event<HttpObject, HttpObject> event) {
+        event.payloadOpt()
+            .filter(HttpObject::isMethodPost)
+            .filter(req -> req.pathMatch("/api/auth/login"))
+            .ifPresent(req -> {
+                final TypeMap body = req.bodyAsJson().asMap();
+                final String email = body.asString("email");
+                final String password = body.asString("password");
+                
+                try {
+                    final String token = authenticateUser(email, password);
+                    req.createResponse()
+                        .statusCode(200)
+                        .body(Map.of("token", token, "user", getUserByEmail(email)))
+                        .respond(event);
+                } catch (AuthenticationException e) {
+                    req.createResponse()
+                        .statusCode(401)
+                        .body(Map.of("error", "Invalid credentials"))
+                        .respond(event);
+                }
+            });
+    }
+    
+    // Global error handler
+    private static void handleError(Event<?, ?> event) {
+        if (event.isEvent(EVENT_HTTP_REQUEST)) {
+            event.payloadAck()
+                .createResponse()
+                .statusCode(500)
+                .body(Map.of("error", "Internal server error", 
+                           "details", event.error().getMessage()))
+                .respond(event);
+        }
+    }
+}
+```
 
 ## Usage
 
@@ -42,32 +165,38 @@ public static void main(final String[] args) {
     app.subscribeEvent(EVENT_APP_UNHANDLED, RestEndpoint::controllerAdvice);
 }
 
-private static void helloWorldController(final Event event) {
-    event.payloadOpt(HttpObject.class)
+private static void helloWorldController(final Event<HttpObject, HttpObject> event) {
+    event.payloadOpt()
         .filter(HttpObject::isMethodGet)
         .filter(request -> request.pathMatch("/hello"))
-        .ifPresent(request -> request.response().body(Map.of("Hello", System.getProperty("user.name"))).respond(event));
+        .ifPresent(request -> request.respond(event, response -> response.body(Map.of("Hello", System.getProperty("user.name")))));
 }
 
-private static void authorize(final Event event) {
-    event.payloadOpt(HttpObject.class)
+private static void authorize(final Event<HttpObject, HttpObject> event) {
+    event.payloadOpt()
         .filter(request -> request.pathMatch("/hello/**"))
         .filter(request -> !"mySecretToken".equals(request.authToken()))
-        .ifPresent(request -> request.response().body(Map.of("message", "You are unauthorized")).statusCode(401).respond(event));
+        .ifPresent(request -> request.respond(event, response -> response.body(Map.of("message", "You are unauthorized")).statusCode(401)));
 }
 
-private static void controllerAdvice(final Event event) {
-    event.payloadOpt(HttpObject.class).ifPresent(request ->
-        request.response().body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500).respond(event));
+private static void controllerAdvice(final Event<HttpObject, HttpObject> event) {
+    event.payloadOpt().ifPresent(request ->
+        request.respond(event, response -> response.body("Internal Server Error [" + event.error().getMessage() + "]").statusCode(500)));
 }
 ```
 
 ## Configuration
 
-| [Config](../../context/README.md#configuration) | Type      | Default                       | Description                                         |
-|-------------------------------------------------|-----------|-------------------------------|-----------------------------------------------------|
-| `app_service_http_port `                        | `Integer` | `8080`, `8081`, ... (dynamic) | (HttpServer) Port                                   |
-| `app_service_http_client`                       | `Boolean` | `false`                       | (HttpClient) If the HttpClient should start as well |
+| [Config](../../context/README.md#configuration) | Type      | Default                       | Description                                                 |
+|-------------------------------------------------|-----------|-------------------------------|-------------------------------------------------------------|
+| `app_service_http_port`                         | `Integer` | `8080`, `8081`, ... (dynamic) | The HTTP/HTTPS port to bind                                 |
+| `app_service_http_client`                       | `Boolean` | `false`                       | If HttpClient should start with HttpServer                  |
+| `app_service_https_cert`                        | `String`  | `null`                        | Path to the server certificate (PEM/CRT)                    |
+| `app_service_https_key`                         | `String`  | `null`                        | Path to the private key (PEM)                               |
+| `app_service_https_ca`                          | `String`  | `null`                        | Optional CA cert path                                       |
+| `app_service_https_kts`                         | `String`  | `null`                        | Path to keystore (JKS, JCEKS, PKCS12)                       |
+| `app_service_https_password`                    | `String`  | `null`                        | Optional password for private key or keystore               |
+| `app_service_https_certs`                       | `String`  | `null`                        | Comma-separated list of cert/key/store files or directories |
 
 ## Events
 
