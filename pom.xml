@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>2025.0.6</version>
+    <version>2025.0.20</version>
     <packaging>jar</packaging>
 
     <name>nano</name>
@@ -40,21 +40,20 @@
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
 
         <!-- PRODUCTION -->
-        <type-map.version>2025.0.8</type-map.version>
+        <type-map.version>2025.09.2550709</type-map.version>
 
         <!-- TEST -->
-        <junit.version>5.12.0</junit.version>
-        <assertj-core.version>3.27.3</assertj-core.version>
-        <junit-launcher.version>1.12.0</junit-launcher.version>
+        <junit-jupiter-api.version>5.13.4</junit-jupiter-api.version>
+        <assertj-core.version>3.27.4</assertj-core.version>
 
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
         <maven-scm-plugin.version>1.11.2</maven-scm-plugin.version>
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
-        <jacoco-maven-plugin.version>0.8.12</jacoco-maven-plugin.version>
+        <jacoco-maven-plugin.version>0.8.13</jacoco-maven-plugin.version>
         <maven-javadoc-plugin.version>3.1.0</maven-javadoc-plugin.version>
         <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
-        <maven-surefire-plugin.version>3.5.2</maven-surefire-plugin.version>
+        <maven-surefire-plugin.version>3.5.3</maven-surefire-plugin.version>
         <central-publishing-maven-plugin.version>0.5.0</central-publishing-maven-plugin.version>
     </properties>
 
