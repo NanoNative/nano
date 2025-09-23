@@ -29,7 +29,6 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.nanonative.nano.core.model.Context.CONFIG_THREAD_POOL_TIMEOUT_MS;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SCHEDULER_UNREGISTER;
-import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.NanoUtils.callerInfoStr;
 import static org.nanonative.nano.helper.NanoUtils.getThreadName;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
@@ -117,9 +116,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      * @return self for chaining
      */
     public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone, final BooleanSupplier until) {
-        final Scheduler scheduler = asyncFromPool(context);
-        final ZonedDateTime firstPlanned = initialPlanned(atTime, dow, zone);
-        scheduleOnce(context, task, scheduler, until, atTime, dow, zone, firstPlanned);
+        scheduleOnce(context, task, asyncFromPool(), until, atTime, dow, zone, initialPlanned(atTime, dow, zone));
         return (T) this;
     }
 
@@ -186,7 +183,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      */
     protected static ZonedDateTime nextPlanned(final ZonedDateTime prevPlanned, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone) {
         return dow != null ? resolveWallTime(prevPlanned.toLocalDate().plusWeeks(1), atTime, zone)
-                : resolveWallTime(prevPlanned.toLocalDate().plusDays(1), atTime, zone);
+            : resolveWallTime(prevPlanned.toLocalDate().plusDays(1), atTime, zone);
     }
 
     /**
@@ -215,7 +212,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      */
     @SuppressWarnings({"resource", "unchecked"})
     public T run(final Supplier<Context> context, final ExRunnable task, final long delay, final TimeUnit timeUnit) {
-        final Scheduler scheduler = asyncFromPool(context);
+        final Scheduler scheduler = asyncFromPool();
         scheduler.schedule(() -> executeScheduler(context, task, scheduler, false), delay, timeUnit);
         return (T) this;
     }
@@ -232,7 +229,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      */
     @SuppressWarnings({"resource", "unchecked"})
     public T run(final Supplier<Context> context, final ExRunnable task, final long delay, final long period, final TimeUnit unit, final BooleanSupplier until) {
-        final Scheduler scheduler = asyncFromPool(context);
+        final Scheduler scheduler = asyncFromPool();
 
         // Periodic task
         scheduler.scheduleAtFixedRate(() -> {
@@ -250,17 +247,12 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      *
      * @return The newly created {@link Scheduler}.
      */
-    protected Scheduler asyncFromPool(final Supplier<Context> context) {
+    protected Scheduler asyncFromPool() {
         final String schedulerId = callerInfoStr(this.getClass()) + "_" + UUID.randomUUID();
         final Scheduler scheduler = new Scheduler(schedulerId) {
             @Override
             protected void beforeExecute(final Thread t, final Runnable r) {
                 t.setName("Scheduler_" + schedulerId);
-                try {
-                    GLOBAL_THREAD_POOL.submit(r);
-                } catch (final Throwable error) {
-                    handleJavaError(context, error);
-                }
             }
         };
         context(Scheduler.class).newEvent(EVENT_APP_SCHEDULER_REGISTER, () -> scheduler).broadcast(true).async(true).send();

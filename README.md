@@ -141,7 +141,7 @@ Maven example
 <dependency>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>1.0.0</version>
+    <version>2025.1.0</version>
 </dependency>
 ```
 
@@ -149,7 +149,7 @@ Gradle example
 
 ```groovy
 dependencies {
-    implementation 'org.nanonative:nano:1.0.0'
+    implementation 'org.nanonative:nano:2025.1.0'
 }
 ```
 
@@ -163,7 +163,7 @@ dependencies {
 
 **Need architecture guidance?** See our [Core Concepts](docs/info/concept/README.md) for best practices.
 
-**Looking for documentation?** Browse our [Complete Documentation Index](docs/README.md) for all guides.
+**Looking for documentation?** Check out our comprehensive guides in the [docs](docs/) directory.
 
 ### Simple Example
 
