@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>2025.1.2</version>
+    <version>2025.1.3</version>
     <packaging>jar</packaging>
 
     <name>nano</name>
@@ -39,11 +39,11 @@
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
 
         <!-- PRODUCTION -->
-        <type-map.version>2025.09.2650711</type-map.version>
+        <type-map.version>2025.09.2660710</type-map.version>
 
         <!-- TEST -->
         <junit.version>5.13.4</junit.version>
-        <assertj-core.version>3.27.5</assertj-core.version>
+        <assertj-core.version>3.27.6</assertj-core.version>
         <junit-launcher.version>1.13.4</junit-launcher.version>
 
         <!-- BUILD -->
