@@ -61,8 +61,8 @@ public class Event<C, R> extends TypeMap {
     @SuppressWarnings({"unchecked", "java:S3358"})
     public <A, B> Optional<Event<A, B>> channel(final Channel<A, B> channel) {
         return this.channel.id() == channel.id()
-                ? Optional.of((Event<A, B>) this)
-                : containsEvent() ? ((Event<?, ?>) payload()).channel(channel) : Optional.empty();
+            ? Optional.of((Event<A, B>) this)
+            : containsEvent() ? ((Event<?, ?>) payload()).channel(channel) : Optional.empty();
     }
 
     /**
@@ -279,7 +279,7 @@ public class Event<C, R> extends TypeMap {
         this.response = response;
         if (!isAcknowledged())
             ofNullable(get("parentEvent")).filter(Event.class::isInstance).map(Event.class::cast).ifPresentOrElse(event -> event.isAcknowledged.set(true),
-                    () -> Optional.of(containsEvent()).filter(containsEvent -> containsEvent).flatMap(containsEvent -> payloadOpt()).filter(Event.class::isInstance).map(Event.class::cast).ifPresent(event -> event.isAcknowledged.set(true)));
+                () -> Optional.of(containsEvent()).filter(containsEvent -> containsEvent).flatMap(containsEvent -> payloadOpt()).filter(Event.class::isInstance).map(Event.class::cast).ifPresent(event -> event.isAcknowledged.set(true)));
         this.isAcknowledged.set(true);
         return this;
     }
@@ -303,21 +303,9 @@ public class Event<C, R> extends TypeMap {
     }
 
     /**
-     * Returns the response as an {@link Optional} only if it is compatible with {@code type}.
-     *
-     * @param type target class to check against the channel's response type
-     * @param <T>  desired response view
-     * @return optional typed response when assignable; otherwise empty
-     */
-    @SuppressWarnings("unchecked")
-    public <T> Optional<T> responseOpt(final Class<T> type) {
-        return ofNullable(channel.response().isAssignableFrom(type) ? (T) response : null);
-    }
-
-    /**
      * Invokes the given consumer with this event and returns this instance.
      * <p>
-     * Useful for debugging or fluent side-effects without breaking the chain.
+     * Useful for debugging or fluent side effects without breaking the chain.
      *
      * @param peek consumer observing this event
      * @return this event for chaining
@@ -364,9 +352,9 @@ public class Event<C, R> extends TypeMap {
      */
     public Throwable error() {
         return error == null
-                ? ofNullable(get("parentEvent")).filter(Event.class::isInstance).map(Event.class::cast).map(Event::error)
-                .or(() -> Optional.of(containsEvent()).filter(containsEvent -> containsEvent).flatMap(containsEvent -> payloadOpt()).filter(Event.class::isInstance).map(Event.class::cast).map(Event::error)).orElse(null)
-                : error;
+            ? ofNullable(get("parentEvent")).filter(Event.class::isInstance).map(Event.class::cast).map(Event::error)
+            .or(() -> Optional.of(containsEvent()).filter(containsEvent -> containsEvent).flatMap(containsEvent -> payloadOpt()).filter(Event.class::isInstance).map(Event.class::cast).map(Event::error)).orElse(null)
+            : error;
     }
 
     /**
@@ -406,18 +394,18 @@ public class Event<C, R> extends TypeMap {
     @Override
     public String toString() {
         return new LinkedTypeMap()
-                .putR("channel", channel())
-                .putR("ack", response != null)
-                .putR("listener", responseListener != null)
-                .putR("payload", ofNullable(payload()).map(Object::toString).orElse(null))
-                .putR("class", this.getClass().getSimpleName())
-                .putR("size", context.size() + this.size()
-                        + (payload == null ? 0 : 1)
-                        + (responseListener == null ? 0 : 1)
-                        + (response == null ? 0 : 1)
-                        + (error == null ? 0 : 1)
-                )
-                .toJson();
+            .putR("channel", channel())
+            .putR("ack", response != null)
+            .putR("listener", responseListener != null)
+            .putR("payload", ofNullable(payload()).map(Object::toString).orElse(null))
+            .putR("class", this.getClass().getSimpleName())
+            .putR("size", context.size() + this.size()
+                + (payload == null ? 0 : 1)
+                + (responseListener == null ? 0 : 1)
+                + (response == null ? 0 : 1)
+                + (error == null ? 0 : 1)
+            )
+            .toJson();
     }
 
     /**

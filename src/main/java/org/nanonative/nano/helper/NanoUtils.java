@@ -208,20 +208,33 @@ public class NanoUtils {
         }) {
             readConfigFile(result, directory + "application" + (profile.isEmpty() ? profile : "-" + profile) + ".properties");
         }
-        return readProfiles(result);
+        return result;
     }
 
     public static Context readProfiles(final Context result) {
-        for (final String pConfig : new String[]{
-            Context.CONFIG_PROFILES,
-            "app_profile",
+        final String[] keys = new String[] {
             "spring_profiles_active",
             "spring_profile_active",
-            "profiles_active",
             "micronaut_profiles",
-            "micronaut_environments"
-        }) {
-            result.asStringOpt(pConfig).ifPresent(profiles -> stream(split(profiles, ",")).map(String::trim).forEach(name -> readConfigFiles(result, name)));
+            "micronaut_environments",
+            "profiles_active",
+            Context.CONFIG_PROFILES,  // "app_profiles"
+            "app_profile"
+        };
+
+        final java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>();
+        for (final String k : keys) {
+            result.asStringOpt(k).ifPresent(raw -> {
+                for (String p : split(raw, ",")) {
+                    final String name = p.trim();
+                    if (!name.isEmpty()) merged.add(name);
+                }
+            });
+        }
+
+        // load each profile file once, in collected order; DO NOT re-enter readProfiles here
+        for (final String profile : merged) {
+            readConfigFiles(result, profile);
         }
         return result;
     }

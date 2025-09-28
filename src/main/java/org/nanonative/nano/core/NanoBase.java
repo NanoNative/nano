@@ -32,6 +32,7 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.addConfig;
 import static org.nanonative.nano.helper.NanoUtils.readConfigFiles;
+import static org.nanonative.nano.helper.NanoUtils.readProfiles;
 import static org.nanonative.nano.helper.NanoUtils.resolvePlaceHolders;
 
 /**
@@ -151,7 +152,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings({"unchecked", "java:S116"})
     public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<? super Event<C, R>, C> listener) {
         final Consumer<? super Event<C, R>> wrapped = event ->
-                event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
+            event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
         listeners.computeIfAbsent(channel.id(), value -> ConcurrentHashMap.newKeySet()).add((Consumer<? super Event<?, ?>>) wrapped);
         return (Consumer<Event<C, R>>) wrapped;
     }
@@ -274,11 +275,33 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @return The {@link Context} initialized with the configurations.
      */
     protected Context readConfigs(final String... args) {
-        final Context result = readConfigFiles(null, "");
-        System.getenv().forEach((key, value) -> addConfig(result, key, value));
-        System.getProperties().forEach((key, value) -> addConfig(result, key, value));
-        if (args != null)
-            ArgsDecoder.argsOf(String.join(" ", args)).forEach((key, value) -> addConfig(result, key, value));
+        final Context result = readConfigFiles(null, ""); // 1) base application.properties
+
+        // helpers to avoid duplication
+        final Runnable applyEnv = () -> System.getenv().forEach((k, v) -> addConfig(result, k, v));
+        final Runnable applySys = () -> System.getProperties().forEach((k, v) -> addConfig(result, k, v));
+        final Runnable applyArgs = () -> {
+            if (args != null) {
+                ArgsDecoder.argsOf(String.join(" ", args))
+                    .forEach((k, v) -> addConfig(result, k, v));
+            }
+        };
+
+        // 2) external overrides (ordered: ENV < -D < ARGS)
+        applyEnv.run();
+        applySys.run();
+        applyArgs.run();
+
+        // 3) discover profiles from any source & load them
+        //    (reads keys like app_profiles, spring_profiles_active, etc.)
+        readProfiles(result);
+
+        // 4) ensure external sources still win over profile files
+        applyEnv.run();
+        applySys.run();
+        applyArgs.run();
+
+        // 5) resolve placeholders once, with all sources present
         return resolvePlaceHolders(result);
     }
 
@@ -290,12 +313,12 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings("java:S3358") // Ternary operator should not be nested
     public static String standardiseKey(final Object key) {
         return key == null ? null : convertObj(key, String.class)
-                .replace('.', '_')
-                .replace('-', '_')
-                .replace('+', '_')
-                .replace(':', '_')
-                .trim()
-                .toLowerCase();
+            .replace('.', '_')
+            .replace('-', '_')
+            .replace('+', '_')
+            .replace(':', '_')
+            .trim()
+            .toLowerCase();
     }
 
 }
