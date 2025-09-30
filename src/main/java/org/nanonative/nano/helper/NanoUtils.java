@@ -212,31 +212,52 @@ public class NanoUtils {
     }
 
     public static Context readProfiles(final Context result) {
-        final String[] keys = new String[] {
-            "spring_profiles_active",
-            "spring_profile_active",
-            "micronaut_profiles",
-            "micronaut_environments",
-            "profiles_active",
-            Context.CONFIG_PROFILES,  // "app_profiles"
-            "app_profile"
-        };
+        // Simplified profile resolution - collect all profile sources in priority order
+        final java.util.LinkedHashSet<String> profiles = new java.util.LinkedHashSet<>();
 
-        final java.util.LinkedHashSet<String> merged = new java.util.LinkedHashSet<>();
-        for (final String k : keys) {
-            result.asStringOpt(k).ifPresent(raw -> {
-                for (String p : split(raw, ",")) {
-                    final String name = p.trim();
-                    if (!name.isEmpty()) merged.add(name);
-                }
-            });
+        // Simplified profile loading:
+        // 1. Load initial app_profile if present
+        // 2. Load CONFIG_PROFILES from files (declared profile list)
+        // 3. Add external framework profiles (spring, micronaut, etc.)
+        // 4. CLI overrides applied later in NanoBase
+
+        // 1. First add single app_profile (loads initial profile which may define more profiles)
+        addProfilesFromConfig(result, "app_profile", profiles);
+
+        // Load initial profiles and re-read to get any CONFIG_PROFILES they define from files
+        for (final String profile : new java.util.ArrayList<>(profiles)) {
+            readConfigFiles(result, profile);
         }
 
-        // load each profile file once, in collected order; DO NOT re-enter readProfiles here
-        for (final String profile : merged) {
+        // 2. Add profiles from CONFIG_PROFILES (from files - maintains declared order)
+        addProfilesFromConfig(result, Context.CONFIG_PROFILES, profiles);
+
+        // 3. Add Spring profiles (external override capability)
+        addProfilesFromConfig(result, "spring_profiles_active", profiles);
+        addProfilesFromConfig(result, "spring_profile_active", profiles);
+
+        // 4. Add Micronaut profiles
+        addProfilesFromConfig(result, "micronaut_profiles", profiles);
+        addProfilesFromConfig(result, "micronaut_environments", profiles);
+
+        // 5. Add generic active profiles
+        addProfilesFromConfig(result, "profiles_active", profiles);
+
+
+        // Load remaining profiles exactly once, preserve order
+        for (final String profile : profiles) {
             readConfigFiles(result, profile);
         }
         return result;
+    }
+
+    private static void addProfilesFromConfig(final Context result, final String configKey, final java.util.LinkedHashSet<String> profiles) {
+        result.asStringOpt(configKey).ifPresent(raw -> {
+            for (String p : NanoUtils.split(raw, ",")) {
+                final String name = p.trim();
+                if (!name.isEmpty()) profiles.add(name);
+            }
+        });
     }
 
     public static Context readConfigFile(final Context context, final String path) {

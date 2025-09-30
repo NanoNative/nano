@@ -275,33 +275,29 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @return The {@link Context} initialized with the configurations.
      */
     protected Context readConfigs(final String... args) {
-        final Context result = readConfigFiles(null, ""); // 1) base application.properties
+        final Context result = readConfigFiles(null, ""); // 1) base
 
-        // helpers to avoid duplication
-        final Runnable applyEnv = () -> System.getenv().forEach((k, v) -> addConfig(result, k, v));
-        final Runnable applySys = () -> System.getProperties().forEach((k, v) -> addConfig(result, k, v));
+        // overlays: ENV < -D < CLI
+        final Runnable applyEnv  = () -> System.getenv().forEach((k, v) -> addConfig(result, k, v));
+        final Runnable applySys  = () -> System.getProperties().forEach((k, v) -> addConfig(result, k, v));
         final Runnable applyArgs = () -> {
-            if (args != null) {
-                ArgsDecoder.argsOf(String.join(" ", args))
-                    .forEach((k, v) -> addConfig(result, k, v));
-            }
+            if (args != null) berlin.yuna.typemap.logic.ArgsDecoder
+                .argsOf(String.join(" ", args)).forEach((k, v) -> addConfig(result, k, v));
         };
 
-        // 2) external overrides (ordered: ENV < -D < ARGS)
         applyEnv.run();
         applySys.run();
         applyArgs.run();
 
-        // 3) discover profiles from any source & load them
-        //    (reads keys like app_profiles, spring_profiles_active, etc.)
+        // discover & load profiles in order
         readProfiles(result);
 
-        // 4) ensure external sources still win over profile files
+        // ensure overlays still win
         applyEnv.run();
         applySys.run();
         applyArgs.run();
 
-        // 5) resolve placeholders once, with all sources present
+        // final placeholder pass
         return resolvePlaceHolders(result);
     }
 

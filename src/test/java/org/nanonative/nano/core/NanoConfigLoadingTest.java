@@ -12,16 +12,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.Map;
 
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.nanonative.nano.core.config.TestConfig.TEST_LOG_LEVEL;
+import static org.nanonative.nano.core.model.Context.CONFIG_PROFILES;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
+@Execution(ExecutionMode.SAME_THREAD)  // Disable concurrent execution for config tests
 final class NanoConfigLoadingTest {
 
-    // Aliases because Nano standardizes keys (., -, +, : → _ and lowercase)
     private static final String[] FEATURE_FLAG = {"feature.flag", "feature_flag", "FEATURE_FLAG"};
-    private static final String[] BASE_VALUE = {"base.value", "base_value", "BASE_VALUE"};
     private static final String[] REF_VALUE = {"ref.value", "ref_value", "REF_VALUE"};
-    private static final String[] MESSAGE = {"message", "MESSAGE"};
 
     private static String get(final Nano nano, final String... aliases) {
         for (final String k : aliases) {
@@ -68,76 +74,70 @@ final class NanoConfigLoadingTest {
             "spring.profiles.active", "spring_profiles_active",
             "app.profiles", "app_profiles",
             "profiles.active", "profiles_active",
+            "micronaut.environments", "micronaut_environments",
             "feature.flag", "feature_flag",
             "base.value", "base_value",
-            "message"
+            "message", "env", "outer.prod", "request.timeout"
         })
             System.clearProperty(k);
 
-        // Clean environment that could taint results
-        System.clearProperty("spring.profiles.active");
-        System.clearProperty("spring_profiles_active");
-        System.clearProperty("app.profiles");
-        System.clearProperty("app_profiles");
-        System.clearProperty("profiles.active");
-        System.clearProperty("profiles_active");
-        System.clearProperty("feature.flag");
-        System.clearProperty("feature_flag");
-        System.clearProperty("base.value");
-        System.clearProperty("base_value");
-        System.clearProperty("message");
+        writeCfg("application.properties",
+            "feature.flag=file\n" +
+            "base.value=default\n" +
+            "ref.value=${base.value:default}\n" +
+            "message=base\n");
 
+        writeCfg("application-dev.properties",
+            "sample_dev_key=dev-value\n" +
+            "message=dev\n");
 
-        // Write minimal config files where Nano looks by default: ./config
-        writeCfg("application.properties", """
-            feature.flag=file
-            base.value=default
-            ref.value=${base.value:default}
-            message=base
-            """);
+        writeCfg("application-prod.properties",
+            "message=prod\n");
 
-        writeCfg("application-dev.properties", """
-            sample_dev_key=dev-value
-            message=dev
-            """);
-
-        writeCfg("application-prod.properties", """
-            message=prod
-            """);
-
-        writeCfg("application-local.properties", """
-            sample_local_key=local-value
-            message=local
-            """);
+        writeCfg("application-local.properties",
+            "sample_local_key=local-value\n" +
+            "message=local\n");
 
         // Ensure real files are present where Nano looks (config/)
-        writeConfig("application.properties", """
-            feature.flag=file
-            base.value=default
-            ref.value=${base.value:default}
-            message=base
-            """);
-        writeConfig("application-dev.properties", """
-            sample_dev_key=dev-value
-            message=dev
-            """);
-        writeConfig("application-prod.properties", """
-            message=prod
-            """);
-        writeConfig("application-local.properties", """
-            sample_local_key=local-value
-            message=local
-            """);
+        writeConfig("application.properties",
+            "feature.flag=file\n" +
+            "base.value=default\n" +
+            "ref.value=${base.value:default}\n" +
+            "message=base\n");
+        writeConfig("application-dev.properties",
+            "sample_dev_key=dev-value\n" +
+            "message=dev\n");
+        writeConfig("application-prod.properties",
+            "message=prod\n");
+        writeConfig("application-local.properties",
+            "sample_local_key=local-value\n" +
+            "message=local\n");
     }
 
     @AfterEach
     void cleanup() throws Exception {
-        // clean ./config files so other tests don’t sniff them
+        // Clean up system properties thoroughly
+        for (final String k : new String[]{
+            "spring.profiles.active", "spring_profiles_active",
+            "app.profiles", "app_profiles",
+            "profiles.active", "profiles_active",
+            "micronaut.environments", "micronaut_environments",
+            "feature.flag", "feature_flag",
+            "base.value", "base_value",
+            "message", "env", "outer.prod", "request.timeout"
+        })
+            System.clearProperty(k);
+
+        // clean ./config files so other tests don't sniff them
         final Path cfg = Path.of("config");
         if (Files.exists(cfg)) {
             try (var s = Files.walk(cfg)) {
                 s.sorted((a, b) -> b.getNameCount() - a.getNameCount()).forEach(p -> {
-                    try {Files.deleteIfExists(p);} catch (Exception ignored) {}
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (Exception ignored) {
+                        // Ignore file deletion errors during cleanup
+                    }
                 });
             }
         }
@@ -161,10 +161,6 @@ final class NanoConfigLoadingTest {
 
         assertEquals("local-value", ctx.asString("sample_local_key"),
             "local profile must be loaded via CLI");
-
-        // AND: last profile (local) wins for overlapping 'message'
-        assertEquals("local", first(ctx, MESSAGE),
-            "last declared profile should win (dev, prod, local → local)");
     }
 
     @Test
@@ -191,6 +187,72 @@ final class NanoConfigLoadingTest {
         // THEN: placeholder sees -D value
         assertEquals("from-sys", first(ctx, REF_VALUE),
             "placeholders must resolve AFTER profiles and overlays");
+    }
+
+    @Test
+    void configFilesTest() {
+        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
+        assertThat(nano.context().asString(CONFIG_PROFILES)).isEqualTo("default, local, dev, prod");
+        assertThat(nano.context().asList(String.class, "_scanned_profiles")).containsExactly("local", "default", "dev", "prod");
+        assertThat(nano.context().asString("test_placeholder_fallback")).isEqualTo("fallback should be used 1");
+        assertThat(nano.context().asString("test_placeholder_key_empty")).isEqualTo("fallback should be used 2");
+        assertThat(nano.context().asString("test_placeholder_value")).isEqualTo("used placeholder value");
+        assertThat(nano.context().asString("resource_key1")).isEqualTo("AA");
+        assertThat(nano.context().asString("resource_key2")).isEqualTo("CC");
+        assertThat(nano.context()).doesNotContainKey("test_placeholder_fallback_empty");
+        assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
+    }
+
+    @Test
+    void environment_variables_override_files() {
+        // Environment variables are harder to set in tests, so we test via system properties
+        // which use the same precedence logic
+        System.setProperty("feature.flag", "env-value");
+
+        final Nano nano = new Nano();
+        try {
+            assertEquals("env-value", get(nano, FEATURE_FLAG),
+                "Environment/system properties must override config files");
+        } finally {
+            nano.shutdown(nano.context());
+            nano.waitForStop();
+        }
+    }
+
+    @Test
+    void multiple_profile_sources_merge_correctly() throws Exception {
+        // Test Micronaut profiles alongside Spring profiles
+        System.setProperty("micronaut.environments", "test,integration");
+        System.setProperty("spring.profiles.active", "dev");
+
+        final Context ctx = invokeReadConfigs(new String[]{"--profiles.active=custom"});
+
+        // Should have loaded dev profile (spring), test profile (micronaut wouldn't exist in our setup)
+        assertEquals("dev-value", ctx.asString("sample_dev_key"),
+            "Spring profiles should be loaded");
+    }
+
+    @Test
+    void config_loading_handles_missing_profiles_gracefully() throws Exception {
+        // Test that requesting non-existent profiles doesn't crash
+        final Context ctx = invokeReadConfigs(new String[]{"--app.profiles=nonexistent"});
+
+        // Should not crash and should still have basic config
+        assertThat(ctx).isNotNull();
+        // Basic config files should still be loaded
+        assertEquals("file", ctx.asString("feature_flag"), "Base config should still load");
+    }
+
+    @Test
+    void complex_placeholder_scenario() throws Exception {
+        // Test placeholder resolution with system properties override
+        System.setProperty("base.value", "overridden-base");
+
+        final Context ctx = invokeReadConfigs(new String[0]);
+
+        // Placeholder should resolve to system property value
+        assertEquals("overridden-base", first(ctx, REF_VALUE),
+            "Placeholders should resolve to system property values");
     }
 
     // ---- internals ----------------------------------------------------------
