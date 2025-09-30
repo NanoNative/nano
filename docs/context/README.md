@@ -221,5 +221,5 @@ Example: `test.placeholder.value=${placeholder_value:fallback}`
 | 🔲                 | `EVENT_APP_UNHANDLED`            | `Unhandled` | `N/A`    | Triggered when an event was not handled                                                                                                            |
 | 🔲                 | `EVENT_APP_OOM`                  | `Double`    | `N/A`    | Triggered when the Application reached out of memory. When the event is not handled, the App will shutdown see config `app_oom_shutdown_threshold` |
 | 🔲                 | `EVENT_APP_HEARTBEAT`            | `Nano`      | `N/A`    | Send every 256ms                                                                                                                                   |
-| 🔳                 | `EVENT_CONFIG_CHANGE`            | `TypeMap`   | `N/A`    | Used to change configs on the fly                                                                                                                  |
+| 🔳                 | `EVENT_CONFIG_CHANGE`            | `TypeMap`   | `N/A`    | Used to change configs on the fly ⚠️ [See broadcast best practices](../events/README.md#-important-event_config_change-best-practices)             |
 

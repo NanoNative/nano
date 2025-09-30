@@ -188,6 +188,10 @@ public class Event<C, R> extends TypeMap {
      * Marks the event as acknowledged without providing a response body.
      * <p>
      * Shorthand for {@code respond(null)}.
+     * <p>
+     * <b>Warning:</b> Acknowledging an event stops its propagation to other listeners unless the event
+     * is marked as {@link #broadcast(boolean) broadcast}. For events like {@code EVENT_CONFIG_CHANGE}
+     * that need to reach all listeners, avoid acknowledgment or use {@code .broadcast(true)} when sending.
      *
      * @return this event for chaining
      */

@@ -71,7 +71,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         this.logService.start();
         this.logService.isReadyState().set(true);
         displayHelpMenu();
-        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.acknowledge().payload()));
+        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.payload()));
     }
 
     /**
