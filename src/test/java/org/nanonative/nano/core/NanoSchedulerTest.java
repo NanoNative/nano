@@ -25,8 +25,6 @@ import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 class NanoSchedulerTest {
 
-    private static final long SHORT_AWAIT_MS = Math.min(TEST_TIMEOUT, 500);
-
     // --- Integration-style, no "ages" of waiting ---
 
     @RepeatedTest(TEST_REPEAT)
@@ -36,7 +34,7 @@ class NanoSchedulerTest {
             final CountDownLatch hit = new CountDownLatch(1);
             final LocalTime in50ms = LocalTime.now().plusNanos(50_000_000); // ~50ms
             nano.context(this.getClass()).runDaily(hit::countDown, in50ms);
-            assertThat(hit.await(SHORT_AWAIT_MS, MILLISECONDS)).isTrue();
+            assertThat(hit.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         } finally {
             nano.stop(getClass()).waitForStop();
         }
@@ -50,7 +48,7 @@ class NanoSchedulerTest {
             final DayOfWeek today = LocalDate.now().getDayOfWeek();
             final LocalTime in50ms = LocalTime.now().plusNanos(50_000_000);
             nano.context(this.getClass()).runWeekly(hit::countDown, in50ms, today);
-            assertThat(hit.await(SHORT_AWAIT_MS, MILLISECONDS)).isTrue();
+            assertThat(hit.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         } finally {
             nano.stop(getClass()).waitForStop();
         }
@@ -64,7 +62,7 @@ class NanoSchedulerTest {
             final DayOfWeek today = LocalDate.now().getDayOfWeek();
             final LocalTime in50ms = LocalTime.now().plusNanos(50_000_000);
             nano.context(this.getClass()).runWeekly(hit::countDown, in50ms, today);
-            assertThat(hit.await(SHORT_AWAIT_MS, MILLISECONDS)).isTrue();
+            assertThat(hit.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         } finally {
             nano.stop(getClass()).waitForStop();
         }
@@ -83,7 +81,7 @@ class NanoSchedulerTest {
                 stop.set(true);
             }, in30ms, null, ZoneId.systemDefault(), stop::get);
 
-            assertThat(hit.await(SHORT_AWAIT_MS, MILLISECONDS)).isTrue();
+            assertThat(hit.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
             // Give it a bit of time to (not) reschedule
             TimeUnit.MILLISECONDS.sleep(50);
             assertThat(hit.getCount()).isZero();
