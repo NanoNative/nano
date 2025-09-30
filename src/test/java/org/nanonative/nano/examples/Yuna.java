@@ -6,10 +6,7 @@ import org.nanonative.nano.services.http.HttpServer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
 
-import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_CERTS;
 import static org.nanonative.nano.services.http.HttpServer.EVENT_HTTP_REQUEST;
 
 @Disabled
@@ -20,7 +17,7 @@ public class Yuna {
         Path crt = Files.createTempFile(tempDirectory, "nano", ".crt");
         Path key = Files.createTempFile(tempDirectory, "nano", ".key");
 
-        final Nano nano = new Nano(Map.of(CONFIG_SERVICE_HTTPS_CERTS, tempDirectory), new HttpServer());
+        final Nano nano = new Nano(new HttpServer());
         // CRT, KEY
         // CRT, CA, KEY
         // PEM
