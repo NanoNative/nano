@@ -42,6 +42,7 @@ import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> {
 
     protected final Set<ScheduledExecutorService> schedulers;
+    protected final Thread keepAliveThread;
 
     /**
      * Initializes {@link NanoThreads} with configurations and command-line arguments.
@@ -58,6 +59,15 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
             schedulers.remove(scheduler);
             event.acknowledge();
         });
+        keepAliveThread = new Thread(() -> {
+            try {
+                Thread.sleep(Long.MAX_VALUE); // ~292 billion years
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+        }, "nano-keepalive");
+        keepAliveThread.setDaemon(false);
+        keepAliveThread.start();
     }
 
     /**
