@@ -62,7 +62,7 @@ jobs:
       contents: read    # Read repository content for checkout
     steps:
       - name: "🔍 Checkout [${{ github.ref_name }}]"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0  # Full history needed for change detection
 

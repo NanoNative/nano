@@ -47,7 +47,7 @@ jobs:
       jacoco_report: ${{ steps.metrics.outputs.jacoco_report }}
     steps:
       - name: "🔍 Checkout [${{ inputs.ref || github.ref_name }}]"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
           ref: ${{ inputs.ref || github.ref }}
@@ -68,7 +68,7 @@ jobs:
         uses: YunaBraska/java-info-action@main
 
       - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }}]"
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ steps.java_info.outputs.java_version }}
           distribution: 'temurin'

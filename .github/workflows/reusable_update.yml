@@ -58,7 +58,7 @@ jobs:
       contents: write      # Read repository and push changes to main
     steps:
       - name: "🔍 Checkout [main]"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
 
@@ -67,7 +67,7 @@ jobs:
         uses: YunaBraska/java-info-action@main
 
       - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }}]"
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ steps.java_info.outputs.java_version }}
           distribution: 'temurin'
@@ -118,7 +118,7 @@ jobs:
       contents: write   # Push changes to main branch
     steps:
       - name: "🔍 Checkout [main]"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
 
@@ -127,7 +127,7 @@ jobs:
         uses: YunaBraska/java-info-action@main
 
       - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }}]"
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: ${{ steps.java_info.outputs.java_version }}
           distribution: 'temurin'
