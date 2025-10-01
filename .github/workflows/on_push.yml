@@ -38,19 +38,6 @@ on:
       - '.gitignore'
       - 'docs/**'
 
-  # Manual testing
-  workflow_dispatch:
-    inputs:
-      run_test:
-        type: boolean
-        default: true
-        required: false
-        description: "Run tests (disable for build-only)"
-      timeout_minutes:
-        type: number
-        default: 15
-        required: false
-        description: "Job timeout in minutes"
 
 concurrency:
   group: test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
@@ -64,5 +51,5 @@ jobs:
       contents: read    # Read repository content for checkout
     with:
       ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
-      run_test: ${{ inputs.run_test != false }}
-      timeout_minutes: ${{ inputs.timeout_minutes || 15 }}
+      run_test: true
+      timeout_minutes: 15
