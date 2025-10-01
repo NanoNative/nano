@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.nanonative</groupId>
     <artifactId>nano</artifactId>
-    <version>2025.1.4</version>
+    <version>2025.1.5</version>
     <packaging>jar</packaging>
 
     <name>nano</name>
@@ -42,9 +42,9 @@
         <type-map.version>2025.09.2660710</type-map.version>
 
         <!-- TEST -->
-        <junit.version>5.13.4</junit.version>
+        <junit.version>6.0.0</junit.version>
         <assertj-core.version>3.27.6</assertj-core.version>
-        <junit-launcher.version>1.13.4</junit-launcher.version>
+        <junit-launcher.version>6.0.0</junit-launcher.version>
 
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
