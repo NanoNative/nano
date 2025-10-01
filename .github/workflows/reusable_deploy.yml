@@ -87,7 +87,7 @@ jobs:
 
       - name: "📋 Read Java Info"
         id: java_info
-        uses: YunaBraska/java-info-action@v2
+        uses: YunaBraska/java-info-action@main
 
       - name: "🏷️ Generate version [date-based]"
         id: version
