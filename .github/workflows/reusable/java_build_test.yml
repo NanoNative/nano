@@ -1,0 +1,108 @@
+name: "Java Build & Test"
+
+permissions: {} # No permissions at workflow level - granted per job
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        description: "Branch, tag or commit to checkout"
+      run_test:
+        type: boolean
+        required: false
+        default: true
+        description: "Run tests"
+      timeout_minutes:
+        type: number
+        required: false
+        default: 15
+        description: "Job timeout in minutes"
+    outputs:
+      project_version:
+        description: "Current project version"
+        value: ${{ jobs.build.outputs.project_version }}
+      should_deploy:
+        description: "Whether deployment should proceed"
+        value: ${{ jobs.build.outputs.should_deploy }}
+      jacoco_report:
+        description: "Path to Jacoco coverage report"
+        value: ${{ jobs.build.outputs.jacoco_report }}
+
+concurrency:
+  group: java-build-test-${{ github.ref }}-${{ inputs.ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "Build & Test [${{ inputs.ref || github.ref_name }}]"
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    permissions:
+      contents: read    # Read repository content for checkout
+    outputs:
+      project_version: ${{ steps.java_info.outputs.project_version }}
+      should_deploy: ${{ steps.metrics.outputs.should_deploy }}
+      jacoco_report: ${{ steps.metrics.outputs.jacoco_report }}
+    steps:
+      - name: "🔍 Checkout [${{ inputs.ref || github.ref_name }}]"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: "📋 Read Java Info"
+        id: "java_info"
+        uses: YunaBraska/java-info-action@v2
+
+      - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }}]"
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ steps.java_info.outputs.java_version }}
+          distribution: 'temurin'
+
+      - name: "🔨 Build [${{ inputs.run_test && 'with tests' || 'only' }}] [${{ steps.java_info.outputs.builder_name }}]"
+        run: ${{ inputs.run_test && steps.java_info.outputs.cmd_test_build || steps.java_info.outputs.cmd_build }}
+
+      - name: "📊 Analyze metrics [${{ steps.java_info.outputs.project_version }}]"
+        id: metrics
+        run: |
+          project_version="${{ steps.java_info.outputs.project_version }}"
+          echo "Project version: ${project_version}"
+          echo "project_version=${project_version}" >> $GITHUB_OUTPUT
+
+          # Find Jacoco report
+          jacoco_report=$(find . -type f -name "testCodeCoverageReport.xml" -o -name "jacocoTestReport.xml" -o -name "jacoco.xml" | head -n 1)
+          echo "Jacoco report: ${jacoco_report}"
+          echo "jacoco_report=${jacoco_report}" >> $GITHUB_OUTPUT
+
+          # Check if should deploy (only on default branch with changes)
+          if [[ "${{ github.ref_name }}" == "${{ github.event.repository.default_branch }}" ]]; then
+            echo "Should deploy: true (on default branch)"
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "Should deploy: false (not on default branch)"
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "📦 Upload build artifacts [run-${{ github.run_id }}]"
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.run_id }}
+          path: |
+            target/
+            !target/**/*.jar.original
+          retention-days: 1
+          if-no-files-found: error

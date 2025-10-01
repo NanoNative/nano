@@ -1,18 +1,53 @@
-name: "On Push"
+name: "Test"
+
+permissions: {} # No permissions at workflow level - granted per job
 
 on:
+  # Test all branch pushes (except main branches)
   push:
-    branches-ignore:
+    branches:
+      - '*'        # All branches
+      - '!main'    # Except main (deploy workflow handles main)
+      - '!master'  # Except master
+      - '!default' # Except default
+    paths-ignore:
+      - '*.md'
+      - '*.cmd'
+      - '*.bat'
+      - '*.sh'
+      - 'FUNDING.yml'
+      - 'FUNDING.yaml'
+      - '.editorconfig'
+      - '.gitignore'
+      - 'docs/**'
+
+  # Test all pull requests
+  pull_request:
+    branches:
       - main
       - master
       - default
+    paths-ignore:
+      - '*.md'
+      - '*.cmd'
+      - '*.bat'
+      - '*.sh'
+      - 'FUNDING.yml'
+      - 'FUNDING.yaml'
+      - '.editorconfig'
+      - '.gitignore'
+      - 'docs/**'
+
+concurrency:
+  group: test-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  builld:
-    uses: ./.github/workflows/java_build.yml
+  test:
+    name: "🧪 Test [${{ github.event_name == 'pull_request' && format('PR #{0}', github.event.pull_request.number) || github.ref_name }}]"
+    uses: ./.github/workflows/reusable/java_build_test.yml
+    permissions:
+      contents: read    # Read repository content for checkout
     with:
-      ref: ${{ github.ref_name }}
-      run_update: false  # Updates only on main branches
-      run_test: true     # Always run tests
-      run_deploy: disabled  # Never deploy on non-main branches
-    secrets: inherit
+      ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+      run_test: true
