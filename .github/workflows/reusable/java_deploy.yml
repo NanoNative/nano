@@ -1,0 +1,161 @@
+name: "Java Deploy"
+
+permissions: {} # No permissions at workflow level - granted per job
+
+on:
+  workflow_call:
+    inputs:
+      run_test:
+        type: boolean
+        required: false
+        default: true
+        description: "Run tests during build to ensure code quality before deployment"
+      build_timeout_minutes:
+        type: number
+        required: false
+        default: 15
+        description: "Build job timeout in minutes"
+      deploy_timeout_minutes:
+        type: number
+        required: false
+        default: 30
+        description: "Deploy job timeout in minutes"
+      deploy_to_github:
+        type: boolean
+        required: false
+        default: true
+        description: "Deploy to GitHub Packages"
+      deploy_to_maven_central:
+        type: boolean
+        required: false
+        default: false
+        description: "Deploy to Maven Central"
+      use_environment:
+        type: boolean
+        required: false
+        default: false
+        description: "Use deployment environments (enables approval workflows for manual deployments)"
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+      OSSH_USER:
+        required: false
+      OSSH_PASS:
+        required: false
+      GPG_SIGNING_KEY:
+        required: true
+      GPG_PASSPHRASE:
+        required: true
+
+concurrency:
+  group: java-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: "🏗️ Build Artifacts"
+    uses: ./.github/workflows/reusable/java_build_test.yml
+    permissions:
+      contents: read    # Read repository content for checkout
+    with:
+      run_test: ${{ inputs.run_test }}
+      timeout_minutes: ${{ inputs.build_timeout_minutes }}
+
+  deploy:
+    name: "🚀 Deploy Java Artifacts"
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.deploy_timeout_minutes }}
+    environment: ${{ inputs.use_environment && (inputs.deploy_to_maven_central && 'maven-central' || 'github-packages') || null }}
+    permissions:
+      contents: write      # Create releases and push version commits
+      packages: write      # Deploy to GitHub Packages
+      id-token: write      # Generate OIDC tokens for attestation
+      attestations: write  # Create build attestations
+    steps:
+      - name: "🔍 Checkout [${{ github.ref_name }}]"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts-${{ github.run_id }}
+          path: target/
+
+      - name: "📋 Read Java Info"
+        id: java_info
+        uses: YunaBraska/java-info-action@v2
+
+      - name: "🏷️ Generate version [date-based]"
+        id: version
+        run: |
+          next_semver=$(date -u '+%Y.%m.%j%H%M')
+          echo "Generated version: ${next_semver}"
+          echo "next_semver=${next_semver}" >> $GITHUB_OUTPUT
+
+      - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }} + GPG]"
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ steps.java_info.outputs.java_version }}
+          distribution: 'temurin'
+          # Configure servers for both GitHub and Maven Central
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+          gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
+          gpg-passphrase: GPG_PASSPHRASE
+
+      - name: "📝 Set version [${{ steps.version.outputs.next_semver }}]"
+        run: |
+          ${{ steps.java_info.outputs.cmd }} versions:set -DnewVersion="${{ steps.version.outputs.next_semver }}" -DgenerateBackupPoms=false -B -q
+
+      - name: "💾 Commit version changes [${{ steps.version.outputs.next_semver }}]"
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add pom.xml
+          git commit -m "chore: release ${{ steps.version.outputs.next_semver }}"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: "📦 Deploy to GitHub Packages [${{ github.repository }}]"
+        if: ${{ inputs.deploy_to_github }}
+        run: |
+          ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}" -B \
+            -DaltDeploymentRepository=github::https://maven.pkg.github.com/${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: "🚀 Deploy to Maven Central [release profile]"
+        if: ${{ inputs.deploy_to_maven_central }}
+        run: |
+          ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}" -B
+        env:
+          OSSH_USER: ${{ secrets.OSSH_USER }}
+          OSSH_PASS: ${{ secrets.OSSH_PASS }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: "🔐 Sign artifacts with Sigstore [*.jar]"
+        uses: sigstore/gh-action-sigstore-python@v3.0.1
+        with:
+          inputs: target/*.jar
+          upload-signing-artifacts: true
+
+      - name: "📋 Generate attestation [build provenance]"
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: target/*.jar
+
+      - name: "🎉 Create release [${{ steps.version.outputs.next_semver }}]"
+        id: release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.version.outputs.next_semver }}
+          name: ${{ steps.version.outputs.next_semver }}
+          generateReleaseNotes: true
+          artifacts: target/*.jar
+          token: ${{ secrets.GITHUB_TOKEN }}
