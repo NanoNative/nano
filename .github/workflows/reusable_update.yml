@@ -31,8 +31,6 @@ on:
         description: "Whether dependency updates were made"
         value: ${{ jobs.update.outputs.has_changes }}
     secrets:
-      GITHUB_TOKEN:
-        required: true
       BOT_TOKEN:
         required: false
         description: "Optional bot token with bypass permissions for branch protection"
@@ -113,7 +111,7 @@ jobs:
   commit:
     name: "📤 Commit & Push Updates"
     needs: [update, test]
-    if: needs.update.outputs.has_changes == 'true' && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    if: needs.update.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ inputs.timeout_minutes }}
     permissions:
@@ -166,7 +164,7 @@ jobs:
   deploy:
     name: "🚀 Deploy Updated Dependencies"
     needs: [update, test, commit]
-    if: needs.update.outputs.has_changes == 'true' && inputs.deploy_on_changes && (needs.test.result == 'success' || needs.test.result == 'skipped')
+    if: needs.update.outputs.has_changes == 'true' && inputs.deploy_on_changes
     uses: ./.github/workflows/reusable_deploy.yml
     permissions:
       contents: write      # Create releases and push version commits

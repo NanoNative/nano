@@ -36,8 +36,6 @@ on:
         default: false
         description: "Use deployment environments (enables approval workflows for manual deployments)"
     secrets:
-      GITHUB_TOKEN:
-        required: true
       OSSH_USER:
         required: false
       OSSH_PASS:
@@ -139,12 +137,6 @@ jobs:
           OSSH_PASS: ${{ secrets.OSSH_PASS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
-      - name: "🔐 Sign artifacts with Sigstore [*.jar]"
-        if: ${{ secrets.GPG_SIGNING_KEY }}
-        uses: sigstore/gh-action-sigstore-python@v3.0.1
-        with:
-          inputs: target/*.jar
-          upload-signing-artifacts: true
 
       - name: "📋 Generate attestation [build provenance]"
         uses: actions/attest-build-provenance@v1
