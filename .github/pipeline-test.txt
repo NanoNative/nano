@@ -1,2 +1,0 @@
-Testing pull request workflow trigger
-This file should not be filtered by paths-ignore
