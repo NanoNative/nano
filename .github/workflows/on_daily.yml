@@ -1,0 +1,46 @@
+name: "Update"
+
+# NOTE: Scheduled runs auto-deploy on changes. Manual runs deploy only if requested.
+# Repository settings required: Actions → General → "Read and write permissions"
+
+permissions: {} # No permissions at workflow level - granted per job
+
+on:
+  schedule:
+    - cron: '0 6 * * MON'  # Every Monday at 6 AM UTC (1h before Dependabot)
+  workflow_dispatch:
+    inputs:
+      deploy_on_changes:
+        type: boolean
+        default: true
+        required: false
+        description: "Deploy automatically if dependency updates are successful"
+      run_test:
+        type: boolean
+        default: true
+        required: false
+        description: "Run tests after updating dependencies"
+      timeout_minutes:
+        type: number
+        default: 15
+        required: false
+        description: "Job timeout in minutes"
+
+concurrency:
+  group: dependency-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: "🔄 Update Dependencies"
+    uses: ./.github/workflows/reusable_update.yml
+    permissions:
+      contents: write      # Read repository and push changes to main
+      packages: write      # Deploy to GitHub Packages (if deploy_on_changes=true)
+      id-token: write      # Generate OIDC tokens for attestation (if deploy_on_changes=true)
+      attestations: write  # Create build attestations (if deploy_on_changes=true)
+    with:
+      deploy_on_changes: ${{ inputs.deploy_on_changes || github.event_name == 'schedule' }}
+      run_test: ${{ inputs.run_test != false }}
+      timeout_minutes: ${{ inputs.timeout_minutes && fromJSON(inputs.timeout_minutes) || 15 }}
+    secrets: inherit
