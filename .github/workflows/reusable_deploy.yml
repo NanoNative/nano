@@ -43,9 +43,9 @@ on:
       OSSH_PASS:
         required: false
       GPG_SIGNING_KEY:
-        required: true
+        required: false
       GPG_PASSPHRASE:
-        required: true
+        required: false
 
 concurrency:
   group: java-deploy-${{ github.ref }}
@@ -106,7 +106,7 @@ jobs:
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
           gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
-          gpg-passphrase: GPG_PASSPHRASE
+          gpg-passphrase: ${{ secrets.GPG_SIGNING_KEY && 'GPG_PASSPHRASE' || '' }}
 
       - name: "📝 Set version [${{ steps.version.outputs.next_semver }}]"
         run: |
@@ -123,7 +123,7 @@ jobs:
       - name: "📦 Deploy to GitHub Packages [${{ github.repository }}]"
         if: ${{ inputs.deploy_to_github }}
         run: |
-          ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}" -B \
+          ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true ${{ secrets.GPG_PASSPHRASE && format('-Dgpg.passphrase="{0}"', secrets.GPG_PASSPHRASE) || '' }} -B \
             -DaltDeploymentRepository=github::https://maven.pkg.github.com/${{ github.repository }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -133,13 +133,14 @@ jobs:
       - name: "🚀 Deploy to Maven Central [release profile]"
         if: ${{ inputs.deploy_to_maven_central }}
         run: |
-          ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true -Dgpg.passphrase="${{ secrets.GPG_PASSPHRASE }}" -B
+          ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true ${{ secrets.GPG_PASSPHRASE && format('-Dgpg.passphrase="{0}"', secrets.GPG_PASSPHRASE) || '' }} -B
         env:
           OSSH_USER: ${{ secrets.OSSH_USER }}
           OSSH_PASS: ${{ secrets.OSSH_PASS }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: "🔐 Sign artifacts with Sigstore [*.jar]"
+        if: ${{ secrets.GPG_SIGNING_KEY }}
         uses: sigstore/gh-action-sigstore-python@v3.0.1
         with:
           inputs: target/*.jar
