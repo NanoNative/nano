@@ -1,0 +1,32 @@
+version: 2
+updates:
+  # GitHub Actions dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"  # 7 AM UTC (1h after our dependency-update workflow)
+    open-pull-requests-limit: 1
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+
+  # Maven dependencies
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"  # 7 AM UTC (1h after our dependency-update workflow)
+    open-pull-requests-limit: 1
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      # Ignore non-stable releases
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+        versions: ["*alpha*", "*beta*", "*rc*", "*snapshot*", "*SNAPSHOT*", "*Alpha*", "*Beta*", "*RC*", "*pre*", "*PRE*", "*milestone*", "*MILESTONE*", "*M*"]
