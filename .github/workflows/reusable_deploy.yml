@@ -54,7 +54,7 @@ concurrency:
 jobs:
   build:
     name: "🏗️ Build Artifacts"
-    uses: ./.github/workflows/reusable/java_build_test.yml
+    uses: ./.github/workflows/reusable_build_test.yml
     permissions:
       contents: read    # Read repository content for checkout
     with:

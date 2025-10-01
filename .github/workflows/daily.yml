@@ -28,7 +28,7 @@ concurrency:
 jobs:
   update:
     name: "🔄 Update Dependencies"
-    uses: ./.github/workflows/reusable/java_dependency_update.yml
+    uses: ./.github/workflows/reusable_update.yml
     permissions:
       contents: write      # Read repository and push changes to main
       packages: write      # Deploy to GitHub Packages (if deploy_on_changes=true)

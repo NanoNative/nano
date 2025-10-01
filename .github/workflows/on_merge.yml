@@ -109,7 +109,7 @@ jobs:
     name: "🚀 Deploy Release"
     needs: [check-conditions]
     if: needs.check-conditions.outputs.should_deploy == 'true'
-    uses: ./.github/workflows/reusable/java_deploy.yml
+    uses: ./.github/workflows/reusable_deploy.yml
     permissions:
       contents: write      # Create releases and push version commits
       packages: write      # Deploy to GitHub Packages

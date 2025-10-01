@@ -5,9 +5,9 @@ Security-first workflows following industry best practices for Java projects.
 ## Architecture
 
 ### Reusable Workflows
-- **`java_build_test.yml`** - Build & test with configurable timeouts
-- **`java_deploy.yml`** - Deploy with signing, attestation & conditional environments
-- **`java_dependency_update.yml`** - Update dependencies with optional deployment
+- **`reusable_build_test.yml`** - Build & test with configurable timeouts
+- **`reusable_deploy.yml`** - Deploy with signing, attestation & conditional environments
+- **`reusable_update.yml`** - Update dependencies with optional deployment
 
 ### Trigger Workflows
 - **`on_push.yml`** - Test branches & PRs (no deployment)
