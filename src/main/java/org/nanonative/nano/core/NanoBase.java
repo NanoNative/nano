@@ -32,6 +32,7 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.addConfig;
 import static org.nanonative.nano.helper.NanoUtils.readConfigFiles;
+import static org.nanonative.nano.helper.NanoUtils.readProfiles;
 import static org.nanonative.nano.helper.NanoUtils.resolvePlaceHolders;
 
 /**
@@ -70,7 +71,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         this.logService.start();
         this.logService.isReadyState().set(true);
         displayHelpMenu();
-        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.acknowledge().payload()));
+        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.payload()));
     }
 
     /**
@@ -151,7 +152,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings({"unchecked", "java:S116"})
     public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<? super Event<C, R>, C> listener) {
         final Consumer<? super Event<C, R>> wrapped = event ->
-                event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
+            event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
         listeners.computeIfAbsent(channel.id(), value -> ConcurrentHashMap.newKeySet()).add((Consumer<? super Event<?, ?>>) wrapped);
         return (Consumer<Event<C, R>>) wrapped;
     }
@@ -274,11 +275,29 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @return The {@link Context} initialized with the configurations.
      */
     protected Context readConfigs(final String... args) {
-        final Context result = readConfigFiles(null, "");
-        System.getenv().forEach((key, value) -> addConfig(result, key, value));
-        System.getProperties().forEach((key, value) -> addConfig(result, key, value));
-        if (args != null)
-            ArgsDecoder.argsOf(String.join(" ", args)).forEach((key, value) -> addConfig(result, key, value));
+        final Context result = readConfigFiles(null, ""); // 1) base
+
+        // overlays: ENV < -D < CLI
+        final Runnable applyEnv  = () -> System.getenv().forEach((k, v) -> addConfig(result, k, v));
+        final Runnable applySys  = () -> System.getProperties().forEach((k, v) -> addConfig(result, k, v));
+        final Runnable applyArgs = () -> {
+            if (args != null) berlin.yuna.typemap.logic.ArgsDecoder
+                .argsOf(String.join(" ", args)).forEach((k, v) -> addConfig(result, k, v));
+        };
+
+        applyEnv.run();
+        applySys.run();
+        applyArgs.run();
+
+        // discover & load profiles in order
+        readProfiles(result);
+
+        // ensure overlays still win
+        applyEnv.run();
+        applySys.run();
+        applyArgs.run();
+
+        // final placeholder pass
         return resolvePlaceHolders(result);
     }
 
@@ -290,12 +309,12 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings("java:S3358") // Ternary operator should not be nested
     public static String standardiseKey(final Object key) {
         return key == null ? null : convertObj(key, String.class)
-                .replace('.', '_')
-                .replace('-', '_')
-                .replace('+', '_')
-                .replace(':', '_')
-                .trim()
-                .toLowerCase();
+            .replace('.', '_')
+            .replace('-', '_')
+            .replace('+', '_')
+            .replace(':', '_')
+            .trim()
+            .toLowerCase();
     }
 
 }

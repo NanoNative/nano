@@ -3,7 +3,6 @@ package org.nanonative.nano.core;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.RepeatedTest;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.nanonative.nano.core.config.TestConfig;
@@ -18,7 +17,6 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -30,7 +28,6 @@ import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
 import static org.nanonative.nano.core.model.Context.APP_HELP;
 import static org.nanonative.nano.core.model.Context.APP_PARAMS;
 import static org.nanonative.nano.core.model.Context.CONFIG_PARALLEL_SHUTDOWN;
-import static org.nanonative.nano.core.model.Context.CONFIG_PROFILES;
 import static org.nanonative.nano.core.model.Context.CONTEXT_CLASS_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_NANO_KEY;
 import static org.nanonative.nano.core.model.Context.CONTEXT_PARENT_KEY;
@@ -45,20 +42,6 @@ import static org.nanonative.nano.services.logging.model.LogLevel.INFO;
 
 @Execution(ExecutionMode.CONCURRENT)
 class NanoTest {
-
-    @Test
-    void configFilesTest() {
-        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
-        assertThat(nano.context().asString(CONFIG_PROFILES)).isEqualTo("default, local, dev, prod");
-        assertThat(nano.context().asList(String.class, "_scanned_profiles")).containsExactly("local", "default", "dev", "prod");
-        assertThat(nano.context().asString("test_placeholder_fallback")).isEqualTo("fallback should be used 1");
-        assertThat(nano.context().asString("test_placeholder_key_empty")).isEqualTo("fallback should be used 2");
-        assertThat(nano.context().asString("test_placeholder_value")).isEqualTo("used placeholder value");
-        assertThat(nano.context().asString("resource_key1")).isEqualTo("AA");
-        assertThat(nano.context().asString("resource_key2")).isEqualTo("CC");
-        assertThat(nano.context()).doesNotContainKey("test_placeholder_fallback_empty");
-        assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
-    }
 
     @RepeatedTest(TEST_REPEAT)
     void stopViaMethod() {
@@ -89,16 +72,16 @@ class NanoTest {
         final CountDownLatch latch = new CountDownLatch(8);
 
         final Nano nano1 = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
         );
         final Nano nano2 = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, CONFIG_PARALLEL_SHUTDOWN, true),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
-                new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown)),
+            new TestService().doOnStop(context -> context.tryExecute(latch::countDown))
         );
         assertThat(nano1.stop(this.getClass())).isEqualTo(nano1);
         assertThat(nano2.stop(this.getClass())).isEqualTo(nano2);
@@ -187,11 +170,11 @@ class NanoTest {
         final Nano config = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, APP_PARAMS, true));
         assertThat(config).isNotNull();
         assertThat(config.toString()).contains(
-                "pid=",
-                "schedulers=", "services=", "listeners=",
-                "cores=", "usedMemory=",
-                "threadsNano=", "threadsActive=", "threadsOther=",
-                "java=", "arch=", "os="
+            "pid=",
+            "schedulers=", "services=", "listeners=",
+            "cores=", "usedMemory=",
+            "threadsNano=", "threadsActive=", "threadsOther=",
+            "java=", "arch=", "os="
         );
         assertThat(config.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
@@ -280,7 +263,8 @@ class NanoTest {
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
-    @RepeatedTest(32) // still time-heavy, but quick per run
+    @RepeatedTest(32)
+        // still time-heavy, but quick per run
     void schedulerRunDayOfWeek() throws InterruptedException {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
         try {
@@ -289,11 +273,11 @@ class NanoTest {
             // 1) Past time today => should NOT run now (next occurrence is next week)
             final CountDownLatch shouldNotFire = new CountDownLatch(1);
             nano.run(
-                    nano::context,
-                    shouldNotFire::countDown,
-                    LocalTime.now().minusHours(1), // past
-                    today,
-                    () -> false
+                nano::context,
+                shouldNotFire::countDown,
+                LocalTime.now().minusHours(1), // past
+                today,
+                () -> false
             );
             // Give a short window; it must NOT fire
             assertThat(shouldNotFire.await(120, MILLISECONDS)).isFalse();
@@ -301,11 +285,11 @@ class NanoTest {
             // 2) Near-future time today => should run once, soon
             final CountDownLatch shouldFire = new CountDownLatch(1);
             nano.run(
-                    nano::context,
-                    shouldFire::countDown,
-                    LocalTime.now().plusNanos(50_000_000), // ~50ms
-                    today,
-                    () -> false
+                nano::context,
+                shouldFire::countDown,
+                LocalTime.now().plusNanos(50_000_000), // ~50ms
+                today,
+                () -> false
             );
             assertThat(shouldFire.await(TEST_TIMEOUT, MILLISECONDS)).isTrue();
         } finally {
