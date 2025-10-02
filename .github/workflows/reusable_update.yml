@@ -1,0 +1,156 @@
+name: "TPL Update"
+
+# NOTE: Scheduled runs auto-deploy on changes. Ensure repository settings:
+# - Settings → Actions → General → Workflow permissions → "Read and write permissions"
+# - Branch protection bypass: Create GitHub App with bypass permissions and use app token
+#   OR create machine user account with bypass permissions and use PAT instead of GITHUB_TOKEN
+# - GITHUB_TOKEN commits won't trigger other workflows (prevents loops)
+
+permissions: { } # No permissions at workflow level - granted per job
+
+on:
+  workflow_call:
+    inputs:
+      deploy_on_changes:
+        type: boolean
+        required: false
+        default: false
+        description: "Deploy automatically if dependency updates are successful"
+      run_test:
+        type: boolean
+        required: false
+        default: true
+        description: "Run tests after updating dependencies"
+      timeout_minutes:
+        type: number
+        required: false
+        default: 15
+        description: "Job timeout in minutes"
+      use_environment:
+        type: boolean
+        required: false
+        default: true
+        description: "Use deployment environments"
+    outputs:
+      has_changes:
+        description: "Whether dependency updates were made"
+        value: ${{ jobs.update.outputs.has_changes }}
+    secrets:
+      BOT_TOKEN:
+        required: true
+        description: "token with bypass permissions for branch protection"
+      OSSH_USER:
+        required: false
+      OSSH_PASS:
+        required: false
+      GPG_SIGNING_KEY:
+        required: false
+      GPG_PASSPHRASE:
+        required: false
+
+concurrency:
+  group: dependency-update-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: "🔄 Update & Test Dependencies"
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    outputs:
+      has_changes: ${{ steps.update.outputs.has_changes }}
+    permissions:
+      contents: write      # Read repository and push changes to main
+    steps:
+      - name: "🔍 Checkout [main]"
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: "📋 Read Java Info"
+        id: java_info
+        uses: YunaBraska/java-info-action@main
+
+      - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }}]"
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ steps.java_info.outputs.java_version }}
+          distribution: 'temurin'
+
+      - name: "🔄 Update dependencies [${{ steps.java_info.outputs.builder_name }}]"
+        id: update
+        run: |
+          echo "🔹 Builder: ${{ steps.java_info.outputs.builder_name }}"
+
+          # Update Maven wrapper
+          echo "📦 Updating Maven wrapper..."
+          ${{ steps.java_info.outputs.cmd_update_wrapper }}
+
+          # Update properties and parent POM if not Gradle
+          if [ "${{ steps.java_info.outputs.builder_name }}" != "Gradle" ]; then
+            echo "🔧 Updating properties and parent POM..."
+            ${{ steps.java_info.outputs.cmd_update_props }}
+            ${{ steps.java_info.outputs.cmd_update_parent }}
+          fi
+
+          # Check if there are changes
+          if git diff --quiet; then
+            echo "⏭️ No dependency updates available"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Dependencies updated"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "⬇️ Resolve dependencies"
+        run: ${{ steps.java_info.outputs.cmd }} dependency:go-offline
+
+      - name: "🧪 Test updated dependencies [${{ steps.java_info.outputs.builder_name }}]"
+        if: steps.update.outputs.has_changes == 'true' && inputs.run_test
+        run: ${{ steps.java_info.outputs.cmd_test_build }}
+
+      - name: "📤 Commit and push to main"
+        if: steps.update.outputs.has_changes == 'true'
+        run: |
+          echo "📝 Configuring git..."
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          echo "✅ Committing dependency updates..."
+          git add .
+          git commit -m "chore: update dependencies
+
+          - Maven wrapper updates
+          - Property version updates
+          - Parent POM updates
+
+          🤖 Automated dependency update (tests passed)"
+
+          echo "📦 Pushing to main..."
+          git push origin head
+
+  deploy:
+    name: "Deploy Updated Dependencies"
+    needs: [ update ]
+    if: needs.update.outputs.has_changes == 'true' && inputs.deploy_on_changes
+    uses: ./.github/workflows/reusable_deploy.yml
+    permissions:
+      contents: write      # Create releases and push version commits
+      packages: write      # Deploy to GitHub Packages
+    with:
+      run_test: false      # Tests already ran in previous job
+      deploy_to_github: true
+      deploy_to_maven_central: true
+      use_environment: ${{ inputs.use_environment || true }}
+    secrets: inherit
