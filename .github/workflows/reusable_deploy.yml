@@ -79,6 +79,17 @@ jobs:
           fetch-depth: 100 # Create release notes
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
         uses: actions/download-artifact@v5
         with:
@@ -100,7 +111,7 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
           gpg-passphrase: ${{ secrets.GPG_SIGNING_KEY && 'GPG_PASSPHRASE' || '' }}
 
-      - name: "📦 Deploy to GitHub Packages [${{ github.repository }}]"
+      - name: "📦 Deploy to GitHub Packages [${{ needs.build.outputs.project_version }}]"
         run: |
           ${{ steps.java_info.outputs.cmd }} versions:set -DnewVersion="${{ needs.build.outputs.project_version }}" -DgenerateBackupPoms=false -B -q
           ${{ steps.java_info.outputs.cmd }} deploy -Dmaven.test.skip=true -B -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/${{ github.repository }}
@@ -125,6 +136,17 @@ jobs:
           fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
         uses: actions/download-artifact@v5
         with:
@@ -146,7 +168,7 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
           gpg-passphrase: ${{ secrets.GPG_SIGNING_KEY && 'GPG_PASSPHRASE' || '' }}
 
-      - name: "📦 Deploy to Maven Central [release profile]"
+      - name: "📦 Deploy to Maven Central [${{ needs.build.outputs.project_version }}]"
         run: |
           ${{ steps.java_info.outputs.cmd }} versions:set -DnewVersion="${{ needs.build.outputs.project_version }}" -DgenerateBackupPoms=false -B -q
           ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true ${{ secrets.GPG_PASSPHRASE && format('-Dgpg.passphrase="{0}"', secrets.GPG_PASSPHRASE) || '' }} -B
@@ -168,6 +190,17 @@ jobs:
         with:
           fetch-depth: 100 # create release notes
           token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
 
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
         uses: actions/download-artifact@v5

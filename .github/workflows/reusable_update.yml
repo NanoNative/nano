@@ -114,7 +114,7 @@ jobs:
           fi
 
       - name: "⬇️ Resolve dependencies"
-        run: ${{ steps.java_info.outputs.cmd }} dependency:go-offline
+        run: ${{ steps.java_info.outputs.cmd }} -B dependency:go-offline
 
       - name: "🧪 Test updated dependencies [${{ steps.java_info.outputs.builder_name }}]"
         if: steps.update.outputs.has_changes == 'true' && inputs.run_test
