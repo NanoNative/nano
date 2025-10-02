@@ -1,32 +1,132 @@
-name: "On Merge"
+name: "📦 Deploy"
+
+permissions: {} # No permissions at workflow level - granted per job
 
 on:
-  pull_request_target:
-    types: [ closed ]
+  # Automatic deployment on PR merge
+  pull_request:
+    types: [closed]
     branches:
       - main
       - master
       - default
-    paths-ignore:
-      - '*.md'
-      - '*.cmd'
-      - '*.bat'
-      - '*.sh'
-      - 'FOUNDING.yml'
-      - 'FOUNDING.yaml'
-      - '.editorconfig'
-      - '.gitignore'
-      - 'docs/**'
-      - '.github/**'
-      - '.mvn/**'
-      - '.gradle/**'
+
+  # Manual deployment
+  workflow_dispatch:
+    inputs:
+      run_test:
+        type: boolean
+        default: true
+        required: false
+        description: "Run tests before deployment"
+      deploy_to_github:
+        type: boolean
+        default: true
+        required: false
+        description: "Deploy to GitHub Packages"
+      deploy_to_maven_central:
+        type: boolean
+        default: true
+        required: false
+        description: "Deploy to Maven Central"
+      ref:
+        type: string
+        required: false
+        description: "Branch, tag or commit to checkout"
+      build_timeout_minutes:
+        type: number
+        default: 15
+        required: false
+        description: "Build job timeout in minutes"
+      deploy_timeout_minutes:
+        type: number
+        default: 30
+        required: false
+        description: "Deploy job timeout in minutes"
+
+concurrency:
+  group: deploy-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
 jobs:
-  builld:
-    if: github.event.pull_request.merged == true
-    uses: ./.github/workflows/java_build.yml
+  check-conditions:
+    name: "🚦 Check Deploy Conditions"
+    runs-on: ubuntu-latest
+    # Only run if manual dispatch OR if PR was actually merged (not just closed)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    outputs:
+      should_deploy: ${{ steps.conditions.outputs.should_deploy }}
+      deploy_to_github: ${{ steps.conditions.outputs.deploy_to_github }}
+      deploy_to_maven_central: ${{ steps.conditions.outputs.deploy_to_maven_central }}
+    permissions:
+      contents: read    # Read repository content for checkout
+    steps:
+      - name: "🔍 Checkout [${{ github.ref_name }}]"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 100  # Full history needed for change detection
+
+      - name: "🚦 Check deployment conditions [${{ github.event_name }}]"
+        id: conditions
+        run: |
+          echo "🔹 Event: ${{ github.event_name }}"
+          echo "🔹 Ref: ${{ github.ref_name }}"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual deployment
+            echo "🎛️ Manual deployment triggered"
+            echo "🎯 GitHub: ${{ inputs.deploy_to_github || true }}"
+            echo "🎯 Maven Central: ${{ inputs.deploy_to_maven_central || false }}"
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+            echo "deploy_to_github=${{ inputs.deploy_to_github || true }}" >> $GITHUB_OUTPUT
+            echo "deploy_to_maven_central=${{ inputs.deploy_to_maven_central || false }}" >> $GITHUB_OUTPUT
+
+          elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.merged }}" = "true" ]; then
+            # Automatic deployment on merge
+            echo "🔀 PR #${{ github.event.pull_request.number }} merged to ${{ github.ref_name }}"
+
+            # Get latest release tag
+            latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+            if [ -z "$latest_tag" ]; then
+              echo "🆕 No previous releases found, deploying"
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+            else
+              echo "🏷️ Latest release: ${latest_tag}"
+              # Check if there are changes since last release
+              if git diff --quiet "${latest_tag}..HEAD" -- . ':!*.md' ':!docs/' ':!.github/workflows/'; then
+                echo "⏭️ Should deploy: false (no changes since ${latest_tag})"
+                echo "should_deploy=false" >> $GITHUB_OUTPUT
+              else
+                echo "✅ Should deploy: true (changes found since ${latest_tag})"
+                echo "should_deploy=true" >> $GITHUB_OUTPUT
+              fi
+            fi
+
+            # Default deployment targets for automatic deployment
+            echo "🎯 Auto-deploy: GitHub Packages only"
+            echo "deploy_to_github=true" >> $GITHUB_OUTPUT
+            echo "deploy_to_maven_central=false" >> $GITHUB_OUTPUT
+
+          else
+            echo "⏭️ Should deploy: false (conditions not met)"
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+            echo "deploy_to_github=false" >> $GITHUB_OUTPUT
+            echo "deploy_to_maven_central=false" >> $GITHUB_OUTPUT
+          fi
+
+  deploy:
+    name: "Deploy Release"
+    needs: [check-conditions]
+    if: needs.check-conditions.outputs.should_deploy == 'true'
+    uses: ./.github/workflows/reusable_deploy.yml
+    permissions:
+      contents: write      # Create releases and push version commits
+      packages: write      # Deploy to GitHub Packages
     with:
-      ref: ${{ github.ref_name }}
-      run_update: false  # Updates only on main branches
-      run_test: true     # Always run tests
-      run_deploy: disabled  # Never deploy on non-main branches
+      deploy_to_github: ${{ needs.check-conditions.outputs.deploy_to_github == 'true' }}
+      deploy_to_maven_central: ${{ needs.check-conditions.outputs.deploy_to_maven_central == 'true' }}
+      use_environment: ${{ github.event_name == 'workflow_dispatch' }}
+      build_timeout_minutes: ${{ inputs.build_timeout_minutes && fromJSON(inputs.build_timeout_minutes) || 15 }}
+      deploy_timeout_minutes: ${{ inputs.deploy_timeout_minutes && fromJSON(inputs.deploy_timeout_minutes) || 30 }}
     secrets: inherit
