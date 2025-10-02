@@ -79,7 +79,7 @@ jobs:
           distribution: 'temurin'
 
       - name: "⬇️ Resolve dependencies"
-        run: ${{ steps.java_info.outputs.cmd }} dependency:go-offline
+        run: ${{ steps.java_info.outputs.cmd }} -B dependency:go-offline
 
       - name: "🔨 Build [${{ inputs.run_test && 'with tests' || 'only' }}] [${{ steps.java_info.outputs.builder_name }}]"
         run: ${{ inputs.run_test && steps.java_info.outputs.cmd_test_build || steps.java_info.outputs.cmd_build }}
