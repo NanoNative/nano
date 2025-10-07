@@ -11,6 +11,7 @@ import java.lang.management.MemoryUsage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,7 +33,6 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.addConfig;
 import static org.nanonative.nano.helper.NanoUtils.readConfigFiles;
-import static org.nanonative.nano.helper.NanoUtils.readProfiles;
 import static org.nanonative.nano.helper.NanoUtils.resolvePlaceHolders;
 
 /**
@@ -275,30 +275,46 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @return The {@link Context} initialized with the configurations.
      */
     protected Context readConfigs(final String... args) {
-        final Context result = readConfigFiles(null, ""); // 1) base
+        final List<String> directories = List.of(
+            "",
+            ".",
+            "config/",
+            ".config/",
+            "resources/",
+            ".resources/",
+            "resources/config/",
+            ".resources/config/"
+        );
 
-        // overlays: ENV < -D < CLI
-        final Runnable applyEnv  = () -> System.getenv().forEach((k, v) -> addConfig(result, k, v));
-        final Runnable applySys  = () -> System.getProperties().forEach((k, v) -> addConfig(result, k, v));
-        final Runnable applyArgs = () -> {
-            if (args != null) berlin.yuna.typemap.logic.ArgsDecoder
-                .argsOf(String.join(" ", args)).forEach((k, v) -> addConfig(result, k, v));
-        };
+        final List<String> profiles = List.of(
+            "spring_profiles_active", "spring_profile_active", "spring_active_profiles", "spring_active_profile",
+            "spring_profiles", "spring_profile", "spring_active", "spring_active",
+            "app_profile", "app_profiles",
+            "profile_active", "profiles_active",
+            "micronaut_environments", "micronaut_environment"
+        );
 
-        applyEnv.run();
-        applySys.run();
-        applyArgs.run();
+        // 1) Defaults + initial profile cascade (classpath/FS, multi-dir, order-stable).
+        final Context result = readConfigFiles(null, directories, profiles);
 
-        // discover & load profiles in order
-        readProfiles(result);
+        // 2) Overlays: ENV < -D < CLI (they override whatever we just loaded).
+        applyOverlays(result, args);
 
-        // ensure overlays still win
-        applyEnv.run();
-        applySys.run();
-        applyArgs.run();
+        // 3) Re-run the profile cascade: overlays may have activated new profiles.
+        readConfigFiles(result, directories, profiles);
 
-        // final placeholder pass
+        // 4) Ensure overlays still win after new profiles landed.
+        applyOverlays(result, args);
+
         return resolvePlaceHolders(result);
+    }
+
+    private static void applyOverlays(final Context ctx, final String... args) {
+        System.getenv().forEach((k, v) -> addConfig(ctx, k, v));
+        System.getProperties().forEach((k, v) -> addConfig(ctx, k, v));
+        if (args != null && args.length > 0) {
+            ArgsDecoder.argsOf(String.join(" ", args)).forEach((k, v) -> addConfig(ctx, k, v));
+        }
     }
 
     /**
@@ -313,7 +329,10 @@ public abstract class NanoBase<T extends NanoBase<T>> {
             .replace('-', '_')
             .replace('+', '_')
             .replace(':', '_')
-            .trim()
+            .replace('{', '_')
+            .replace('}', '_')
+            .replace('$', '_')
+            .strip()
             .toLowerCase();
     }
 

@@ -17,9 +17,15 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +41,8 @@ import java.util.zip.ZipInputStream;
 
 import static java.util.Arrays.stream;
 import static java.util.Optional.ofNullable;
+import static java.util.stream.Collectors.toCollection;
+import static org.nanonative.nano.core.NanoBase.standardiseKey;
 
 @SuppressWarnings({"UnusedReturnValue", "java:S6548", "java:S2386"})
 public class NanoUtils {
@@ -53,15 +61,15 @@ public class NanoUtils {
     public static final long NS = 1L;
     public static final long US = 1_000L;
     public static final long MS = 1_000_000L;
-    public static final long S  = 1_000_000_000L;
-    public static final long M  = 60L * S;
-    public static final long H  = 60L * M;
-    public static final long D  = 24L * H;
-    public static final long W  = 7L * D;
+    public static final long S = 1_000_000_000L;
+    public static final long M = 60L * S;
+    public static final long H = 60L * M;
+    public static final long D = 24L * H;
+    public static final long W = 7L * D;
     public static final long MO = 30L * D;   // calendar-agnostic
-    public static final long Y  = 365L * D;
-    public static final long[] UNIT_NS   = { Y,   MO,  W,  D,  H,  M,  S,  MS,  US,  NS };
-    public static final String[] UNIT_SY = { "y", "mo","w","d","h","m","s","ms","µs","ns" };
+    public static final long Y = 365L * D;
+    public static final long[] UNIT_NS = {Y, MO, W, D, H, M, S, MS, US, NS};
+    public static final String[] UNIT_SY = {"y", "mo", "w", "d", "h", "m", "s", "ms", "µs", "ns"};
 
     public static boolean hasText(final String str) {
         return (str != null && !str.isEmpty() && containsText(str));
@@ -187,111 +195,114 @@ public class NanoUtils {
     }
 
     // ########## NANO CONFIGS ##########
-    public static Context readConfigFiles(final Context context, final String profile) {
-        final Context result = context != null ? context : Context.createRootContext(Nano.class);
-        final List<String> scannedProfiles = result.asList(ArrayList::new, String.class, "_scanned_profiles");
-        if (scannedProfiles.contains(profile))
-            return result;
-        if (!"".equals(profile))
-            scannedProfiles.add(profile);
-        result.put("_scanned_profiles", scannedProfiles);
+    public static Context readConfigFiles(final Context base, final Collection<String> directories, final Collection<String> profileKeys) {
+        final Context ctx = base != null ? base : Context.createRootContext(Nano.class);
+        final List<String> scanned = ctx.asList(ArrayList::new, String.class, "_scanned_profiles");
 
-        for (final String directory : new String[] {
-            "",
-            ".",
-            "config/",
-            ".config/",
-            "resources/",
-            ".resources/",
-            "resources/config/",
-            ".resources/config/"
-        }) {
-            readConfigFile(result, directory + "application" + (profile.isEmpty() ? profile : "-" + profile) + ".properties");
+        // 1) Load defaults (application.properties) in deterministic directory order.
+        if (base == null)
+            directories.forEach(dir -> readProperties(ctx, dir + "application.properties"));
+
+        // 2) Seed requested profiles from what we loaded.
+        final LinkedHashSet<String> requested = new LinkedHashSet<>(discoverProfiles(ctx, profileKeys));
+
+        // Use an index-driven growth strategy instead of a queue.
+        final ArrayList<String> ordered = new ArrayList<>(requested);
+        for (int i = 0; i < ordered.size(); i++) {
+            final String profile = ordered.get(i);
+            if (scanned.contains(profile)) continue; // idempotent re-run protection
+
+            // 3) Load this profile across all directories in fixed order.
+            directories.forEach(dir -> {
+                readProperties(ctx, dir + "application-" + profile + ".properties");
+
+                // 4) Discover any newly activated profiles and append them (preserving order).
+                for (final String p : discoverProfiles(ctx, profileKeys))
+                    if (!p.isBlank() && !scanned.contains(p) && requested.add(p))
+                        ordered.add(p);
+            });
+            scanned.add(profile);
         }
-        return result;
+        ctx.put("_scanned_profiles", scanned);
+        return ctx;
     }
 
-    public static Context readProfiles(final Context result) {
-        // Simplified profile resolution - collect all profile sources in priority order
-        final java.util.LinkedHashSet<String> profiles = new java.util.LinkedHashSet<>();
 
-        // Simplified profile loading:
-        // 1. Load initial app_profile if present
-        // 2. Load CONFIG_PROFILES from files (declared profile list)
-        // 3. Add external framework profiles (spring, micronaut, etc.)
-        // 4. CLI overrides applied later in NanoBase
-
-        // 1. First add single app_profile (loads initial profile which may define more profiles)
-        addProfilesFromConfig(result, "app_profile", profiles);
-
-        // Load initial profiles and re-read to get any CONFIG_PROFILES they define from files
-        for (final String profile : new java.util.ArrayList<>(profiles)) {
-            readConfigFiles(result, profile);
-        }
-
-        // 2. Add profiles from CONFIG_PROFILES (from files - maintains declared order)
-        addProfilesFromConfig(result, Context.CONFIG_PROFILES, profiles);
-
-        // 3. Add Spring profiles (external override capability)
-        addProfilesFromConfig(result, "spring_profiles_active", profiles);
-        addProfilesFromConfig(result, "spring_profile_active", profiles);
-
-        // 4. Add Micronaut profiles
-        addProfilesFromConfig(result, "micronaut_profiles", profiles);
-        addProfilesFromConfig(result, "micronaut_environments", profiles);
-
-        // 5. Add generic active profiles
-        addProfilesFromConfig(result, "profiles_active", profiles);
-
-
-        // Load remaining profiles exactly once, preserve order
-        for (final String profile : profiles) {
-            readConfigFiles(result, profile);
-        }
-        return result;
+    private static Set<String> discoverProfiles(
+        final Context ctx,
+        final Collection<String> profileKeys
+    ) {
+        return profileKeys.stream()
+            .map(ctx::asString) // can be null
+            .filter(Objects::nonNull)
+            .flatMap(s -> Arrays.stream(s.split(",")))
+            .map(String::strip)
+            .filter(s -> !s.isBlank())
+            .map(s -> resolvePlaceHolder(ctx, s))
+            .map(NanoBase::standardiseKey)
+            .filter(Objects::nonNull)
+            .collect(toCollection(LinkedHashSet::new));
     }
 
-    private static void addProfilesFromConfig(final Context result, final String configKey, final java.util.LinkedHashSet<String> profiles) {
-        result.asStringOpt(configKey).ifPresent(raw -> {
-            for (String p : NanoUtils.split(raw, ",")) {
-                final String name = p.trim();
-                if (!name.isEmpty()) profiles.add(name);
-            }
-        });
-    }
-
-    public static Context readConfigFile(final Context context, final String path) {
-        try (final InputStream input = path.startsWith(".") ? new FileInputStream(path.substring(1)) : NanoUtils.class.getClassLoader().getResourceAsStream(path)) {
-            if (input != null) {
-                final Properties properties = new Properties();
-                properties.load(input);
-                properties.forEach((key, value) -> addConfig(context, key, value));
-            }
+    public static Context readProperties(final Context context, final String path) {
+        try (final InputStream in = tryClasspathThenFs(path)) {
+            if (in == null) return context;
+            final Properties props = new Properties();
+            props.load(in);
+            props.forEach((k, v) -> addConfig(context, k, v));
         } catch (final Exception ignored) {
-            // ignored
+            // Missing files don’t get a eulogy.
         }
         return context;
+    }
+
+    public static InputStream tryClasspathThenFs(final String path) throws java.io.FileNotFoundException {
+        final String filePath = path.startsWith("./") ? path.substring(2) : path;
+        final InputStream fromCp = NanoUtils.class.getClassLoader().getResourceAsStream(filePath);
+        if (fromCp != null) return fromCp;
+        final Path p = Path.of(filePath);
+        return Files.exists(p) ? new FileInputStream(p.toFile()) : null;
     }
 
     public static Context addConfig(final Context context, final Object key, final Object value) {
         if (value == null || "null".equals(value) || "".equals(value)) {
-            context.remove(NanoBase.standardiseKey(key));
+            context.remove(standardiseKey(key));
         } else if (value instanceof final String valueStr && hasText(valueStr)) {
-            context.put(NanoBase.standardiseKey(key), valueStr.trim());
+            context.put(standardiseKey(key), valueStr.strip());
         } else {
-            context.put(NanoBase.standardiseKey(key), value);
+            context.put(standardiseKey(key), value);
         }
         return context;
     }
 
+    public static Object resolvePlaceHolder(final Context context, final String value) {
+        return isExpr(value) ? resolvePlaceHolder(0, context, value, new HashSet<>()) : value;
+    }
+
+    public static Object resolvePlaceHolder(final int depth, final Context context, final String value, final Set<String> seen) {
+        if (depth > 32)
+            return value;
+        final String key = value.substring(2, value.length() - 1);
+        final int sep = key.indexOf(':');
+        return context.asOpt(Object.class, standardiseKey(sep >= 0 ? key.substring(0, sep) : key))
+            .filter(s -> !seen.contains(key)) // prevent cycles
+            .map(s -> {
+                seen.add(key);
+                return s;
+            }) // prevent cycles
+            .map(object -> object instanceof String s && isExpr(s) ? resolvePlaceHolder(depth + 1, context, s, seen) : object).orElse(sep >= 0 ? key.substring(sep + 1) : null);
+    }
+
     public static Context resolvePlaceHolders(final Context context) {
         context.forEach((key, value) -> {
-            if (value instanceof final String valueStr && valueStr.startsWith("${") && valueStr.endsWith("}")) {
-                final String[] placeholder = split(valueStr.substring(2, valueStr.length() - 1), ":");
-                addConfig(context, key, context.asOpt(Object.class, NanoBase.standardiseKey(placeholder[0])).orElseGet(() -> placeholder.length > 1 ? placeholder[1].trim() : null));
-            }
+            if (value instanceof final String s && isExpr(s))
+                addConfig(context, key, resolvePlaceHolder(context, s));
         });
         return context;
+    }
+
+    public static boolean isExpr(final String s) {
+        return s.length() >= 3 && s.charAt(0) == '$' && s.charAt(1) == '{' && s.charAt(s.length() - 1) == '}';
     }
 
     public static byte[] encodeGzip(final byte[] data) {
