@@ -78,12 +78,6 @@ jobs:
           java-version: ${{ steps.java_info.outputs.java_version }}
           distribution: 'temurin'
 
-      - name: "⬇️ Resolve dependencies"
-        run: ${{ steps.java_info.outputs.cmd }} -B dependency:go-offline
-
-      - name: "🔨 Build [${{ inputs.run_test && 'with tests' || 'only' }}] [${{ steps.java_info.outputs.builder_name }}]"
-        run: ${{ inputs.run_test && steps.java_info.outputs.cmd_test_build || steps.java_info.outputs.cmd_build }}
-
       - name: "📝 Set Project Version"
         id: version
         run: |
@@ -94,6 +88,13 @@ jobs:
           fi
           echo "project_version [${project_version}]"
           echo "project_version=${project_version}" >> $GITHUB_OUTPUT
+
+      - name: "⬇️ Resolve dependencies"
+        run: ${{ steps.java_info.outputs.cmd }} -B dependency:go-offline
+
+      - name: "🔨 Build [${{ inputs.run_test && 'with tests' || 'only' }}] [${{ steps.java_info.outputs.builder_name }}]"
+        run: ${{ inputs.run_test && steps.java_info.outputs.cmd_test_build || steps.java_info.outputs.cmd_build }}
+
       - name: "📊 Analyze metrics [${{ steps.version.outputs.project_version }}]"
         id: metrics
         run: |
