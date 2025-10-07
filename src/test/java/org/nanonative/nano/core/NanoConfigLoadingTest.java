@@ -6,14 +6,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.model.TestService;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
+import static org.nanonative.nano.model.TestService.CONFIG_TEST_OPTION1;
 
 @Execution(ExecutionMode.SAME_THREAD)  // Disable concurrent execution for config tests
 final class NanoConfigLoadingTest {
@@ -271,6 +275,34 @@ final class NanoConfigLoadingTest {
         assertThat(nano.context().asString("message")).isEqualTo(ctxBefore);
         assertThat(nano.context().asList(String.class, "_scanned_profiles"))
                 .containsExactlyElementsOf(firstScan);
+        nano.shutdown(nano.context()).waitForStop();
+    }
+
+    @Test
+    void test_profiles() throws Exception {
+        // GIVEN
+        writeCfg("application.properties", String.join(System.lineSeparator(),
+            "config_test_1=CONFIG1_APP",
+            "config_test_2=CONFIG2_APP"
+        ));
+        writeCfg("application-dev.properties", String.join(System.lineSeparator(),
+            "config_test_1=CONFIG1_DEV",
+            "config_test_2=CONFIG2_DEV"
+        ));
+
+        final TestService testService = new TestService();
+        final Nano nano = new Nano(Map.of("app_profiles", "dev"), testService);
+
+        assertThat(testService.getConfigTestOption1()).isEqualTo("CONFIG1_DEV");
+        assertThat(testService.getConfigTestOption2()).isEqualTo("CONFIG2_DEV");
+
+        nano.context.newEvent(EVENT_CONFIG_CHANGE, () -> Map.of(
+            CONFIG_TEST_OPTION1, "CONFIG1_CHANGE"
+        )).broadcast(true).send();
+
+        assertThat(testService.getConfigTestOption1()).isEqualTo("CONFIG1_CHANGE");
+        assertThat(testService.getConfigTestOption2()).isEqualTo("CONFIG2_DEV");
+
         nano.shutdown(nano.context()).waitForStop();
     }
 
