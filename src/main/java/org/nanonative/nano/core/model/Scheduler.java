@@ -6,6 +6,8 @@ import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 
+import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_FACTORY;
+
 /**
  * Lightweight scheduler for deferred and periodic tasks.
  */
@@ -14,6 +16,7 @@ public class Scheduler extends ScheduledThreadPoolExecutor {
 
     /**
      * Creates a new Scheduler.
+     *
      * @param id a custom defined id
      */
     public Scheduler(final String id) {
@@ -22,17 +25,19 @@ public class Scheduler extends ScheduledThreadPoolExecutor {
 
     /**
      * Creates a new Scheduler.
-     * @param id a custom defined id
+     *
+     * @param id           a custom defined id
      * @param corePoolSize the number of threads to keep in the pool, even if they are idle
-     * @param handler the handler
+     * @param handler      the handler
      */
     public Scheduler(final String id, final int corePoolSize, final RejectedExecutionHandler handler) {
-        super(corePoolSize, handler);
+        super(corePoolSize, GLOBAL_THREAD_FACTORY, handler);
         this.id = id;
     }
 
     /**
      * Performs the id operation.
+     *
      * @return the result
      */
     public String id() {
@@ -41,6 +46,7 @@ public class Scheduler extends ScheduledThreadPoolExecutor {
 
     /**
      * Performs the toString operation.
+     *
      * @return the result
      */
     @Override

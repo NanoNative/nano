@@ -212,9 +212,9 @@ public class Nano extends NanoServices<Nano> {
             final List<String> secrets = List.of("secret", "token", "pass", "pwd", "bearer", "auth", "private", "ssn");
             final int keyLength = context.keySet().stream().map(String::valueOf).mapToInt(String::length).max().orElse(0);
             context.info(() -> "Configs: " + lineSeparator() + context.entrySet().stream()
-                    .sorted((o1, o2) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(o1.getKey()), String.valueOf(o2.getKey())))
-                    .map(config -> String.format("%-" + keyLength + "s  %s", config.getKey(), secrets.stream().anyMatch(s -> String.valueOf(config.getKey()).toLowerCase().contains(s)) ? "****" : config.getValue()))
-                    .collect(joining(lineSeparator())))
+                .sorted((o1, o2) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(o1.getKey()), String.valueOf(o2.getKey())))
+                .map(config -> String.format("%-" + keyLength + "s  %s", config.getKey(), secrets.stream().anyMatch(s -> String.valueOf(config.getKey()).toLowerCase().contains(s)) ? "****" : config.getValue()))
+                .collect(joining(lineSeparator())))
             ;
         }
     }
@@ -316,8 +316,8 @@ public class Nano extends NanoServices<Nano> {
         final List<String> list = context.asList(String.class, "_scanned_profiles");
         if (!list.isEmpty()) {
             context.debug(() -> "Profiles [{}] Services [{}]",
-                    list.stream().sorted().collect(joining(", ")),
-                    services().stream().collect(Collectors.groupingBy(Service::name, Collectors.counting())).entrySet().stream().map(entry -> entry.getValue() > 1 ? "(" + entry.getValue() + ") " + entry.getKey() : entry.getKey()).collect(joining(", "))
+                list.stream().sorted().collect(joining(", ")),
+                services().stream().collect(Collectors.groupingBy(Service::name, Collectors.counting())).entrySet().stream().map(entry -> entry.getValue() > 1 ? "(" + entry.getValue() + ") " + entry.getKey() : entry.getKey()).collect(joining(", "))
             );
         }
     }
@@ -375,18 +375,18 @@ public class Nano extends NanoServices<Nano> {
     public Nano printSystemInfo() {
         final long activeThreads = NanoThread.activeCarrierThreads();
         context.debug(() -> "pid [{}] schedulers [{}] services [{}] listeners [{}] cores [{}] usedMemory [{}mb] threadsNano [{}], threadsActive [{}] threadsOther [{}] java [{}] arch [{}] os [{}]",
-                pid(),
-                schedulers.size(),
-                services.size(),
-                listeners.values().stream().mapToLong(Collection::size).sum(),
-                Runtime.getRuntime().availableProcessors(),
-                usedMemoryMB(),
-                NanoThread.activeNanoThreads(),
-                activeThreads,
-                ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads,
-                System.getProperty("java.version"),
-                System.getProperty("os.arch"),
-                System.getProperty("os.name") + " - " + System.getProperty("os.version")
+            pid(),
+            schedulers.size(),
+            services.size(),
+            listeners.values().stream().mapToLong(Collection::size).sum(),
+            Runtime.getRuntime().availableProcessors(),
+            usedMemoryMB(),
+            NanoThread.activeNanoThreads(),
+            activeThreads,
+            ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads,
+            System.getProperty("java.version"),
+            System.getProperty("os.arch"),
+            System.getProperty("os.name") + " - " + System.getProperty("os.version")
         );
         return this;
     }
@@ -407,6 +407,10 @@ public class Nano extends NanoServices<Nano> {
                 listeners.clear();
                 context.info(() -> "Stopped [{}] in [{}] with uptime [{}]", context.asString(APP_NANO_NAME), NanoUtils.formatDuration(System.nanoTime() - startTimeMs), NanoUtils.formatDuration(System.nanoTime() - createdAtNs));
                 schedulers.clear();
+                // Interrupt keep-alive thread on shutdown
+                if (keepAliveThread.isAlive()) {
+                    keepAliveThread.interrupt();
+                }
             }, Nano.class.getSimpleName() + " Shutdown-Hook");
             sequence.start();
             sequence.join();
@@ -447,18 +451,18 @@ public class Nano extends NanoServices<Nano> {
     public String toString() {
         final long activeThreads = NanoThread.activeCarrierThreads();
         return "Nano{" +
-                "pid=" + pid() +
-                ", schedulers=" + schedulers.size() +
-                ", services=" + services.size() +
-                ", listeners=" + listeners.values().stream().mapToLong(Collection::size).sum() +
-                ", cores=" + Runtime.getRuntime().availableProcessors() +
-                ", usedMemory=" + usedMemoryMB() + "mb" +
-                ", threadsActive=" + NanoThread.activeNanoThreads() +
-                ", threadsNano=" + activeThreads +
-                ", threadsOther=" + (ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads) +
-                ", java=" + System.getProperty("java.version") +
-                ", arch=" + System.getProperty("os.arch") +
-                ", os=" + System.getProperty("os.name") + " - " + System.getProperty("os.version") +
-                '}';
+            "pid=" + pid() +
+            ", schedulers=" + schedulers.size() +
+            ", services=" + services.size() +
+            ", listeners=" + listeners.values().stream().mapToLong(Collection::size).sum() +
+            ", cores=" + Runtime.getRuntime().availableProcessors() +
+            ", usedMemory=" + usedMemoryMB() + "mb" +
+            ", threadsActive=" + NanoThread.activeNanoThreads() +
+            ", threadsNano=" + activeThreads +
+            ", threadsOther=" + (ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads) +
+            ", java=" + System.getProperty("java.version") +
+            ", arch=" + System.getProperty("os.arch") +
+            ", os=" + System.getProperty("os.name") + " - " + System.getProperty("os.version") +
+            '}';
     }
 }

@@ -193,8 +193,7 @@ public abstract class Service {
         event.channel(EVENT_CONFIG_CHANGE).map(Event::payload).map(map -> {
             if (map instanceof final TypeMapI<?> typeMap)
                 return typeMap;
-            return new TypeMap((Map<?, ?>) map);
-
+            return new TypeMap(map);
         }).ifPresentOrElse(configs -> {
             final TypeMap merged = new TypeMap(context);
             context.forEach(merged::putIfAbsent);

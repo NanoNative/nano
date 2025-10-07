@@ -11,6 +11,7 @@ import java.lang.management.MemoryUsage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -70,7 +71,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         this.logService.start();
         this.logService.isReadyState().set(true);
         displayHelpMenu();
-        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.acknowledge().payload()));
+        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.payload()));
     }
 
     /**
@@ -151,7 +152,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings({"unchecked", "java:S116"})
     public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<? super Event<C, R>, C> listener) {
         final Consumer<? super Event<C, R>> wrapped = event ->
-                event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
+            event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
         listeners.computeIfAbsent(channel.id(), value -> ConcurrentHashMap.newKeySet()).add((Consumer<? super Event<?, ?>>) wrapped);
         return (Consumer<Event<C, R>>) wrapped;
     }
@@ -274,12 +275,46 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @return The {@link Context} initialized with the configurations.
      */
     protected Context readConfigs(final String... args) {
-        final Context result = readConfigFiles(null, "");
-        System.getenv().forEach((key, value) -> addConfig(result, key, value));
-        System.getProperties().forEach((key, value) -> addConfig(result, key, value));
-        if (args != null)
-            ArgsDecoder.argsOf(String.join(" ", args)).forEach((key, value) -> addConfig(result, key, value));
+        final List<String> directories = List.of(
+            "",
+            ".",
+            "config/",
+            ".config/",
+            "resources/",
+            ".resources/",
+            "resources/config/",
+            ".resources/config/"
+        );
+
+        final List<String> profiles = List.of(
+            "spring_profiles_active", "spring_profile_active", "spring_active_profiles", "spring_active_profile",
+            "spring_profiles", "spring_profile", "spring_active", "spring_active",
+            "app_profile", "app_profiles",
+            "profile_active", "profiles_active",
+            "micronaut_environments", "micronaut_environment"
+        );
+
+        // 1) Defaults + initial profile cascade (classpath/FS, multi-dir, order-stable).
+        final Context result = readConfigFiles(null, directories, profiles);
+
+        // 2) Overlays: ENV < -D < CLI (they override whatever we just loaded).
+        applyOverlays(result, args);
+
+        // 3) Re-run the profile cascade: overlays may have activated new profiles.
+        readConfigFiles(result, directories, profiles);
+
+        // 4) Ensure overlays still win after new profiles landed.
+        applyOverlays(result, args);
+
         return resolvePlaceHolders(result);
+    }
+
+    private static void applyOverlays(final Context ctx, final String... args) {
+        System.getenv().forEach((k, v) -> addConfig(ctx, k, v));
+        System.getProperties().forEach((k, v) -> addConfig(ctx, k, v));
+        if (args != null && args.length > 0) {
+            ArgsDecoder.argsOf(String.join(" ", args)).forEach((k, v) -> addConfig(ctx, k, v));
+        }
     }
 
     /**
@@ -290,12 +325,15 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     @SuppressWarnings("java:S3358") // Ternary operator should not be nested
     public static String standardiseKey(final Object key) {
         return key == null ? null : convertObj(key, String.class)
-                .replace('.', '_')
-                .replace('-', '_')
-                .replace('+', '_')
-                .replace(':', '_')
-                .trim()
-                .toLowerCase();
+            .replace('.', '_')
+            .replace('-', '_')
+            .replace('+', '_')
+            .replace(':', '_')
+            .replace('{', '_')
+            .replace('}', '_')
+            .replace('$', '_')
+            .strip()
+            .toLowerCase();
     }
 
 }
