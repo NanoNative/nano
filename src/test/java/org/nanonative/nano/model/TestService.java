@@ -20,8 +20,12 @@ import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_HEARTBEAT;
 import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
+import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
 
 public class TestService extends Service {
+
+    public static final String CONFIG_TEST_OPTION1 = registerConfig("config_test_1", "test config 1");
+    public static final String CONFIG_TEST_OPTION2 = registerConfig("config_test_2", "test config 2");
 
     private final AtomicInteger startCount = new AtomicInteger(0);
     private final AtomicInteger stopCount = new AtomicInteger(0);
@@ -33,6 +37,9 @@ public class TestService extends Service {
     private final AtomicReference<Consumer<Context>> stopConsumer = new AtomicReference<>();
     private long startTime = System.currentTimeMillis();
     public static Channel<Object, Object> TEST_EVENT = Channel.registerChannelId("TEST_EVENT", Object.class, Object.class);
+
+    protected String config1;
+    protected String config2;
 
     public TestService resetEvents() {
         events.clear();
@@ -168,6 +175,15 @@ public class TestService extends Service {
 
     @Override
     public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
+        config1 = configs.asStringOpt(CONFIG_TEST_OPTION1).orElse(merged.asStringOpt(CONFIG_TEST_OPTION1).orElse("DEFAULT1"));
+        config2 = configs.asStringOpt(CONFIG_TEST_OPTION2).orElse(merged.asStringOpt(CONFIG_TEST_OPTION2).orElse("DEFAULT2"));
+    }
 
+    public String getConfigTestOption1() {
+        return config1;
+    }
+
+    public String getConfigTestOption2() {
+        return config2;
     }
 }
