@@ -145,7 +145,7 @@ jobs:
           fi
 
       - name: "📦 Upload build artifacts [run-${{ github.run_id }}]"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-artifacts-${{ github.run_id }}
           path: |

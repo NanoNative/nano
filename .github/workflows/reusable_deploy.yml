@@ -91,7 +91,7 @@ jobs:
             ${{ runner.os }}-build-
 
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: build-artifacts-${{ github.run_id }}
           path: target/
@@ -148,7 +148,7 @@ jobs:
             ${{ runner.os }}-build-
 
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: build-artifacts-${{ github.run_id }}
           path: target/
@@ -203,7 +203,7 @@ jobs:
             ${{ runner.os }}-build-
 
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: build-artifacts-${{ github.run_id }}
           path: target/
