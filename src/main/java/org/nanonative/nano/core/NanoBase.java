@@ -61,9 +61,10 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      */
     protected NanoBase(final Map<Object, Object> configs, final String... args) {
         this.createdAtNs = System.nanoTime();
-        this.context = readConfigs(args);
+        this.context = Context.createRootContext(Nano.class);
         if (configs != null)
             configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(value).orElse("")));
+        readConfigs(context, args);
         this.logService = new LogService();
         this.logService.context(context);
         this.logService.configure(context, context);
@@ -273,8 +274,8 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @param args Command-line arguments.
      * @return The {@link Context} initialized with the configurations.
      */
-    protected Context readConfigs(final String... args) {
-        final Context result = readConfigFiles(null, "");
+    protected Context readConfigs(final Context context, final String... args) {
+        final Context result = readConfigFiles(context, "");
         System.getenv().forEach((key, value) -> addConfig(result, key, value));
         System.getProperties().forEach((key, value) -> addConfig(result, key, value));
         if (args != null)
