@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static java.lang.System.lineSeparator;
 import static java.util.Arrays.asList;
@@ -45,6 +44,7 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_START;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.NanoUtils.generateNanoName;
+import static org.nanonative.nano.services.file.FileWatchRequest.forFilesWithGroup;
 import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_CHANGE;
 import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_WATCH;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
@@ -223,9 +223,9 @@ public class Nano extends NanoServices<Nano> {
             final List<String> secrets = List.of("secret", "token", "pass", "pwd", "bearer", "auth", "private", "ssn");
             final int keyLength = context.keySet().stream().map(String::valueOf).mapToInt(String::length).max().orElse(0);
             context.info(() -> "Configs: " + lineSeparator() + context.entrySet().stream()
-                .sorted((o1, o2) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(o1.getKey()), String.valueOf(o2.getKey())))
-                .map(config -> String.format("%-" + keyLength + "s  %s", config.getKey(), secrets.stream().anyMatch(s -> String.valueOf(config.getKey()).toLowerCase().contains(s)) ? "****" : config.getValue()))
-                .collect(joining(lineSeparator())))
+                    .sorted((o1, o2) -> String.CASE_INSENSITIVE_ORDER.compare(String.valueOf(o1.getKey()), String.valueOf(o2.getKey())))
+                    .map(config -> String.format("%-" + keyLength + "s  %s", config.getKey(), secrets.stream().anyMatch(s -> String.valueOf(config.getKey()).toLowerCase().contains(s)) ? "****" : config.getValue()))
+                    .collect(joining(lineSeparator())))
             ;
         }
     }
@@ -327,8 +327,8 @@ public class Nano extends NanoServices<Nano> {
         final List<String> list = context.asList(String.class, "_scanned_profiles");
         if (!list.isEmpty()) {
             context.debug(() -> "Profiles [{}] Services [{}]",
-                list.stream().sorted().collect(joining(", ")),
-                services().stream().collect(Collectors.groupingBy(Service::name, Collectors.counting())).entrySet().stream().map(entry -> entry.getValue() > 1 ? "(" + entry.getValue() + ") " + entry.getKey() : entry.getKey()).collect(joining(", "))
+                    list.stream().sorted().collect(joining(", ")),
+                    services().stream().collect(Collectors.groupingBy(Service::name, Collectors.counting())).entrySet().stream().map(entry -> entry.getValue() > 1 ? "(" + entry.getValue() + ") " + entry.getKey() : entry.getKey()).collect(joining(", "))
             );
         }
     }
@@ -386,18 +386,18 @@ public class Nano extends NanoServices<Nano> {
     public Nano printSystemInfo() {
         final long activeThreads = NanoThread.activeCarrierThreads();
         context.debug(() -> "pid [{}] schedulers [{}] services [{}] listeners [{}] cores [{}] usedMemory [{}mb] threadsNano [{}], threadsActive [{}] threadsOther [{}] java [{}] arch [{}] os [{}]",
-            pid(),
-            schedulers.size(),
-            services.size(),
-            listeners.values().stream().mapToLong(Collection::size).sum(),
-            Runtime.getRuntime().availableProcessors(),
-            usedMemoryMB(),
-            NanoThread.activeNanoThreads(),
-            activeThreads,
-            ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads,
-            System.getProperty("java.version"),
-            System.getProperty("os.arch"),
-            System.getProperty("os.name") + " - " + System.getProperty("os.version")
+                pid(),
+                schedulers.size(),
+                services.size(),
+                listeners.values().stream().mapToLong(Collection::size).sum(),
+                Runtime.getRuntime().availableProcessors(),
+                usedMemoryMB(),
+                NanoThread.activeNanoThreads(),
+                activeThreads,
+                ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads,
+                System.getProperty("java.version"),
+                System.getProperty("os.arch"),
+                System.getProperty("os.name") + " - " + System.getProperty("os.version")
         );
         return this;
     }
@@ -461,13 +461,13 @@ public class Nano extends NanoServices<Nano> {
         if (service(FileWatcher.class) != null) {
             // Set up config file watching
             final List<Path> configPaths = CONFIG_FILE_LOCATIONS.stream()
-                .map(Path::of)
-                .filter(Files::exists)
-                .filter(Files::isDirectory)
-                .toList();
+                    .map(Path::of)
+                    .filter(Files::exists)
+                    .filter(Files::isDirectory)
+                    .toList();
 
             if (!configPaths.isEmpty()) {
-                final FileWatchRequest configWatchRequest = FileWatchRequest.forFilesWithGroup(configPaths, "CONFIG_CHANGE");
+                final FileWatchRequest configWatchRequest = forFilesWithGroup("CONFIG_CHANGE", configPaths);
                 context.newEvent(EVENT_FILE_WATCH, () -> configWatchRequest).send();
                 context.debug(() -> "Initialized config file watching for {} paths", configPaths.size());
             }
@@ -497,18 +497,18 @@ public class Nano extends NanoServices<Nano> {
     public String toString() {
         final long activeThreads = NanoThread.activeCarrierThreads();
         return "Nano{" +
-            "pid=" + pid() +
-            ", schedulers=" + schedulers.size() +
-            ", services=" + services.size() +
-            ", listeners=" + listeners.values().stream().mapToLong(Collection::size).sum() +
-            ", cores=" + Runtime.getRuntime().availableProcessors() +
-            ", usedMemory=" + usedMemoryMB() + "mb" +
-            ", threadsActive=" + NanoThread.activeNanoThreads() +
-            ", threadsNano=" + activeThreads +
-            ", threadsOther=" + (ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads) +
-            ", java=" + System.getProperty("java.version") +
-            ", arch=" + System.getProperty("os.arch") +
-            ", os=" + System.getProperty("os.name") + " - " + System.getProperty("os.version") +
-            '}';
+                "pid=" + pid() +
+                ", schedulers=" + schedulers.size() +
+                ", services=" + services.size() +
+                ", listeners=" + listeners.values().stream().mapToLong(Collection::size).sum() +
+                ", cores=" + Runtime.getRuntime().availableProcessors() +
+                ", usedMemory=" + usedMemoryMB() + "mb" +
+                ", threadsActive=" + NanoThread.activeNanoThreads() +
+                ", threadsNano=" + activeThreads +
+                ", threadsOther=" + (ManagementFactory.getThreadMXBean().getThreadCount() - activeThreads) +
+                ", java=" + System.getProperty("java.version") +
+                ", arch=" + System.getProperty("os.arch") +
+                ", os=" + System.getProperty("os.name") + " - " + System.getProperty("os.version") +
+                '}';
     }
 }
