@@ -85,7 +85,7 @@ class FileWatcherTest {
         final Context ctx = nano.context(getClass());
         nano.subscribeEvent(EVENT_FILE_CHANGE, event -> changes.offer(event.payload()));
         ctx.newEvent(EVENT_FILE_WATCH, () ->
-            FileWatchRequest.forFilesWithGroup(List.of(dir), "TEST_GROUP")
+            FileWatchRequest.forFilesWithGroup("TEST_GROUP", List.of(dir))
         ).send();
 
         Files.writeString(file, "created", UTF_8);
@@ -107,7 +107,7 @@ class FileWatcherTest {
         nano.subscribeEvent(EVENT_FILE_CHANGE, event -> changes.offer(event.payload()));
 
         ctx.newEvent(EVENT_FILE_WATCH, () ->
-            FileWatchRequest.forFilesWithGroup(List.of(dir), "OFF")
+            FileWatchRequest.forFilesWithGroup("OFF", List.of(dir))
         ).send();
 
         Files.writeString(file, "one", UTF_8);
@@ -116,7 +116,7 @@ class FileWatcherTest {
         changes.clear();
 
         ctx.newEvent(EVENT_FILE_UNWATCH, () ->
-            FileWatchRequest.forFilesWithGroup(List.of(dir), "OFF")
+            FileWatchRequest.forFilesWithGroup("OFF", List.of(dir))
         ).send();
 
         Files.writeString(file, "second", UTF_8);
@@ -136,10 +136,10 @@ class FileWatcherTest {
         nano.subscribeEvent(EVENT_FILE_CHANGE, event -> changes.offer(event.payload()));
 
         ctx.newEvent(EVENT_FILE_WATCH, () ->
-            FileWatchRequest.forFilesWithGroup(List.of(dir), "GROUP1")
+            FileWatchRequest.forFilesWithGroup("GROUP1", List.of(dir))
         ).send();
         ctx.newEvent(EVENT_FILE_WATCH, () ->
-            FileWatchRequest.forFilesWithGroup(List.of(dir), "GROUP2")
+            FileWatchRequest.forFilesWithGroup("GROUP2", List.of(dir))
         ).send();
 
         Files.writeString(dir.resolve("first.txt"), "first", UTF_8);
@@ -150,7 +150,7 @@ class FileWatcherTest {
         changes.clear();
 
         ctx.newEvent(EVENT_FILE_UNWATCH, () ->
-            FileWatchRequest.forFilesWithGroup(List.of(dir), "GROUP1")
+            FileWatchRequest.forFilesWithGroup("GROUP1", List.of(dir))
         ).send();
 
         Files.writeString(dir.resolve("second.txt"), "second", UTF_8);
@@ -175,7 +175,7 @@ class FileWatcherTest {
         nano.subscribeEvent(EVENT_FILE_CHANGE, event -> events.offer(event.payload()));
 
         ctx.newEvent(EVENT_FILE_WATCH, () ->
-            FileWatchRequest.forFilesWithGroup(List.of(dirOne, dirTwo), "DUO")
+            FileWatchRequest.forFilesWithGroup("DUO", List.of(dirOne, dirTwo))
         ).send();
 
         Files.writeString(fileOne, "one", UTF_8);
@@ -205,10 +205,10 @@ class FileWatcherTest {
                     start.await();
                     final String group = "CONCURRENT_" + index;
                     ctx.newEvent(EVENT_FILE_WATCH, () ->
-                        FileWatchRequest.forFilesWithGroup(List.of(dir), group)
+                        FileWatchRequest.forFilesWithGroup(group, List.of(dir))
                     ).send();
                     ctx.newEvent(EVENT_FILE_UNWATCH, () ->
-                        FileWatchRequest.forFilesWithGroup(List.of(dir), group)
+                        FileWatchRequest.forFilesWithGroup(group, List.of(dir))
                     ).send();
                     success.incrementAndGet();
                 } catch (Exception ignored) {
@@ -264,20 +264,20 @@ class FileWatcherTest {
         final FileWatchRequest singleFileRequest = FileWatchRequest.forFile(path1);
         assertThat(singleFileRequest.paths()).hasSize(1);
         assertThat(singleFileRequest.paths().getFirst()).isEqualTo(path1);
-        assertThat(singleFileRequest.group()).isEmpty();
+        assertThat(singleFileRequest.group()).isNull();
         assertThat(singleFileRequest.getGroupOrDefault()).isEqualTo("DEFAULT_GROUP");
 
         final FileWatchRequest multiFileRequest = FileWatchRequest.forFiles(paths);
         assertThat(multiFileRequest.paths()).containsExactly(path1, path2);
-        assertThat(multiFileRequest.group()).isEmpty();
+        assertThat(multiFileRequest.group()).isNull();
         assertThat(multiFileRequest.getGroupOrDefault()).isEqualTo("DEFAULT_GROUP");
 
-        final FileWatchRequest singleFileGroupRequest = FileWatchRequest.forFileWithGroup(path1, "TEST_GROUP");
+        final FileWatchRequest singleFileGroupRequest = FileWatchRequest.forFileWithGroup("TEST_GROUP", path1);
         assertThat(singleFileGroupRequest.paths()).containsExactly(path1);
         assertThat(singleFileGroupRequest.group()).contains("TEST_GROUP");
         assertThat(singleFileGroupRequest.getGroupOrDefault()).isEqualTo("TEST_GROUP");
 
-        final FileWatchRequest multiFileGroupRequest = FileWatchRequest.forFilesWithGroup(paths, "MULTI_GROUP");
+        final FileWatchRequest multiFileGroupRequest = FileWatchRequest.forFilesWithGroup("MULTI_GROUP", paths);
         assertThat(multiFileGroupRequest.paths()).containsExactly(path1, path2);
         assertThat(multiFileGroupRequest.group()).contains("MULTI_GROUP");
         assertThat(multiFileGroupRequest.getGroupOrDefault()).isEqualTo("MULTI_GROUP");
