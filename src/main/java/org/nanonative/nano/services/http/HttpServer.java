@@ -3,10 +3,12 @@ package org.nanonative.nano.services.http;
 import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMapI;
 import com.sun.net.httpserver.HttpExchange;
+import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.file.FileChangeEvent;
 import org.nanonative.nano.services.file.FileWatcher;
 import org.nanonative.nano.services.http.model.HttpHeaders;
 import org.nanonative.nano.services.http.model.HttpObject;
@@ -18,18 +20,26 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.WatchService;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static berlin.yuna.typemap.logic.TypeConverter.collectionOf;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
 import static org.nanonative.nano.helper.event.model.Channel.registerChannelId;
+import static org.nanonative.nano.services.file.FileWatchRequest.forFilesWithGroup;
+import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_CHANGE;
+import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_UNWATCH;
+import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_WATCH;
 import static org.nanonative.nano.services.http.HttpsHelper.configureHttps;
 import static org.nanonative.nano.services.http.HttpsHelper.createDefaultServer;
 import static org.nanonative.nano.services.http.HttpsHelper.createHttpsServer;
@@ -71,11 +81,10 @@ public class HttpServer extends Service {
     public void start() {
         try {
             STARTUP_LOCK.lock();
-            if (context.containsKey(CONFIG_SERVICE_HTTPS_CERT) || context.containsKey(CONFIG_SERVICE_HTTPS_KEY) || context.containsKey(CONFIG_SERVICE_HTTPS_CA) || context.containsKey(CONFIG_SERVICE_HTTPS_KTS)) {
+            if (hasHttpsConfig(context)) {
                 server = createHttpsServer(context);
                 configureHttps(context, server);
-                if (context.service(FileWatcher.class) == null)
-                    context.runAwait(new FileWatcher());
+                refreshCertWatchers(context);
             } else {
                 server = createDefaultServer(context);
             }
@@ -86,17 +95,17 @@ public class HttpServer extends Service {
                 try {
                     final AtomicBoolean internalError = new AtomicBoolean(false);
                     event.send().peek(setError(internalError)).responseOpt().ifPresentOrElse(
-                        response -> sendResponse(exchange, request, response),
-                        () -> context.newEvent(EVENT_HTTP_REQUEST_UNHANDLED, () -> request).send().responseOpt().ifPresentOrElse(
                             response -> sendResponse(exchange, request, response),
-                            () -> sendResponse(exchange, request, new HttpObject().failure(internalError.get() ? 500 : 404, internalError.get() ? "Internal Server Error" : "Not Found", null))
-                        )
+                            () -> context.newEvent(EVENT_HTTP_REQUEST_UNHANDLED, () -> request).send().responseOpt().ifPresentOrElse(
+                                    response -> sendResponse(exchange, request, response),
+                                    () -> sendResponse(exchange, request, new HttpObject().failure(internalError.get() ? 500 : 404, internalError.get() ? "Internal Server Error" : "Not Found", null))
+                            )
                     );
                 } catch (final Exception e) {
                     context.newEvent(EVENT_APP_ERROR).payload(() -> event).error(e).containsEvent(true).send();
                     event.responseOpt().ifPresentOrElse(
-                        response -> sendResponse(exchange, request, response),
-                        () -> sendResponse(exchange, request, new HttpObject().failure(500, "Internal Server Error", null))
+                            response -> sendResponse(exchange, request, response),
+                            () -> sendResponse(exchange, request, new HttpObject().failure(500, "Internal Server Error", null))
                     );
                 }
             });
@@ -117,52 +126,47 @@ public class HttpServer extends Service {
             context.info(() -> "[{}] port [{}] stopped", name(), server.getAddress().getPort());
             server = null;
         }
+        context.newEvent(EVENT_FILE_UNWATCH, () -> forFilesWithGroup(CONFIG_SERVICE_HTTPS_CERT, Collections.emptyList())).send();
     }
 
 
     @Override
     public void onEvent(final Event<?, ?> event) {
+        if (server == null)
+            event.channel(EVENT_FILE_CHANGE).map(Event::payload).flatMap(FileChangeEvent::group).ifPresent(group -> {
+                if (group.equals(CONFIG_SERVICE_HTTPS_CERT))
+                    configureHttps(context, server);
+            });
     }
 
     @Override
     public void configure(final TypeMapI<?> configs, final TypeMapI<?> merged) {
-        if (configs.containsKey(CONFIG_SERVICE_HTTPS_CERTS) || configs.containsKey(CONFIG_SERVICE_HTTPS_CERT) || configs.containsKey(CONFIG_SERVICE_HTTPS_KEY) || configs.containsKey(CONFIG_SERVICE_HTTPS_CA) || configs.containsKey(CONFIG_SERVICE_HTTPS_KTS))
-            merged.asStringOpt(CONFIG_SERVICE_HTTPS_CERTS)
-                .map(certPaths -> {
-                    Arrays.stream(certPaths.split(","))
-                        .map(String::trim)
-                        .filter(NanoUtils::hasText)
-                        .map(Paths::get)
-                        .flatMap(NanoUtils::listFiles)
-                        .filter(Files::exists)
-                        .forEach(path -> {
-                            final String fileName = path.getFileName().toString().toLowerCase();
-                            if (fileName.endsWith(".key") && context.asPath(CONFIG_SERVICE_HTTPS_KEY) == null) {
-                                context.put(CONFIG_SERVICE_HTTPS_KEY, path);
-                            } else if (fileName.endsWith(".crt") && context.asPath(CONFIG_SERVICE_HTTPS_CERT) == null) {
-                                // FIXME: crt could be a CA as well - needs logical check
-                                context.put(CONFIG_SERVICE_HTTPS_CERT, path);
-                            } else if (fileName.endsWith(".ca") && context.asPath(CONFIG_SERVICE_HTTPS_CA) == null) {
-                                context.put(CONFIG_SERVICE_HTTPS_CA, path);
-                            } else if (fileName.endsWith(".kts") && context.asPath(CONFIG_SERVICE_HTTPS_KTS) == null) {
-                                context.put(CONFIG_SERVICE_HTTPS_KTS, path);
-                            }
-                        });
-                    return true;
-                }).ifPresent(certChanges -> {
-                    // TODO: refresh file watcher for auto reload which triggers this method on changes
-                    configureHttps(context, server);
-                    context.run(() -> {
-                        final WatchService watchService;
-
-                    });
-                });
+        if (hasHttpsConfig(merged) && server != null) {
+            context.putAll(configs);
+            refreshCertWatchers(context);
+            configureHttps(context, server);
+        }
     }
-
 
     @Override
     public Object onFailure(final Event<?, ?> error) {
         return null;
+    }
+
+    protected static boolean hasHttpsConfig(final Map<?, ?> config) {
+        return config.containsKey(CONFIG_SERVICE_HTTPS_CERT)
+                || config.containsKey(CONFIG_SERVICE_HTTPS_KEY)
+                || config.containsKey(CONFIG_SERVICE_HTTPS_CA)
+                || config.containsKey(CONFIG_SERVICE_HTTPS_KTS);
+    }
+
+    protected void refreshCertWatchers(final Context context) {
+        context.newEvent(EVENT_FILE_WATCH, () -> forFilesWithGroup(CONFIG_SERVICE_HTTPS_CERT, Stream.of(
+                context.asPath(CONFIG_SERVICE_HTTPS_CERT),
+                context.asPath(CONFIG_SERVICE_HTTPS_KEY),
+                context.asPath(CONFIG_SERVICE_HTTPS_CA),
+                context.asPath(CONFIG_SERVICE_HTTPS_KTS)
+        ).filter(Objects::nonNull).toList())).send();
     }
 
     protected void sendResponse(final HttpExchange exchange, final HttpObject request, final HttpObject response) {
@@ -206,9 +210,8 @@ public class HttpServer extends Service {
     @Override
     public String toString() {
         return new LinkedTypeMap()
-            .putR("name", port())
-            .putR("class", this.getClass().getSimpleName())
-            .toJson();
+                .putR("name", port())
+                .putR("class", this.getClass().getSimpleName())
+                .toJson();
     }
 }
-
