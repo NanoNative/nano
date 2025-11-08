@@ -8,10 +8,15 @@ import org.nanonative.nano.core.model.Service;
 import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
+import org.nanonative.nano.services.file.FileChangeEvent;
+import org.nanonative.nano.services.file.FileWatchRequest;
+import org.nanonative.nano.services.file.FileWatcher;
 import org.nanonative.nano.services.logging.LogService;
 import org.nanonative.nano.services.metric.model.MetricUpdate;
 
 import java.lang.management.ManagementFactory;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -19,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.lang.System.lineSeparator;
 import static java.util.Arrays.asList;
@@ -36,8 +42,11 @@ import static org.nanonative.nano.core.model.Context.EVENT_APP_OOM;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SERVICE_REGISTER;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_SHUTDOWN;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_START;
+import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.helper.NanoUtils.generateNanoName;
+import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_CHANGE;
+import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_WATCH;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
 import static org.nanonative.nano.services.metric.logic.MetricService.EVENT_METRIC_UPDATE;
 import static org.nanonative.nano.services.metric.model.MetricType.GAUGE;
@@ -132,6 +141,8 @@ public class Nano extends NanoServices<Nano> {
             });
             // INIT CLEANUP TASK - just for safety
             subscribeEvent(EVENT_APP_HEARTBEAT, this::cleanUps);
+            // Initialize config file watching if FileWatcher service is available
+            initializeConfigWatching();
             context.newEvent(EVENT_APP_START).broadcast(true).async(true).send();
         } catch (final Exception e) {
             context.error(e, () -> "Failed to start [{}] in [{}]", this.getClass().getSimpleName(), NanoUtils.formatDuration(System.nanoTime() - service_startUpTime));
@@ -440,6 +451,41 @@ public class Nano extends NanoServices<Nano> {
             Thread.currentThread().interrupt();
             context.error(e, () -> "Shutdown was interrupted. The empire strikes back.");
         }
+    }
+
+    /**
+     * Initialize config file watching if FileWatcher service is available
+     */
+    private void initializeConfigWatching() {
+        // Only set up config watching if FileWatcher service is available
+        if (service(FileWatcher.class) != null) {
+            // Set up config file watching
+            final List<Path> configPaths = CONFIG_FILE_LOCATIONS.stream()
+                .map(Path::of)
+                .filter(Files::exists)
+                .filter(Files::isDirectory)
+                .toList();
+
+            if (!configPaths.isEmpty()) {
+                final FileWatchRequest configWatchRequest = FileWatchRequest.forFilesWithGroup(configPaths, "CONFIG_CHANGE");
+                context.newEvent(EVENT_FILE_WATCH, () -> configWatchRequest).send();
+                context.debug(() -> "Initialized config file watching for {} paths", configPaths.size());
+            }
+
+            // Subscribe to file changes for config files
+            subscribeEvent(EVENT_FILE_CHANGE, this::handleConfigFileChange);
+        }
+    }
+
+    /**
+     * Handle config file changes and trigger EVENT_CONFIG_CHANGE
+     */
+    private void handleConfigFileChange(final Event<FileChangeEvent, Void> event) {
+        event.payloadOpt().filter(fce -> fce.belongsToGroup("CONFIG_CHANGE")).ifPresent(cfe -> {
+            context.debug(() -> "Config file changed: [{}] kind [{}]", cfe.path(), cfe.getKindName());
+            context.newEvent(EVENT_CONFIG_CHANGE, this::readConfigs).broadcast(true).async(true).send();
+
+        });
     }
 
     /**

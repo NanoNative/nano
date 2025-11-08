@@ -90,13 +90,14 @@ final TypeMap groupData = new TypeMap()
 context.newEvent(EVENT_WATCH_GROUP, () -> groupData).send();
 ```
 
-### Public Methods
+### Observability
 
 ```java
-public Set<String> getWatchedGroups()           // Get all active group keys
-public Set<Path> getGroupPaths(String groupKey) // Get paths watched by a group
-public void watchGroup(TypeMap groupData)       // Register group (event-driven)
-public void unwatchGroup(String groupKey)       // Unregister group (event-driven)
+// Listen for change notifications
+nano.subscribeEvent(EVENT_FILE_CHANGE, event -> {
+    final FileChangeEvent change = event.payload();
+    System.out.println(change.getKindName() + " -> " + change.path());
+});
 ```
 
 ## Configuration Integration

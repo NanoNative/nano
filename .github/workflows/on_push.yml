@@ -8,7 +8,7 @@ on:
       - default
 
 jobs:
-  builld:
+  build:
     uses: ./.github/workflows/java_build.yml
     with:
       ref: ${{ github.ref_name }}

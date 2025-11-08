@@ -5,18 +5,30 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.Resources;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.nanonative.nano.core.model.Context;
+import org.nanonative.nano.testutil.TestFiles;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.core.model.Context.CONFIG_FILE_LOCATIONS_KEY;
 
-@Execution(ExecutionMode.SAME_THREAD)  // Disable concurrent execution for config tests
+@Execution(ExecutionMode.SAME_THREAD)
+@ResourceLock(Resources.SYSTEM_PROPERTIES)
 final class NanoConfigLoadingTest {
+
+    private Path workDir;
+    private List<Path> configDirs;
+    private String overrideValue;
+    private String previousLocations;
 
     @BeforeEach
     void setup() throws Exception {
@@ -30,6 +42,22 @@ final class NanoConfigLoadingTest {
                 "message", "env", "outer.prod", "request.timeout"
         })
             System.clearProperty(k);
+
+        workDir = Files.createTempDirectory("nano-config-test");
+        configDirs = List.of(
+            workDir,
+            workDir.resolve("config"),
+            workDir.resolve(".config"),
+            workDir.resolve("resources"),
+            workDir.resolve(".resources"),
+            workDir.resolve("resources/config"),
+            workDir.resolve(".resources/config")
+        );
+        previousLocations = System.getProperty(CONFIG_FILE_LOCATIONS_KEY);
+        overrideValue = configDirs.stream()
+            .map(path -> path.toString().endsWith("/") ? path.toString() : path.toString() + "/")
+            .collect(Collectors.joining(","));
+        System.setProperty(CONFIG_FILE_LOCATIONS_KEY, overrideValue);
 
         purgeAllDirs();
 
@@ -60,6 +88,12 @@ final class NanoConfigLoadingTest {
             if (k.contains("profile") || k.contains("profiles") || k.contains("feature") || k.contains("base") || k.contains("ref"))
                 System.clearProperty(k);
         }
+        if (previousLocations == null) {
+            System.clearProperty(CONFIG_FILE_LOCATIONS_KEY);
+        } else {
+            System.setProperty(CONFIG_FILE_LOCATIONS_KEY, previousLocations);
+        }
+        TestFiles.deleteTree(workDir);
     }
 
     // ---------- tests ----------
@@ -78,7 +112,7 @@ final class NanoConfigLoadingTest {
     @Test
     void cross_directory_priority_last_dir_wins() throws Exception {
         // GIVEN: same profile file in two dirs; later directory in search order should win
-        Path dotResources = Files.createDirectories(Path.of(".resources/config"));
+        Path dotResources = Files.createDirectories(workDir.resolve(".resources/config"));
         Files.writeString(dotResources.resolve("application-local.properties"),
                 "resource.key2=ZZ" + System.lineSeparator(), StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
@@ -274,25 +308,16 @@ final class NanoConfigLoadingTest {
         nano.shutdown(nano.context()).waitForStop();
     }
 
-    private static void deleteTree(Path p) throws Exception {
-        if (Files.exists(p)) {
-            try (var s = Files.walk(p)) {
-                s.sorted((a, b) -> b.getNameCount() - a.getNameCount()).forEach(x -> {
-                    try {Files.deleteIfExists(x);} catch (Exception ignored) {}
-                });
-            }
+    private void purgeAllDirs() throws Exception {
+        for (Path dir : configDirs) {
+            TestFiles.deleteTree(dir);
         }
-    }
-
-    private static void purgeAllDirs() throws Exception {
-        for (String d : new String[]{"config", ".config", "resources", ".resources", "resources/config", ".resources/config"})
-            deleteTree(Path.of(d));
     }
 
     // ---------- test helpers ----------
 
-    private static void writeCfg(String name, String content) throws Exception {
-        Path dir = Path.of("config");
+    private void writeCfg(String name, String content) throws Exception {
+        Path dir = workDir.resolve("config");
         if (!Files.exists(dir)) Files.createDirectories(dir);
         Files.writeString(dir.resolve(name), content, StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
