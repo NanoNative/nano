@@ -60,7 +60,7 @@ class NanoTest {
     }
 
     @Test
-    void test_profiles() {
+    void testCustomProfile() {
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, LogLevel.ALL, "app_profiles", "custom"));
         assertThat(nano.context().asString("resource_key1")).isEqualTo("AA");
         assertThat(nano.context().asString("resource_key2")).isEqualTo("ZZ");
