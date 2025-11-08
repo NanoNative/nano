@@ -65,6 +65,8 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         if (configs != null)
             configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(value).orElse("")));
         readConfigs(context, args);
+        if (configs != null)
+            configs.forEach((key, value) -> context.put(convertObj(key, String.class), value)); // overwrite with configMap values
         this.logService = new LogService();
         this.logService.context(context);
         this.logService.configure(context, context);
