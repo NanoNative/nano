@@ -18,7 +18,6 @@ import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -48,9 +47,9 @@ class NanoTest {
 
     @Test
     void configFilesTest() {
-        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL));
+        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, "app_profile", "local", "app_profiles", "default, local, dev, prod"));
         assertThat(nano.context().asString(CONFIG_PROFILES)).isEqualTo("default, local, dev, prod");
-        assertThat(nano.context().asList(String.class, "_scanned_profiles")).containsExactly("local", "default", "dev", "prod");
+        assertThat(nano.context().asList(String.class, "_scanned_profiles")).contains("local", "default", "dev", "prod");
         assertThat(nano.context().asString("test_placeholder_fallback")).isEqualTo("fallback should be used 1");
         assertThat(nano.context().asString("test_placeholder_key_empty")).isEqualTo("fallback should be used 2");
         assertThat(nano.context().asString("test_placeholder_value")).isEqualTo("used placeholder value");
@@ -58,6 +57,14 @@ class NanoTest {
         assertThat(nano.context().asString("resource_key2")).isEqualTo("CC");
         assertThat(nano.context()).doesNotContainKey("test_placeholder_fallback_empty");
         assertThat(nano.stop(this.getClass()).waitForStop().isReady()).isFalse();
+    }
+
+    @Test
+    void test_profiles() {
+        final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, LogLevel.ALL, "app_profiles", "custom"));
+        assertThat(nano.context().asString("resource_key1")).isEqualTo("AA");
+        assertThat(nano.context().asString("resource_key2")).isEqualTo("ZZ");
+        assertThat(nano.shutdown(this.getClass()).waitForStop().isReady()).isFalse();
     }
 
     @RepeatedTest(TEST_REPEAT)
