@@ -1,6 +1,7 @@
 package org.nanonative.nano.core;
 
 import berlin.yuna.typemap.logic.ArgsDecoder;
+import berlin.yuna.typemap.model.TypeMap;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
@@ -11,7 +12,6 @@ import java.lang.management.MemoryUsage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Arrays;
-import berlin.yuna.typemap.model.TypeMap;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -76,9 +76,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      */
     protected NanoBase(final Map<Object, Object> configs, final String... args) {
         this.createdAtNs = System.nanoTime();
-        this.context = readConfigs(args);
-        if (configs != null)
-            configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(value).orElse("")));
+        this.context = readConfigs(configs, args);
         this.logService = new LogService();
         this.logService.context(context);
         this.logService.configure(context, context);
@@ -285,17 +283,18 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     /**
      * Reads and initializes {@link Context} based on provided arguments.
      *
-     * @param args Command-line arguments.
+     * @param configs Configuration settings in a key-value map.
+     * @param args    Command-line arguments.
      * @return The {@link Context} initialized with the configurations.
      */
-    protected Context readConfigs(final String... args) {
+    protected Context readConfigs(final Map<Object, Object> configs, final String... args) {
         final TypeMap cliArgs = new TypeMap();
         if (args != null && args.length > 0) {
             cliArgs.putAll(ArgsDecoder.argsOf(String.join(" ", args)));
         }
 
         final Optional<String> cliOverride = ofNullable(cliArgs.asString(CONFIG_FILE_LOCATIONS_KEY))
-            .or(() -> ofNullable(cliArgs.asString(standardiseKey(CONFIG_FILE_LOCATIONS_KEY))));
+                .or(() -> ofNullable(cliArgs.asString(standardiseKey(CONFIG_FILE_LOCATIONS_KEY))));
 
         final List<String> directories = ofNullable(System.getProperty(CONFIG_FILE_LOCATIONS_KEY))
                 .or(() -> ofNullable(System.getenv(CONFIG_FILE_LOCATIONS_KEY.replace('.', '_').toUpperCase())))
@@ -321,10 +320,13 @@ public abstract class NanoBase<T extends NanoBase<T>> {
         // 2) Overlays: ENV < -D < CLI (they override whatever we just loaded).
         applyOverlays(result, cliArgs);
 
-        // 3) Re-run the profile cascade: overlays may have activated new profiles.
+        // 3) Overlays: ENV < DSL
+        applyOverlays(result, (configs instanceof TypeMap tMap) ? tMap : new TypeMap(configs));
+
+        // 4) Re-run the profile cascade: overlays may have activated new profiles.
         readConfigFiles(result, directories, profiles);
 
-        // 4) Ensure overlays still win after new profiles landed.
+        // 5) Ensure overlays still win after new profiles landed.
         applyOverlays(result, cliArgs);
 
         return resolvePlaceHolders(result);

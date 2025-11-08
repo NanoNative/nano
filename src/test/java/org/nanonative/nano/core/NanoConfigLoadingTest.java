@@ -5,8 +5,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
-import org.junit.jupiter.api.parallel.Resources;
 import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.testutil.TestFiles;
 
@@ -16,10 +16,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.core.config.TestConfig.TEST_LOG_LEVEL;
 import static org.nanonative.nano.core.model.Context.CONFIG_FILE_LOCATIONS_KEY;
+import static org.nanonative.nano.core.model.Context.CONFIG_PROFILES;
+import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
 @Execution(ExecutionMode.SAME_THREAD)
 @ResourceLock(Resources.SYSTEM_PROPERTIES)
@@ -45,18 +49,18 @@ final class NanoConfigLoadingTest {
 
         workDir = Files.createTempDirectory("nano-config-test");
         configDirs = List.of(
-            workDir,
-            workDir.resolve("config"),
-            workDir.resolve(".config"),
-            workDir.resolve("resources"),
-            workDir.resolve(".resources"),
-            workDir.resolve("resources/config"),
-            workDir.resolve(".resources/config")
+                workDir,
+                workDir.resolve("config"),
+                workDir.resolve(".config"),
+                workDir.resolve("resources"),
+                workDir.resolve(".resources"),
+                workDir.resolve("resources/config"),
+                workDir.resolve(".resources/config")
         );
         previousLocations = System.getProperty(CONFIG_FILE_LOCATIONS_KEY);
         overrideValue = configDirs.stream()
-            .map(path -> path.toString().endsWith("/") ? path.toString() : path.toString() + "/")
-            .collect(Collectors.joining(","));
+                .map(path -> path.toString().endsWith("/") ? path.toString() : path.toString() + "/")
+                .collect(Collectors.joining(","));
         System.setProperty(CONFIG_FILE_LOCATIONS_KEY, overrideValue);
 
         purgeAllDirs();
@@ -290,7 +294,7 @@ final class NanoConfigLoadingTest {
     }
 
     @Test
-    void idempotent_second_call_does_not_reprocess_already_scanned_profiles() throws Exception {
+    void idempotent_second_call_does_not_reprocess_already_scanned_profiles() {
         // GIVEN
         Nano nano = new Nano();
         var firstScan = nano.context().asList(String.class, "_scanned_profiles");
@@ -298,13 +302,28 @@ final class NanoConfigLoadingTest {
 
         // WHEN: simulate re-running config reader with same dirs/keys (Nano does this internally too)
         var ctxBefore = nano.context().asString("message");
-        // call the same readConfigs via reflection (or trigger your public re-run if exposed)
-        var ctx = nano.context(); // your loader already re-runs once; here we just assert stability
 
         // THEN: values stable, no duplicate scans appended
         assertThat(nano.context().asString("message")).isEqualTo(ctxBefore);
         assertThat(nano.context().asList(String.class, "_scanned_profiles"))
                 .containsExactlyElementsOf(firstScan);
+        nano.shutdown(nano.context()).waitForStop();
+    }
+
+    @Test
+    void simpleProfileTest() throws Exception {
+        purgeAllDirs();
+        writeCfg("application.properties", String.join(System.lineSeparator(),
+                "resource.key1=AA", "resource.key2=BB"
+        ));
+        writeCfg("application-custom.properties", String.join(System.lineSeparator(),
+                "resource.key2=ZZ"
+        ));
+
+        Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL, CONFIG_PROFILES, "custom"));
+        assertThat(nano.context().asString("resource_key1")).isEqualTo("AA");
+        assertThat(nano.context().asString("resource_key2")).isEqualTo("ZZ");
+
         nano.shutdown(nano.context()).waitForStop();
     }
 

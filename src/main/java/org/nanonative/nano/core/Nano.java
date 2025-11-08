@@ -483,7 +483,7 @@ public class Nano extends NanoServices<Nano> {
     private void handleConfigFileChange(final Event<FileChangeEvent, Void> event) {
         event.payloadOpt().filter(fce -> fce.belongsToGroup("CONFIG_CHANGE")).ifPresent(cfe -> {
             context.debug(() -> "Config file changed: [{}] kind [{}]", cfe.path(), cfe.getKindName());
-            context.newEvent(EVENT_CONFIG_CHANGE, this::readConfigs).broadcast(true).async(true).send();
+            context.newEvent(EVENT_CONFIG_CHANGE, () -> this.readConfigs(null)).broadcast(true).async(true).send();
 
         });
     }
