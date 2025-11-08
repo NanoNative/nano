@@ -4,6 +4,7 @@ import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMap;
 import org.junit.jupiter.api.Test;
 import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.services.file.FileChangeEvent;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.net.URL;
@@ -13,6 +14,7 @@ import java.util.Map;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_CHANGE;
 import static org.nanonative.nano.services.http.HttpClient.CONFIG_HTTP_CLIENT_TRUSTED_CA;
 import static org.nanonative.nano.services.http.HttpClient.CONFIG_HTTP_CLIENT_TRUST_ALL;
@@ -88,33 +90,65 @@ class HttpServerTest {
     }
 
     @Test
-    void shouldRegisterReloadOnConfigChange() {
+    void shouldServeOverHttpsAfterConfigChange() throws Exception {
+        final Path cert1 = copyToTemp(SIMPLE_CERT);
+        final Path key1 = copyToTemp(SIMPLE_KEY);
+        final Path cert2 = copyToTemp(PEM_CERT);
+        final Path key2 = copyToTemp(PEM_KEY);
+
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
-                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY
+            CONFIG_SERVICE_HTTPS_CERT, cert1,
+            CONFIG_SERVICE_HTTPS_KEY, key1,
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
-        nano.context(HttpServerTest.class).newEvent(org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE, () -> TypeMap.mapOf(
-                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT
-        )).broadcast(true).send();
+        try {
+            nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .ifPresent(req -> req.createResponse().body("config-ok").respond(event)));
 
-        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+            assertThat(sendHttps(nano, server, "/config")).extracting(HttpObject::bodyAsString).isEqualTo("config-ok");
+
+            nano.context(HttpServerTest.class).newEvent(EVENT_CONFIG_CHANGE, () -> TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, cert2,
+                CONFIG_SERVICE_HTTPS_KEY, key2
+            )).broadcast(true).send();
+
+            assertThat(sendHttps(nano, server, "/config")).extracting(HttpObject::bodyAsString).isEqualTo("config-ok");
+        } finally {
+            nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+        }
     }
 
     @Test
-    void shouldRegisterReloadOnFileChangeEvent() {
+    void shouldServeOverHttpsAfterFileChangeEvent() throws Exception {
+        final Path cert = copyToTemp(SIMPLE_CERT);
+        final Path key = copyToTemp(SIMPLE_KEY);
+
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
-                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY
+            CONFIG_SERVICE_HTTPS_CERT, cert,
+            CONFIG_SERVICE_HTTPS_KEY, key,
+            CONFIG_SERVICE_HTTP_CLIENT, true,
+            CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
-        server.onEvent(nano.context(HttpServerTest.class).newEvent(EVENT_FILE_CHANGE, () ->
-                org.nanonative.nano.services.file.FileChangeEvent.of(SIMPLE_CERT, ENTRY_MODIFY, CONFIG_SERVICE_HTTPS_CERT)
-        ));
+        try {
+            nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .ifPresent(req -> req.createResponse().body("file-ok").respond(event)));
 
-        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+            assertThat(sendHttps(nano, server, "/file")).extracting(HttpObject::bodyAsString).isEqualTo("file-ok");
+
+            Files.writeString(cert, Files.readString(cert) + "\n");
+            server.onEvent(nano.context(HttpServerTest.class).newEvent(EVENT_FILE_CHANGE, () ->
+                FileChangeEvent.of(cert, ENTRY_MODIFY, CONFIG_SERVICE_HTTPS_CERT)
+            ));
+
+            assertThat(sendHttps(nano, server, "/file")).extracting(HttpObject::bodyAsString).isEqualTo("file-ok");
+        } finally {
+            nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+        }
     }
 
     @Test
