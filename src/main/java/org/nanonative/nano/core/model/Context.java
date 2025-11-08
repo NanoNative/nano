@@ -44,7 +44,7 @@ import static org.nanonative.nano.helper.NanoUtils.reduceSte;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
 import static org.nanonative.nano.services.logging.LogService.MAX_LOG_NAME_LENGTH;
 
-@SuppressWarnings({"unused", "UnusedReturnValue", "java:S2160"})
+@SuppressWarnings({"unused", "UnusedReturnValue", "java:S2160", "rawtypes"})
 public class Context extends ConcurrentTypeMap {
 
     // Context keys

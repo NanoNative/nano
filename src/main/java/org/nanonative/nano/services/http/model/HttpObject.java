@@ -81,7 +81,7 @@ import static org.nanonative.nano.services.http.model.HttpHeaders.VARY;
  * This class provides methods to manage HTTP details such as headers, body, and status code,
  * as well as utilities to check request types and content in a fluent and chaining API.
  */
-@SuppressWarnings("java:S2386") // Mutable fields should not be "public static"
+@SuppressWarnings({"java:S2386", "unused"}) // Mutable fields should not be "public static"
 public class HttpObject extends HttpRequest {
 
     // lazy loaded fields

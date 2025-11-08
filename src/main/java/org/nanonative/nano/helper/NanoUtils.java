@@ -44,7 +44,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.stream.Collectors.toCollection;
 import static org.nanonative.nano.core.NanoBase.standardiseKey;
 
-@SuppressWarnings({"UnusedReturnValue", "java:S6548", "java:S2386"})
+@SuppressWarnings({"UnusedReturnValue", "java:S6548", "java:S2386", "unused"})
 public class NanoUtils {
 
     public static final String LINE_SEPARATOR = System.lineSeparator();

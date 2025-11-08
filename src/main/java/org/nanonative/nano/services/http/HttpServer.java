@@ -9,17 +9,12 @@ import org.nanonative.nano.helper.NanoUtils;
 import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.file.FileChangeEvent;
-import org.nanonative.nano.services.file.FileWatcher;
 import org.nanonative.nano.services.http.model.HttpHeaders;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.WatchService;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -44,13 +39,14 @@ import static org.nanonative.nano.services.http.HttpsHelper.configureHttps;
 import static org.nanonative.nano.services.http.HttpsHelper.createDefaultServer;
 import static org.nanonative.nano.services.http.HttpsHelper.createHttpsServer;
 
+@SuppressWarnings("unused")
 public class HttpServer extends Service {
     protected com.sun.net.httpserver.HttpServer server;
 
     // Register configurations
     public static final String CONFIG_SERVICE_HTTP_PORT = registerConfig("app_service_http_port", "Default port for the HTTP service (see " + HttpServer.class.getSimpleName() + ")");
     public static final String CONFIG_SERVICE_HTTP_CLIENT = registerConfig("app_service_http_client", "Boolean if " + HttpClient.class.getSimpleName() + " should start as well");
-    public static final String CONFIG_SERVICE_HTTPS_CERTS = registerConfig("app_service_https_certs", "Comma-separated paths to SSL certificates, private keys, or keystores. Can be files or directories.");
+//    public static final String CONFIG_SERVICE_HTTPS_CERTS = registerConfig("app_service_https_certs", "Comma-separated paths to SSL certificates, private keys, or keystores. Can be files or directories.");
     public static final String CONFIG_SERVICE_HTTPS_CERT = registerConfig("app_service_https_cert", "SSL certificate path");
     public static final String CONFIG_SERVICE_HTTPS_CA = registerConfig("app_service_https_ca", "SSL CA certificate path");
     public static final String CONFIG_SERVICE_HTTPS_KEY = registerConfig("app_service_https_key", "SSL private key path");

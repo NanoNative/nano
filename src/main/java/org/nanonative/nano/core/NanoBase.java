@@ -161,7 +161,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @param <R>      The return payload
      * @return A consumer function that can be used to unsubscribe the listener later.
      */
-    @SuppressWarnings({"unchecked", "java:S116"})
+    @SuppressWarnings({"unchecked", "java:S116", "CastCanBeRemovedNarrowingVariableType"})
     public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<? super Event<C, R>, C> listener) {
         final Consumer<? super Event<C, R>> wrapped = event ->
                 event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));

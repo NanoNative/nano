@@ -338,7 +338,7 @@ public class Nano extends NanoServices<Nano> {
      *
      * @param startupServices the startupServices
      */
-    @SuppressWarnings("SlowListContainsAll")
+    @SuppressWarnings({"SlowListContainsAll", "BusyWait"})
     protected void startServicesAndLogger(final FunctionOrNull<Context, List<Service>> startupServices) {
         if (startupServices == null || services.stream().noneMatch(LogService.class::isInstance))
             // Use default logger

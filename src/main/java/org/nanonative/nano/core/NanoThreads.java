@@ -125,6 +125,7 @@ public abstract class NanoThreads<T extends NanoThreads<T>> extends NanoBase<T> 
      * @param until   stop condition; when {@code true}, cancels further runs
      * @return self for chaining
      */
+    @SuppressWarnings("unchecked")
     public T run(final Supplier<Context> context, final ExRunnable task, final LocalTime atTime, final DayOfWeek dow, final ZoneId zone, final BooleanSupplier until) {
         scheduleOnce(context, task, asyncFromPool(), until, atTime, dow, zone, initialPlanned(atTime, dow, zone));
         return (T) this;

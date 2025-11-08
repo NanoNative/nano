@@ -35,7 +35,7 @@ public class FileWatcher extends Service {
     public static final Channel<FileChangeEvent, Void> EVENT_FILE_CHANGE = registerChannelId("FILE_CHANGE", FileChangeEvent.class);
 
     // Watcher
-    protected AtomicReference<WatchService> watchService = new AtomicReference<>();
+    protected final AtomicReference<WatchService> watchService = new AtomicReference<>();
 
     // Directories <-> keys
     protected final Map<WatchKey, Path> keyToDir = new ConcurrentHashMap<>();

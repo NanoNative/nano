@@ -2,6 +2,7 @@ package org.nanonative.nano.helper;
 
 import java.util.function.Consumer;
 
+@SuppressWarnings("unused")
 @FunctionalInterface
 public interface ExFunction<T, R> {
 

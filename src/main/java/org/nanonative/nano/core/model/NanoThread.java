@@ -24,6 +24,7 @@ import java.util.function.Supplier;
 import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 
+@SuppressWarnings("unused")
 public class NanoThread {
 
     protected final List<BiConsumer<NanoThread, Throwable>> listeners = new CopyOnWriteArrayList<>();

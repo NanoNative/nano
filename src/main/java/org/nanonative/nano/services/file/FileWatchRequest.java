@@ -2,7 +2,6 @@ package org.nanonative.nano.services.file;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
 
 // TODO: use TypeMap / Event itself
 
