@@ -1,7 +1,7 @@
 > [Home](../../../README.md)
 > / [Components](../../../README.md#-components)
 > / [Services](../../services/README.md)
-> / [**HttpServer**](README.md)
+> / [**MetricService**](README.md)
 
 * [Usage](#usage)
   * [Start Metric Service](#start-metric-service)
@@ -46,7 +46,7 @@ The following endpoints are available:
 
 ```java
 public static void main(final String[] args) {
-    final Context context = new Nano(args, new HttpServer()).context(MyClass.class);
+    final Context context = new Nano(args, new MetricService(), new HttpServer()).context(MyClass.class);
 
     // create counter
     context.newEvent(EVENT_METRIC_UPDATE).payload(() -> new MetricUpdate(COUNTER, "my.counter.key", 130624, metricTags)).send();
@@ -76,4 +76,3 @@ public static void main(final String[] args) {
 | 🔲                 | `EVENT_METRIC_UPDATE`           | `MetricUpdate` | `true`       | Sets or updates specific metric            |
 | 🔲                 | `EVENT_APP_HEARTBEAT`           | `-`            | `true`       | (Internal usage) Updates system metrics    |
 | 🔲                 | `EVENT_HTTP_REQUEST`            | `HttpObject`   | `HttpObject` | (Internal usage) provides metric endpoints |
-

@@ -161,8 +161,8 @@ public static void main(final String[] args) {
     // Response
     app.subscribeEvent(EVENT_HTTP_REQUEST, RestEndpoint::helloWorldController);
 
-    // Error handling
-    app.subscribeEvent(EVENT_APP_UNHANDLED, RestEndpoint::controllerAdvice);
+    // Error handling for requests that bubbled up
+    app.subscribeEvent(EVENT_HTTP_REQUEST_UNHANDLED, RestEndpoint::controllerAdvice);
 }
 
 private static void helloWorldController(final Event<HttpObject, HttpObject> event) {
@@ -203,7 +203,6 @@ private static void controllerAdvice(final Event<HttpObject, HttpObject> event) 
 | In 🔲 <br/> Out 🔳 | [Event](../../events/README.md) | Payload      | Response     | Description                                                                                                                                                                          |
 |--------------------|---------------------------------|--------------|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | 🔲                 | `EVENT_HTTP_REQUEST`            | `HttpObject` | `HttpObject` | Triggered when an HTTP request is received.<br/>If a response is returned for this event, it is sent back to the client.                                                             |
-| 🔲                 | `EVENT_HTTP_REQUEST_UNHANDLED`  | `HttpObject` | `HttpObject` | Triggered when an HTTP request is received but not handled.<br/>If a response is returned for this event, it is sent back to the client.<br/>Else client will receive a `404         |
-| 🔲                 | `EVENT_APP_UNHANDLED`           | `HttpObject` | `HttpObject` | Triggered when an exception occurs while handling an HTTP request.<br/>If a response is returned for this event, it is sent back to the client.<br/>Else client will receive a `500` |
+| 🔲                 | `EVENT_HTTP_REQUEST_UNHANDLED`  | `HttpObject` | `HttpObject` | Triggered when an HTTP request reached the end of the pipeline without a response.<br/>Respond here to customize the default 404                                                     |
+| 🔲                 | `EVENT_APP_ERROR`               | `HttpObject` | `HttpObject` | Triggered when an exception occurs while handling an HTTP request.<br/>If a response is returned for this event, it is sent back to the client.<br/>Else client will receive a `500` |
 | 🔲                 | `EVENT_HTTP_REQUEST`            | `HttpObject` | `HttpObject` | Listening for HTTP request                                                                                                                                                           |
-

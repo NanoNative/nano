@@ -12,14 +12,14 @@ The FileWatcher service provides group-based file system monitoring capabilities
 - No manual configuration required - works out of the box
 
 ### 👥 **Group-Based Watching**
-- Multiple components can register file paths under different group keys
-- Prevents duplicate watching of the same files/folders
-- Clean group removal without affecting other groups watching same files
+- Register arbitrary file/directory sets under named groups using `FileWatchRequest`
+- Prevent duplicate system watches even when multiple groups share directories
+- Remove a group without disturbing other watchers on the same path
 
 ### 🔒 **Thread-Safe Concurrency**
-- Built with `ReentrantReadWriteLock` for optimal concurrent performance
+- Backed by lock-free concurrent collections
 - Safe concurrent group registration/unregistration
-- Handles overlapping groups correctly
+- Handles overlapping group definitions correctly
 
 ### 🚀 **High Performance**
 - Efficient duplicate prevention
@@ -31,72 +31,46 @@ The FileWatcher service provides group-based file system monitoring capabilities
 ### Basic Usage
 
 ```java
-// FileWatcher starts automatically and watches config directories
 final Nano nano = new Nano(new FileWatcher());
 
-// Listen for any file changes
-nano.subscribeEvent(EVENT_FILE_CHANGE, event -> {
-    final Path changedFile = event.payload();
-    final String changeType = event.asString("kind"); // ENTRY_CREATE, ENTRY_MODIFY, ENTRY_DELETE
-    System.out.println("File " + changeType + ": " + changedFile);
-});
-
-// Listen for config changes (automatic)
-nano.subscribeEvent(EVENT_CONFIG_CHANGE, event -> {
-    final Map<String, Object> configChanges = event.payload();
-    System.out.println("Config updated: " + configChanges);
-});
+nano.subscribeEvent(EVENT_FILE_CHANGE, event -> event.payloadOpt().ifPresent(change -> {
+    System.out.println(change.getKindName() + " " + change.path());
+}));
 ```
 
 ### Group-Based Watching
 
 ```java
-// Register a group to watch specific directories
-final TypeMap certificateWatchGroup = new TypeMap()
-    .putR("groupKey", "SSL_CERTIFICATES")
-    .putR("paths", List.of("/etc/ssl/certs", "/opt/app/certificates"));
+final List<Path> certDirs = List.of(Path.of("/etc/ssl/certs"), Path.of("/opt/app/certificates"));
+final FileWatchRequest request = FileWatchRequest.forFilesWithGroup(certDirs, "SSL_CERTIFICATES");
 
-context.newEvent(EVENT_WATCH_GROUP, () -> certificateWatchGroup).send();
+nano.context().newEvent(EVENT_FILE_WATCH, () -> request).send();
 
-// Listen for certificate changes
-nano.subscribeEvent(EVENT_FILE_CHANGE, event -> {
-    if ("SSL_CERTIFICATES".equals(event.get("groupKey"))) {
-        final Path certFile = event.payload();
-        // Reload SSL certificates
-        reloadCertificates(certFile);
-    }
-});
+nano.subscribeEvent(EVENT_FILE_CHANGE, event -> event.payloadOpt()
+    .filter(change -> change.belongsToGroup("SSL_CERTIFICATES"))
+    .ifPresent(change -> reloadCertificates(change.path())));
 ```
 
 ## API Reference
 
 ### Events
 
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `EVENT_WATCH_GROUP` | `TypeMap` | Register files/directories under a group key |
-| `EVENT_UNWATCH_GROUP` | `String` | Unregister an entire group |
-| `EVENT_FILE_CHANGE` | `Path` | File system change detected |
-| `EVENT_WATCH_FILE` | `Path` | Legacy: Watch single file/directory |
-| `EVENT_UNWATCH_FILE` | `Path` | Legacy: Unwatch single file/directory |
-
-### Group Registration
-
-```java
-final TypeMap groupData = new TypeMap()
-    .putR("groupKey", "MY_GROUP")           // Required: Unique group identifier
-    .putR("paths", List.of("/path1", "/path2")); // Required: Paths to watch
-
-context.newEvent(EVENT_WATCH_GROUP, () -> groupData).send();
-```
+| Event                | Payload            | Description                                         |
+|----------------------|--------------------|-----------------------------------------------------|
+| `EVENT_FILE_WATCH`   | `FileWatchRequest` | Register files/directories under a group key        |
+| `EVENT_FILE_UNWATCH` | `FileWatchRequest` | Unregister a group (paths optional when removing)   |
+| `EVENT_FILE_CHANGE`  | `FileChangeEvent`  | File system change detected (kind + group metadata) |
 
 ### Observability
 
 ```java
 // Listen for change notifications
 nano.subscribeEvent(EVENT_FILE_CHANGE, event -> {
-    final FileChangeEvent change = event.payload();
-    System.out.println(change.getKindName() + " -> " + change.path());
+    event.payloadOpt().ifPresent(change -> {
+        if (change.belongsToGroup("CONFIG_CHANGE")) {
+            System.out.println("Config updated: " + change.path());
+        }
+    });
 });
 ```
 
@@ -138,27 +112,23 @@ nano.subscribeEvent(EVENT_CONFIG_CHANGE, event -> {
 public class HttpsService {
 
     public void start() {
-        // Watch certificate directory
-        final TypeMap certGroup = new TypeMap()
-            .putR("groupKey", "HTTPS_CERTS")
-            .putR("paths", List.of("/etc/ssl/private", "/etc/ssl/certs"));
+        final FileWatchRequest certGroup = FileWatchRequest.forFilesWithGroup(
+            List.of(Path.of("/etc/ssl/private"), Path.of("/etc/ssl/certs")),
+            "HTTPS_CERTS"
+        );
 
-        nano.context().newEvent(EVENT_WATCH_GROUP, () -> certGroup).send();
+        nano.context().newEvent(EVENT_FILE_WATCH, () -> certGroup).send();
 
         // React to certificate changes
         nano.subscribeEvent(EVENT_FILE_CHANGE, this::handleCertChange);
     }
 
-    private void handleCertChange(Event<Path, Void> event) {
-        if ("HTTPS_CERTS".equals(event.get("groupKey"))) {
-            final Path certFile = event.payload();
-            final String kind = event.asString("kind");
-
-            if ("ENTRY_MODIFY".equals(kind) && certFile.toString().endsWith(".pem")) {
-                // Reload SSL context
-                reloadSslContext(certFile);
-            }
-        }
+    private void handleCertChange(Event<FileChangeEvent, Void> event) {
+        event.payloadOpt()
+            .filter(change -> change.belongsToGroup("HTTPS_CERTS"))
+            .filter(FileChangeEvent::isModify)
+            .filter(change -> change.path().toString().endsWith(".pem"))
+            .ifPresent(change -> reloadSslContext(change.path()));
     }
 }
 ```
@@ -168,20 +138,22 @@ public class HttpsService {
 ```java
 // Development: Watch local config files
 if (isDevelopment()) {
-    final TypeMap devConfigGroup = new TypeMap()
-        .putR("groupKey", "DEV_CONFIG")
-        .putR("paths", List.of("./config", "./local-config"));
+    final FileWatchRequest devConfigGroup = FileWatchRequest.forFilesWithGroup(
+        List.of(Path.of("./config"), Path.of("./local-config")),
+        "DEV_CONFIG"
+    );
 
-    context.newEvent(EVENT_WATCH_GROUP, () -> devConfigGroup).send();
+    context.newEvent(EVENT_FILE_WATCH, () -> devConfigGroup).send();
 }
 
 // Production: Watch mounted config volumes
 if (isProduction()) {
-    final TypeMap prodConfigGroup = new TypeMap()
-        .putR("groupKey", "PROD_CONFIG")
-        .putR("paths", List.of("/opt/app/config", "/mnt/config-volume"));
+    final FileWatchRequest prodConfigGroup = FileWatchRequest.forFilesWithGroup(
+        List.of(Path.of("/opt/app/config"), Path.of("/mnt/config-volume")),
+        "PROD_CONFIG"
+    );
 
-    context.newEvent(EVENT_WATCH_GROUP, () -> prodConfigGroup).send();
+    context.newEvent(EVENT_FILE_WATCH, () -> prodConfigGroup).send();
 }
 ```
 
@@ -191,8 +163,8 @@ if (isProduction()) {
 @Override
 public void stop() {
     // Unregister groups on shutdown
-    context.newEvent(EVENT_UNWATCH_GROUP, () -> "MY_GROUP").send();
-    context.newEvent(EVENT_UNWATCH_GROUP, () -> "SSL_CERTIFICATES").send();
+    context.newEvent(EVENT_FILE_UNWATCH, () -> FileWatchRequest.forFilesWithGroup(List.of(), "MY_GROUP")).send();
+    context.newEvent(EVENT_FILE_UNWATCH, () -> FileWatchRequest.forFilesWithGroup(List.of(), "SSL_CERTIFICATES")).send();
 }
 ```
 
@@ -204,19 +176,14 @@ public void stop() {
 // Use descriptive group keys
 final String GROUP_KEY = "HTTP_CLIENT_CERTIFICATES";
 
-// Watch directories, not individual files (more efficient)
-.putR("paths", List.of("/etc/ssl/certs"))  // ✅ Directory
-// Instead of listing every .pem file individually
+FileWatchRequest.forFilesWithGroup(List.of(Path.of("/etc/ssl/certs")), GROUP_KEY);  // ✅ Directory
 
 // Handle all change types appropriately
-nano.subscribeEvent(EVENT_FILE_CHANGE, event -> {
-    final String kind = event.asString("kind");
-    switch (kind) {
-        case "ENTRY_CREATE" -> handleFileCreated(event.payload());
-        case "ENTRY_MODIFY" -> handleFileModified(event.payload());
-        case "ENTRY_DELETE" -> handleFileDeleted(event.payload());
-    }
-});
+    nano.subscribeEvent(EVENT_FILE_CHANGE, event -> event.payloadOpt().ifPresent(change -> {
+        if (change.isCreate()) handleFileCreated(change.path());
+        else if (change.isModify()) handleFileModified(change.path());
+        else if (change.isDelete()) handleFileDeleted(change.path());
+    }));
 
 // Use broadcast for config changes (following best practices)
 context.newEvent(EVENT_CONFIG_CHANGE, () -> configChanges)
@@ -228,7 +195,7 @@ context.newEvent(EVENT_CONFIG_CHANGE, () -> configChanges)
 
 ```java
 // Don't watch individual files if you can avoid it
-.putR("paths", List.of("/path/file1.txt", "/path/file2.txt")) // ❌
+FileWatchRequest.forFiles(List.of(Path.of("/path/file1.txt"), Path.of("/path/file2.txt"))); // ❌ prefer directory
 
 // Don't create groups for single-use scenarios
 final String GROUP_KEY = "TEMP_GROUP_" + UUID.randomUUID(); // ❌
@@ -241,7 +208,7 @@ final String GROUP_KEY = "TEMP_GROUP_" + UUID.randomUUID(); // ❌
 
 ### Thread Safety
 - **Read Operations**: Multiple threads can safely read group information simultaneously
-- **Write Operations**: Group registration/unregistration is atomic and thread-safe
+- **Write Operations**: Group registration/unregistration uses concurrent maps for atomicity
 - **File Events**: Processed sequentially per directory, concurrent across directories
 
 ### Performance Characteristics
@@ -291,16 +258,16 @@ public class ConfigReloadHandler {
 public class K8sConfigWatcher {
 
     public void watchConfigMaps() {
-        // Watch Kubernetes-mounted config maps
-        final TypeMap k8sGroup = new TypeMap()
-            .putR("groupKey", "K8S_CONFIGMAPS")
-            .putR("paths", List.of(
-                "/etc/config",           // ConfigMap mount
-                "/etc/secrets",          // Secret mount
-                "/opt/app/config"        // Additional config volume
-            ));
+        final FileWatchRequest k8sGroup = FileWatchRequest.forFilesWithGroup(
+            List.of(
+                Path.of("/etc/config"),   // ConfigMap mount
+                Path.of("/etc/secrets"),  // Secret mount
+                Path.of("/opt/app/config")
+            ),
+            "K8S_CONFIGMAPS"
+        );
 
-        context.newEvent(EVENT_WATCH_GROUP, () -> k8sGroup).send();
+        context.newEvent(EVENT_FILE_WATCH, () -> k8sGroup).send();
     }
 }
 ```
@@ -316,16 +283,6 @@ ls -la /path/to/watched/directory
 
 # Verify file system supports inotify (Linux)
 cat /proc/sys/fs/inotify/max_user_watches
-```
-
-**High memory usage:**
-```java
-// Monitor watched groups and paths
-final Set<String> groups = fileWatcher.getWatchedGroups();
-groups.forEach(group -> {
-    final Set<Path> paths = fileWatcher.getGroupPaths(group);
-    System.out.println("Group " + group + " watches " + paths.size() + " paths");
-});
 ```
 
 **CONFIG_CHANGE events not firing:**
@@ -345,3 +302,15 @@ final Nano nano = new Nano(Map.of(
 ---
 
 The enhanced FileWatcher service provides robust, production-ready file system monitoring with automatic configuration reloading, making it ideal for cloud-native applications that need to respond to configuration changes without restarts.
+### FileWatchRequest Helpers
+
+```java
+// Single directory, default group
+FileWatchRequest.forFile(Path.of("./config"));
+
+// Multiple directories with explicit group
+FileWatchRequest.forFilesWithGroup(List.of(Path.of("./config"), Path.of("./secrets")), "CONFIGS");
+
+// Later removal
+nano.context().newEvent(EVENT_FILE_UNWATCH, () -> FileWatchRequest.forFilesWithGroup(List.of(), "CONFIGS")).send();
+```

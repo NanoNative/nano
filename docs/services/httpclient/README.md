@@ -33,12 +33,16 @@ This makes it possible to define change data before sending the HTTP request.
 public static void main(final String[] args) {
     final Nano app = new Nano(args, new HttpClient());
 
-    // Intercept and add Token to request
-    app.subscribeEvent(EVENT_HTTP_REQUEST, event ->
+    // Intercept and add token before every outbound call
+    app.subscribeEvent(EVENT_SEND_HTTP, event ->
         event.payloadOpt().ifPresent(request -> request.header("Authorization", "myCustomToken"))
     );
 
-    app.context(MyClass.class).newEvent(EVENT_SEND_HTTP, () -> new Httpobject().methodType(GET).path("http://localhost:8080/hello").body("Hello World")).send();
+    app.context(MyClass.class).newEvent(EVENT_SEND_HTTP, () -> new HttpObject()
+        .methodType(GET)
+        .path("http://localhost:8080/hello")
+        .body("Hello World")
+    ).send();
 }
 ```
 
@@ -90,4 +94,3 @@ public static void main(final String[] args) {
 | In 🔲 <br/> Out 🔳 | [Event](../../events/README.md) | Payload      | Response     | Description           |
 |--------------------|---------------------------------|--------------|--------------|-----------------------|
 | 🔳                 | `EVENT_SEND_HTTP`               | `HttpObject` | `HttpObject` | Sending a HttpRequest |
-
