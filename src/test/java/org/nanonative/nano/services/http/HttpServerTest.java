@@ -90,65 +90,113 @@ class HttpServerTest {
     }
 
     @Test
-    void shouldServeOverHttpsAfterConfigChange() throws Exception {
-        final Path cert1 = copyToTemp(SIMPLE_CERT);
-        final Path key1 = copyToTemp(SIMPLE_KEY);
-        final Path cert2 = copyToTemp(PEM_CERT);
-        final Path key2 = copyToTemp(PEM_KEY);
-
+    void shouldRegisterReloadOnConfigChange() {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, cert1,
-            CONFIG_SERVICE_HTTPS_KEY, key1,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
-        try {
-            nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
-                .ifPresent(req -> req.createResponse().body("config-ok").respond(event)));
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .filter(req -> req.pathMatch("/config-reload"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
 
-            assertThat(sendHttps(nano, server, "/config")).extracting(HttpObject::bodyAsString).isEqualTo("config-ok");
+        final HttpObject beforeReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload")
+                .send(nano.context(HttpServerTest.class));
 
-            nano.context(HttpServerTest.class).newEvent(EVENT_CONFIG_CHANGE, () -> TypeMap.mapOf(
-                CONFIG_SERVICE_HTTPS_CERT, cert2,
-                CONFIG_SERVICE_HTTPS_KEY, key2
-            )).broadcast(true).send();
+        assertThat(beforeReload.statusCode()).isEqualTo(200);
+        assertThat(beforeReload.bodyAsString()).isEqualTo("ok");
 
-            assertThat(sendHttps(nano, server, "/config")).extracting(HttpObject::bodyAsString).isEqualTo("config-ok");
-        } finally {
-            nano.stop(nano.context(HttpServerTest.class)).waitForStop();
-        }
+        nano.context(HttpServerTest.class).newEvent(EVENT_CONFIG_CHANGE, () -> TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, PEM_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, PEM_KEY
+        )).send();
+
+        final HttpObject afterReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(afterReload.statusCode()).isEqualTo(200);
+        assertThat(afterReload.bodyAsString()).isEqualTo("ok");
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
     }
 
     @Test
-    void shouldServeOverHttpsAfterFileChangeEvent() throws Exception {
-        final Path cert = copyToTemp(SIMPLE_CERT);
-        final Path key = copyToTemp(SIMPLE_KEY);
-
+    void shouldFailReloadOnInvalidConfigChange() {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, cert,
-            CONFIG_SERVICE_HTTPS_KEY, key,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
-        try {
-            nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
-                .ifPresent(req -> req.createResponse().body("file-ok").respond(event)));
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .filter(req -> req.pathMatch("/config-reload-invalid"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
 
-            assertThat(sendHttps(nano, server, "/file")).extracting(HttpObject::bodyAsString).isEqualTo("file-ok");
+        final HttpObject beforeReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload-invalid")
+                .send(nano.context(HttpServerTest.class));
 
-            Files.writeString(cert, Files.readString(cert) + "\n");
-            server.onEvent(nano.context(HttpServerTest.class).newEvent(EVENT_FILE_CHANGE, () ->
-                FileChangeEvent.of(cert, ENTRY_MODIFY, CONFIG_SERVICE_HTTPS_CERT)
-            ));
+        assertThat(beforeReload.statusCode()).isEqualTo(200);
+        assertThat(beforeReload.bodyAsString()).isEqualTo("ok");
 
-            assertThat(sendHttps(nano, server, "/file")).extracting(HttpObject::bodyAsString).isEqualTo("file-ok");
-        } finally {
-            nano.stop(nano.context(HttpServerTest.class)).waitForStop();
-        }
+        final Path invalidCert = Paths.get("invalid_reload.crt");
+        final Path invalidKey = Paths.get("invalid_reload.key");
+
+        nano.context(HttpServerTest.class).newEvent(EVENT_CONFIG_CHANGE, () -> TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, invalidCert,
+                CONFIG_SERVICE_HTTPS_KEY, invalidKey
+        )).send();
+
+        final HttpObject afterReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload-invalid")
+                .send(nano.context(HttpServerTest.class));
+
+        // stays with the old certificates
+        assertThat(afterReload.statusCode()).isEqualTo(200);
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void shouldRegisterReloadOnFileChangeEvent() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .filter(req -> req.pathMatch("/file-reload"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
+
+        final HttpObject beforeFileEvent = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/file-reload")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(beforeFileEvent.statusCode()).isEqualTo(200);
+        assertThat(beforeFileEvent.bodyAsString()).isEqualTo("ok");
+
+        nano.context(HttpServerTest.class).newEvent(EVENT_FILE_CHANGE, () ->
+                FileChangeEvent.of(SIMPLE_CERT, ENTRY_MODIFY, CONFIG_SERVICE_HTTPS_CERT)
+        ).broadcast(true).send();
+
+        final HttpObject afterFileEvent = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/file-reload")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(afterFileEvent.statusCode()).isEqualTo(200);
+        assertThat(afterFileEvent.bodyAsString()).isEqualTo("ok");
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
     }
 
     @Test
