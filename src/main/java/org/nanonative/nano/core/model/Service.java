@@ -6,6 +6,7 @@ import org.nanonative.nano.helper.event.model.Event;
 import org.nanonative.nano.services.metric.model.MetricUpdate;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.util.Arrays.stream;
@@ -190,14 +191,14 @@ public abstract class Service {
      * @return This service instance for method chaining
      */
     public Service receiveEvent(final Event<?, ?> event) {
-        event.channel(EVENT_CONFIG_CHANGE).map(Event::payload).map(map -> {
-            if (map instanceof final TypeMapI<?> typeMap)
-                return typeMap;
-            return new TypeMap(map);
-        }).ifPresentOrElse(configs -> {
+        event.channel(EVENT_CONFIG_CHANGE).map(Event::payload).ifPresentOrElse(configs -> {
             final TypeMap merged = new TypeMap(context);
-            context.forEach(merged::putIfAbsent);
-            configure(configs, merged);
+            final TypeMap diff = new TypeMap();
+            merged.putAll(configs);
+            ((Map<?, ?>) configs).entrySet().stream()
+                .filter(entry -> !Objects.equals(context.get(entry.getKey()), entry.getValue()))
+                .forEach(entry -> diff.put(entry.getKey(), entry.getValue()));
+            configure(diff, merged);
             context.putAll(configs);
         }, () -> onEvent(event));
         return this;
