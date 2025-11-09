@@ -224,7 +224,8 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      */
     public double usedMemoryMB() {
         final Runtime runtime = Runtime.getRuntime();
-        return BigDecimal.valueOf((double) (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)).setScale(2, RoundingMode.HALF_UP).doubleValue();
+        final long usedBytes = Math.max(0L, runtime.totalMemory() - runtime.freeMemory());
+        return BigDecimal.valueOf(usedBytes / (1024d * 1024d)).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     /**
