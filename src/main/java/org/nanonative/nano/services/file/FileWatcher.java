@@ -8,13 +8,17 @@ import org.nanonative.nano.helper.event.model.Event;
 
 import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.nio.file.StandardWatchEventKinds.ENTRY_CREATE;
 import static java.nio.file.StandardWatchEventKinds.ENTRY_DELETE;
@@ -22,120 +26,235 @@ import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static java.nio.file.StandardWatchEventKinds.OVERFLOW;
 import static org.nanonative.nano.helper.event.model.Channel.registerChannelId;
 
+@SuppressWarnings({"java:S135"}) // too many break statements
 public class FileWatcher extends Service {
 
-    public static final Channel<Path, Void> EVENT_WATCH_FILE = registerChannelId("WATCH_FILE", Path.class);
-    public static final Channel<Path, Void>  EVENT_UNWATCH_FILE = registerChannelId("UNWATCH_FILE", Path.class);
-    public static final Channel<Path, Void>  EVENT_FILE_CHANGE = registerChannelId("FILE_CHANGE", Path.class);
+    // API
+    public static final Channel<FileWatchRequest, Void> EVENT_FILE_WATCH = registerChannelId("WATCH", FileWatchRequest.class);
+    public static final Channel<FileWatchRequest, Void> EVENT_FILE_UNWATCH = registerChannelId("UNWATCH", FileWatchRequest.class);
+    public static final Channel<FileChangeEvent, Void> EVENT_FILE_CHANGE = registerChannelId("FILE_CHANGE", FileChangeEvent.class);
 
-    private WatchService watchService;
-    private Map<WatchKey, Path> watchedKeys;
-    private Map<Path, WatchKey> pathToKey;
+    // Watcher
+    protected final AtomicReference<WatchService> watchService = new AtomicReference<>();
+
+    // Directories <-> keys
+    protected final Map<WatchKey, Path> keyToDir = new ConcurrentHashMap<>();
+    protected final Map<Path, WatchKey> dirToKey = new ConcurrentHashMap<>();
+
+    // Groups
+    protected static final class GroupState {
+        final Set<Path> dirs = ConcurrentHashMap.newKeySet(); // watched directories
+        final Set<Path> files = ConcurrentHashMap.newKeySet(); // exact files (absolute); empty → whole dirs
+    }
+
+    protected final Map<String, GroupState> groups = new ConcurrentHashMap<>();
+
+    // Reverse lookup: dir → groups watching it
+    protected final Map<Path, Set<String>> dirToGroups = new ConcurrentHashMap<>();
+    // Recently unwatched groups to suppress stale events emitted while keys drain
+    protected final Map<String, Long> unwatchedGroups = new ConcurrentHashMap<>();
 
     @Override
     public void start() {
         try {
-            watchService = FileSystems.getDefault().newWatchService();
-            watchedKeys = new ConcurrentHashMap<>();
-            pathToKey = new ConcurrentHashMap<>();
-
-            context.run(() -> {
-                while (watchService != null) {
-                    try {
-                        final WatchKey key = watchService.take();
-                        final Path watchedDir = watchedKeys.get(key);
-
-                        if (watchedDir != null) {
-                            for (final WatchEvent<?> event : key.pollEvents()) {
-                                final WatchEvent.Kind<?> kind = event.kind();
-                                if (kind == OVERFLOW) continue;
-
-                                final Path eventPath = watchedDir.resolve((Path) event.context());
-                                context.newEvent(EVENT_FILE_CHANGE)
-                                    .putR("kind", kind.name())
-                                    .payload(() -> eventPath)
-                                    .send();
-
-                                if (kind == ENTRY_DELETE && pathToKey.containsKey(eventPath)) {
-                                    unwatch(eventPath);
-                                }
-                            }
-                        }
-                        key.reset();
-                    } catch (final InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    } catch (final ClosedWatchServiceException ignored) {
-                        // Watch service has been closed, exit the loop
-                    }
-                }
-            });
-
+            final WatchService ws = FileSystems.getDefault().newWatchService();
+            if (watchService.compareAndSet(null, ws))
+                context.run(() -> watchQueue(ws));
         } catch (Exception e) {
-            context.error(() -> "Failed to initialize " + this.getClass().getSimpleName(), e);
+            context.error(e, () -> "Failed to initialize " + getClass().getSimpleName());
         }
     }
 
     @Override
     public void stop() {
-        Optional.ofNullable(watchedKeys).ifPresent(map -> {
-            map.keySet().forEach(WatchKey::cancel);
-            map.clear();
-        });
-        Optional.ofNullable(pathToKey).ifPresent(Map::clear);
+        // Cancel keys first (cheap, non-blocking)
+        dirToKey.values().forEach(WatchKey::cancel);
+        keyToDir.clear();
+        dirToKey.clear();
 
-        try {
-            if (watchService != null)
-                watchService.close();
-        } catch (Exception ignored) {
-            // ignored
+        // Close the WatchService
+        final WatchService ws = watchService.getAndSet(null);
+        if (ws != null) {
+            try {ws.close();} catch (Exception ignored) {}
         }
-        watchService = null;
+
+        // Clear group state
+        groups.clear();
+        dirToGroups.clear();
+        unwatchedGroups.clear();
     }
 
     @Override
-    public Object onFailure(final Event<?, ?> error) {
-        return null;
-    }
+    public Object onFailure(final Event<?, ?> error) {return null;}
 
     @Override
-    public void onEvent(final Event<?, ?>  event) {
-        event.channel(EVENT_WATCH_FILE).map(Event::payloadAck).ifPresent(this::watch);
-        event.channel(EVENT_UNWATCH_FILE).map(Event::payloadAck).ifPresent(this::unwatch);
+    public void onEvent(final Event<?, ?> event) {
+        event.channel(EVENT_FILE_WATCH).map(Event::payload).ifPresent(this::onWatch);
+        event.channel(EVENT_FILE_UNWATCH).map(Event::payload).ifPresent(this::onUnwatch);
     }
 
-    public boolean watch(final Path path) {
+    @SuppressWarnings({"java:S135"}) // too many break warnings
+    protected void watchQueue(final WatchService ws) {
+        while (true) {
+            try {
+                final WatchKey key = ws.take();
+                final Path watchedDir = keyToDir.get(key);
+                if (watchedDir != null) {
+                    receiveEvents(key, watchedDir);
+                }
+                // If reset fails, the key is dead; clean it.
+                if (!key.reset()) {
+                    final Path dead = keyToDir.remove(key);
+                    if (dead != null) dirToKey.remove(dead);
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (ClosedWatchServiceException closed) {
+                break;
+            }
+        }
+    }
+
+    protected void receiveEvents(final WatchKey key, final Path watchedDir) {
+        for (WatchEvent<?> ev : key.pollEvents()) {
+            final WatchEvent.Kind<?> kind = ev.kind();
+            if (kind == OVERFLOW) continue;
+
+            final Path rel = (Path) ev.context();
+            if (rel == null) continue;
+
+            final Path eventPath = watchedDir.resolve(rel).toAbsolutePath().normalize();
+            dispatch(eventPath, kind);
+
+            // watched dir deleted → unwatch
+            if (kind == ENTRY_DELETE && Objects.equals(eventPath, watchedDir)) {
+                unwatchDir(watchedDir);
+            }
+        }
+    }
+
+    /* ===== watch/unwatch ===== */
+
+    protected void onWatch(final FileWatchRequest req) {
+        final String group = req.getGroupOrDefault();
+        unwatchedGroups.remove(group);
+        final GroupState gs = groups.computeIfAbsent(group, k -> new GroupState());
+
+        for (Path p : req.paths()) {
+            if (p == null) continue;
+            final Path abs = p.toAbsolutePath().normalize();
+
+            if (Files.isDirectory(abs)) {
+                // directory: register as-is
+                if (watchDir(abs)) {
+                    gs.dirs.add(abs);
+                    dirToGroups.computeIfAbsent(abs, path -> ConcurrentHashMap.newKeySet()).add(group);
+                }
+                continue;
+            }
+
+            // file: watch parent directory, add file to allowlist
+            final Path parent = abs.getParent();
+            if (parent != null && Files.isDirectory(parent)) {
+                if (watchDir(parent)) {
+                    gs.dirs.add(parent);
+                    dirToGroups.computeIfAbsent(parent, path -> ConcurrentHashMap.newKeySet()).add(group);
+                }
+                gs.files.add(abs);
+            }
+        }
+
+        context.debug(() -> "Group [{}]: watching {} dir(s), {} file(s)", group, gs.dirs.size(), gs.files.size());
+    }
+
+    protected void onUnwatch(final FileWatchRequest req) {
+        final String group = req.getGroupOrDefault();
+        final GroupState gs = groups.remove(group);
+        if (gs == null) return;
+
+        // Drop reverse links; unwatch dirs that no one else needs
+        for (Path dir : gs.dirs) {
+            final Set<String> watchers = dirToGroups.get(dir);
+            if (watchers != null) {
+                watchers.remove(group);
+                if (watchers.isEmpty()) {
+                    dirToGroups.remove(dir);
+                    unwatchDir(dir);
+                }
+            }
+        }
+        unwatchedGroups.put(group, System.nanoTime());
+    }
+
+    protected boolean watchDir(final Path dir) {
+        final Path abs = dir.toAbsolutePath().normalize();
+        if (!Files.isDirectory(abs)) return false;
+        if (dirToKey.containsKey(abs)) return true;
+
         try {
-            if (pathToKey.containsKey(path)) return true;
-
-            final WatchKey key = path.register(watchService, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
-            watchedKeys.put(key, path);
-            pathToKey.put(path, key);
+            final WatchService ws = watchService.get();
+            if (ws == null) {
+                context.warn(() -> "Watch request arrived before service start [{}]", abs);
+                return false;
+            }
+            final WatchKey key = abs.register(ws, ENTRY_CREATE, ENTRY_DELETE, ENTRY_MODIFY);
+            keyToDir.put(key, abs);
+            dirToKey.put(abs, key);
             return true;
         } catch (Exception e) {
-            context.error(e, () -> "Failed to watch path [%s]", path);
+            context.error(e, () -> "Failed to watch dir [{}]", abs);
             return false;
         }
     }
 
-    public void unwatch(final Path path) {
-        final WatchKey key = pathToKey.remove(path);
+    protected void unwatchDir(final Path dir) {
+        final Path abs = dir.toAbsolutePath().normalize();
+        final WatchKey key = dirToKey.remove(abs);
         if (key != null) {
             key.cancel();
-            watchedKeys.remove(key);
+            keyToDir.remove(key);
+        }
+    }
+
+    /* ===== dispatch ===== */
+
+    protected void dispatch(final Path eventPath, final WatchEvent.Kind<?> kind) {
+        // 1) generic event
+        final FileChangeEvent base = FileChangeEvent.of(eventPath, kind);
+        context.newEvent(EVENT_FILE_CHANGE).payload(() -> base).send();
+
+        // 2) group-scoped events
+        final Path parent = Optional.ofNullable(eventPath.getParent()).orElse(eventPath);
+        final Set<String> gs = dirToGroups.get(parent);
+        if (gs == null || gs.isEmpty()) return;
+
+        for (String g : gs) {
+            if (unwatchedGroups.containsKey(g)) continue;
+            final GroupState s = groups.get(g);
+            if (s == null) continue;
+            // allowlist empty -> whole dir; otherwise only selected files
+            if (s.files.isEmpty() || s.files.contains(eventPath)) {
+                final FileChangeEvent ge = FileChangeEvent.of(eventPath, kind, g);
+                context.newEvent(EVENT_FILE_CHANGE).payload(() -> ge).broadcast(true).send();
+            }
         }
     }
 
     @Override
-    public void configure(final TypeMapI<?> changes, final TypeMapI<?> merged) {
-        // No configurable parameters… yet.
-    }
+    public void configure(final TypeMapI<?> changes, final TypeMapI<?> merged) { /* hooks later */ }
 
     @Override
     public String toString() {
+        final int dirCount = groups.values().stream().mapToInt(s -> s.dirs.size()).sum();
+        final int fileCount = groups.values().stream().mapToInt(s -> s.files.size()).sum();
         return new LinkedTypeMap()
-            .putR("watchedKeys", watchedKeys.size())
-            .putR("pathToKey", pathToKey.size())
-            .putR("class", this.getClass().getSimpleName())
+            .putR("watchedKeys", keyToDir.size())
+            .putR("pathToKey", dirToKey.size())
+            .putR("groups", groups.size())
+            .putR("groupDirs", dirCount)
+            .putR("groupFiles", fileCount)
+            .putR("class", getClass().getSimpleName())
             .toJson();
     }
 }

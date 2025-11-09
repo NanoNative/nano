@@ -44,7 +44,7 @@ import static org.nanonative.nano.helper.NanoUtils.reduceSte;
 import static org.nanonative.nano.services.logging.LogService.EVENT_LOGGING;
 import static org.nanonative.nano.services.logging.LogService.MAX_LOG_NAME_LENGTH;
 
-@SuppressWarnings({"unused", "UnusedReturnValue", "java:S2160"})
+@SuppressWarnings({"unused", "UnusedReturnValue", "java:S2160", "rawtypes"})
 public class Context extends ConcurrentTypeMap {
 
     // Context keys
@@ -63,6 +63,7 @@ public class Context extends ConcurrentTypeMap {
     public static final String CONFIG_PARALLEL_SHUTDOWN = ConfigRegister.registerConfig("app_service_shutdown_parallel", "Enable or disable parallel service shutdown (see " + NanoServices.class.getSimpleName() + "). Enabled = Can increase the shutdown performance on`true`");
     public static final String CONFIG_OOM_SHUTDOWN_THRESHOLD = ConfigRegister.registerConfig("app_oom_shutdown_threshold", "Sets the threshold for heap in percentage to send an `EVENT_APP_OOM`. default = `98`, disabled = `-1`. If the event is unhandled, tha pp will try to shutdown with last resources");
     public static final String CONFIG_ENV_PROD = ConfigRegister.registerConfig("app_env_prod", "Enable or disable behaviour e.g. exit codes. This is useful in prod environments specially on error cases. default = `false`");
+    public static final String CONFIG_FILE_LOCATIONS_KEY = ConfigRegister.registerConfig("app_config_dirs", "Comma separated list of directories to scan for application*.properties, overriding defaults.");
 
     // Register event channels
     public static final Channel<Void, Void> EVENT_APP_START = Channel.registerChannelId("APP_START", Void.class);

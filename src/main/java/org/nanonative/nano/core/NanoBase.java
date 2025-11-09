@@ -1,6 +1,7 @@
 package org.nanonative.nano.core;
 
 import berlin.yuna.typemap.logic.ArgsDecoder;
+import berlin.yuna.typemap.model.TypeMap;
 import org.nanonative.nano.core.model.Context;
 import org.nanonative.nano.helper.event.model.Channel;
 import org.nanonative.nano.helper.event.model.Event;
@@ -10,8 +11,11 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -28,6 +32,7 @@ import static java.util.Optional.ofNullable;
 import static java.util.logging.Level.INFO;
 import static org.nanonative.nano.core.model.Context.APP_HELP;
 import static org.nanonative.nano.core.model.Context.CONFIG_ENV_PROD;
+import static org.nanonative.nano.core.model.Context.CONFIG_FILE_LOCATIONS_KEY;
 import static org.nanonative.nano.core.model.Context.EVENT_APP_ERROR;
 import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
 import static org.nanonative.nano.helper.NanoUtils.addConfig;
@@ -52,6 +57,16 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     public static final Map<Integer, Channel<?, ?>> EVENT_CHANNELS = new ConcurrentHashMap<>();
     public static final Map<String, String> CONFIG_KEYS = new ConcurrentHashMap<>();
     public static final AtomicInteger EVENT_ID_COUNTER = new AtomicInteger(0);
+    public static final List<String> CONFIG_FILE_LOCATIONS = List.of(
+            "",
+            ".",
+            "config/",
+            ".config/",
+            "resources/",
+            ".resources/",
+            "resources/config/",
+            ".resources/config/"
+    );
 
     /**
      * Initializes the NanoBase with provided configurations and arguments.
@@ -61,16 +76,14 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      */
     protected NanoBase(final Map<Object, Object> configs, final String... args) {
         this.createdAtNs = System.nanoTime();
-        this.context = readConfigs(args);
-        if (configs != null)
-            configs.forEach((key, value) -> context.computeIfAbsent(convertObj(key, String.class), add -> ofNullable(value).orElse("")));
+        this.context = readConfigs(configs, args);
         this.logService = new LogService();
         this.logService.context(context);
         this.logService.configure(context, context);
         this.logService.start();
         this.logService.isReadyState().set(true);
         displayHelpMenu();
-        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.acknowledge().payload()));
+        subscribeEvent(EVENT_CONFIG_CHANGE, event -> context.putAll(event.payload()));
     }
 
     /**
@@ -148,7 +161,7 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      * @param <R>      The return payload
      * @return A consumer function that can be used to unsubscribe the listener later.
      */
-    @SuppressWarnings({"unchecked", "java:S116"})
+    @SuppressWarnings({"unchecked", "java:S116", "CastCanBeRemovedNarrowingVariableType"})
     public <C, R> Consumer<Event<C, R>> subscribeEvent(final Channel<C, R> channel, final BiConsumer<? super Event<C, R>, C> listener) {
         final Consumer<? super Event<C, R>> wrapped = event ->
                 event.payloadOpt().ifPresent(payload -> listener.accept(event, payload));
@@ -211,7 +224,8 @@ public abstract class NanoBase<T extends NanoBase<T>> {
      */
     public double usedMemoryMB() {
         final Runtime runtime = Runtime.getRuntime();
-        return BigDecimal.valueOf((double) (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)).setScale(2, RoundingMode.HALF_UP).doubleValue();
+        final long usedBytes = Math.max(0L, runtime.totalMemory() - runtime.freeMemory());
+        return BigDecimal.valueOf(usedBytes / (1024d * 1024d)).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     /**
@@ -270,16 +284,59 @@ public abstract class NanoBase<T extends NanoBase<T>> {
     /**
      * Reads and initializes {@link Context} based on provided arguments.
      *
-     * @param args Command-line arguments.
+     * @param configs Configuration settings in a key-value map.
+     * @param args    Command-line arguments.
      * @return The {@link Context} initialized with the configurations.
      */
-    protected Context readConfigs(final String... args) {
-        final Context result = readConfigFiles(null, "");
-        System.getenv().forEach((key, value) -> addConfig(result, key, value));
-        System.getProperties().forEach((key, value) -> addConfig(result, key, value));
-        if (args != null)
-            ArgsDecoder.argsOf(String.join(" ", args)).forEach((key, value) -> addConfig(result, key, value));
+    protected Context readConfigs(final Map<Object, Object> configs, final String... args) {
+        final TypeMap cliArgs = new TypeMap();
+        if (args != null && args.length > 0) {
+            cliArgs.putAll(ArgsDecoder.argsOf(String.join(" ", args)));
+        }
+
+        final Optional<String> cliOverride = ofNullable(cliArgs.asString(CONFIG_FILE_LOCATIONS_KEY))
+                .or(() -> ofNullable(cliArgs.asString(standardiseKey(CONFIG_FILE_LOCATIONS_KEY))));
+
+        final List<String> directories = ofNullable(System.getProperty(CONFIG_FILE_LOCATIONS_KEY))
+                .or(() -> ofNullable(System.getenv(CONFIG_FILE_LOCATIONS_KEY.replace('.', '_').toUpperCase())))
+                .or(() -> cliOverride)
+                .map(value -> Arrays.stream(value.split(","))
+                        .map(String::strip)
+                        .filter(s -> !s.isEmpty())
+                        .toList())
+                .filter(list -> !list.isEmpty())
+                .orElse(CONFIG_FILE_LOCATIONS);
+
+        final List<String> profiles = List.of(
+                "spring_profiles_active", "spring_profile_active", "spring_active_profiles", "spring_active_profile",
+                "spring_profiles", "spring_profile", "spring_active", "spring_active",
+                "app_profile", "app_profiles",
+                "profile_active", "profiles_active",
+                "micronaut_environments", "micronaut_environment"
+        );
+
+        // 1) Defaults + initial profile cascade (classpath/FS, multi-dir, order-stable).
+        final Context result = readConfigFiles(null, directories, profiles);
+
+        // 2) Overlays: ENV < -D < CLI (they override whatever we just loaded).
+        applyOverlays(result, cliArgs);
+
+        // 3) Overlays: ENV < DSL
+        applyOverlays(result, (configs instanceof TypeMap tMap) ? tMap : new TypeMap(configs));
+
+        // 4) Re-run the profile cascade: overlays may have activated new profiles.
+        readConfigFiles(result, directories, profiles);
+
+        // 5) Ensure overlays still win after new profiles landed.
+        applyOverlays(result, cliArgs);
+
         return resolvePlaceHolders(result);
+    }
+
+    private static void applyOverlays(final Context ctx, final TypeMap cliArgs) {
+        System.getenv().forEach((k, v) -> addConfig(ctx, k, v));
+        System.getProperties().forEach((k, v) -> addConfig(ctx, k, v));
+        cliArgs.forEach((k, v) -> addConfig(ctx, k, v));
     }
 
     /**
@@ -294,7 +351,10 @@ public abstract class NanoBase<T extends NanoBase<T>> {
                 .replace('-', '_')
                 .replace('+', '_')
                 .replace(':', '_')
-                .trim()
+                .replace('{', '_')
+                .replace('}', '_')
+                .replace('$', '_')
+                .strip()
                 .toLowerCase();
     }
 

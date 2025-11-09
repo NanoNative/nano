@@ -4,6 +4,7 @@ import berlin.yuna.typemap.model.LinkedTypeMap;
 import berlin.yuna.typemap.model.TypeMap;
 import org.junit.jupiter.api.Test;
 import org.nanonative.nano.core.Nano;
+import org.nanonative.nano.services.file.FileChangeEvent;
 import org.nanonative.nano.services.http.model.HttpObject;
 
 import java.net.URL;
@@ -11,7 +12,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
+import static java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.nanonative.nano.core.model.Context.EVENT_CONFIG_CHANGE;
+import static org.nanonative.nano.services.file.FileWatcher.EVENT_FILE_CHANGE;
 import static org.nanonative.nano.services.http.HttpClient.CONFIG_HTTP_CLIENT_TRUSTED_CA;
 import static org.nanonative.nano.services.http.HttpClient.CONFIG_HTTP_CLIENT_TRUST_ALL;
 import static org.nanonative.nano.services.http.HttpServer.CONFIG_SERVICE_HTTPS_CERT;
@@ -86,13 +90,123 @@ class HttpServerTest {
     }
 
     @Test
+    void shouldRegisterReloadOnConfigChange() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .filter(req -> req.pathMatch("/config-reload"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
+
+        final HttpObject beforeReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(beforeReload.statusCode()).isEqualTo(200);
+        assertThat(beforeReload.bodyAsString()).isEqualTo("ok");
+
+        nano.context(HttpServerTest.class).newEvent(EVENT_CONFIG_CHANGE, () -> TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, PEM_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, PEM_KEY
+        )).send();
+
+        final HttpObject afterReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(afterReload.statusCode()).isEqualTo(200);
+        assertThat(afterReload.bodyAsString()).isEqualTo("ok");
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void shouldFailReloadOnInvalidConfigChange() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .filter(req -> req.pathMatch("/config-reload-invalid"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
+
+        final HttpObject beforeReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload-invalid")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(beforeReload.statusCode()).isEqualTo(200);
+        assertThat(beforeReload.bodyAsString()).isEqualTo("ok");
+
+        final Path invalidCert = Paths.get("invalid_reload.crt");
+        final Path invalidKey = Paths.get("invalid_reload.key");
+
+        nano.context(HttpServerTest.class).newEvent(EVENT_CONFIG_CHANGE, () -> TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, invalidCert,
+                CONFIG_SERVICE_HTTPS_KEY, invalidKey
+        )).send();
+
+        final HttpObject afterReload = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/config-reload-invalid")
+                .send(nano.context(HttpServerTest.class));
+
+        // stays with the old certificates
+        assertThat(afterReload.statusCode()).isEqualTo(200);
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
+    void shouldRegisterReloadOnFileChangeEvent() {
+        final HttpServer server = new HttpServer();
+        final Nano nano = new Nano(TypeMap.mapOf(
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
+        ), server);
+
+        nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
+                .filter(req -> req.pathMatch("/file-reload"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
+
+        final HttpObject beforeFileEvent = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/file-reload")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(beforeFileEvent.statusCode()).isEqualTo(200);
+        assertThat(beforeFileEvent.bodyAsString()).isEqualTo("ok");
+
+        nano.context(HttpServerTest.class).newEvent(EVENT_FILE_CHANGE, () ->
+                FileChangeEvent.of(SIMPLE_CERT, ENTRY_MODIFY, CONFIG_SERVICE_HTTPS_CERT)
+        ).broadcast(true).send();
+
+        final HttpObject afterFileEvent = new HttpObject()
+                .path("https://localhost:" + server.address().getPort() + "/file-reload")
+                .send(nano.context(HttpServerTest.class));
+
+        assertThat(afterFileEvent.statusCode()).isEqualTo(200);
+        assertThat(afterFileEvent.bodyAsString()).isEqualTo("ok");
+
+        nano.stop(nano.context(HttpServerTest.class)).waitForStop();
+    }
+
+    @Test
     void testEmptyContextDefaultsToHttp() {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(Map.of(CONFIG_SERVICE_HTTP_CLIENT, true), server);
 
         nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
-            .filter(req -> req.pathMatch("/test"))
-            .ifPresent(req -> req.createResponse().body("ok").respond(event)));
+                .filter(req -> req.pathMatch("/test"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
 
         final HttpObject response = new HttpObject().path("http://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
         assertThat(response.statusCode()).isEqualTo(200);
@@ -106,14 +220,14 @@ class HttpServerTest {
         final Path invalidCert = Paths.get("nonexistent.crt");
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, invalidCert,
-            CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_CERT, invalidCert,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
         HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
-            .send(nano.context(HttpServerTest.class));
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(response.statusCode()).isNotEqualTo(200);
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
@@ -124,14 +238,14 @@ class HttpServerTest {
         final Path invalidKey = Paths.get("nonexistent.key");
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
-            CONFIG_SERVICE_HTTPS_KEY, invalidKey,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, invalidKey,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
         HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
-            .send(nano.context(HttpServerTest.class));
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(response.statusCode()).isNotEqualTo(200);
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
@@ -141,15 +255,15 @@ class HttpServerTest {
     void testWrongPasswordForKey() {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, PASSWORD_CERT,
-            CONFIG_SERVICE_HTTPS_KEY, PASSWORD_KEY,
-            CONFIG_SERVICE_HTTPS_PASSWORD, "wrongpassword",
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_CERT, PASSWORD_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, PASSWORD_KEY,
+                CONFIG_SERVICE_HTTPS_PASSWORD, "wrongpassword",
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
         HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
-            .send(nano.context(HttpServerTest.class));
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(response.statusCode()).isNotEqualTo(200);
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
@@ -160,14 +274,14 @@ class HttpServerTest {
         final Path invalidStore = Paths.get("nonexistent.p12");
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_KTS, invalidStore,
-            CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_KTS, invalidStore,
+                CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
         HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
-            .send(nano.context(HttpServerTest.class));
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(response.statusCode()).isNotEqualTo(200);
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
@@ -177,14 +291,14 @@ class HttpServerTest {
     void testInvalidKeystorePassword() {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_KTS, PKCS12_STORE,
-            CONFIG_SERVICE_HTTPS_PASSWORD, "wrongpassword",
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_KTS, PKCS12_STORE,
+                CONFIG_SERVICE_HTTPS_PASSWORD, "wrongpassword",
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
         HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test")
-            .send(nano.context(HttpServerTest.class));
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(response.statusCode()).isNotEqualTo(200);
         nano.stop(nano.context(HttpServerTest.class)).waitForStop();
@@ -194,18 +308,18 @@ class HttpServerTest {
     void testSimpleCertWithTrustedClient() {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
-            CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUSTED_CA, SIMPLE_CERT
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUSTED_CA, SIMPLE_CERT
         ), server);
 
         nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
-            .filter(req -> req.pathMatch("/secure"))
-            .ifPresent(req -> req.createResponse().body("secured").respond(event)));
+                .filter(req -> req.pathMatch("/secure"))
+                .ifPresent(req -> req.createResponse().body("secured").respond(event)));
 
         final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/secure")
-            .send(nano.context(HttpServerTest.class));
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(response.bodyAsString()).isEqualTo("secured");
         assertThat(response.statusCode()).isEqualTo(200);
@@ -217,18 +331,18 @@ class HttpServerTest {
     void testInvalidTrustedClient() {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
-            CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUSTED_CA, "AA" + SIMPLE_CERT
+                CONFIG_SERVICE_HTTPS_CERT, SIMPLE_CERT,
+                CONFIG_SERVICE_HTTPS_KEY, SIMPLE_KEY,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUSTED_CA, "AA" + SIMPLE_CERT
         ), server);
 
         nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
-            .filter(req -> req.pathMatch("/secure"))
-            .ifPresent(req -> req.createResponse().body("secured").respond(event)));
+                .filter(req -> req.pathMatch("/secure"))
+                .ifPresent(req -> req.createResponse().body("secured").respond(event)));
 
         final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/secure")
-            .send(nano.context(HttpServerTest.class));
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(response.bodyAsString()).isEqualTo("Failed to send HTTP request - maybe no [HttpClient] was configured?");
         assertThat(response.statusCode()).isEqualTo(-99);
@@ -242,8 +356,8 @@ class HttpServerTest {
         final Nano nano = new Nano(server, new HttpClient());
 
         final HttpObject resp = new HttpObject()
-            .path("http://localhost:" + server.address().getPort() + "/there-is-no-cake")
-            .send(nano.context(HttpServerTest.class));
+                .path("http://localhost:" + server.address().getPort() + "/there-is-no-cake")
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(resp.statusCode()).isEqualTo(404);
         assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
@@ -262,8 +376,8 @@ class HttpServerTest {
         });
 
         final HttpObject resp = new HttpObject()
-            .path("http://localhost:" + server.address().getPort() + "/explode")
-            .send(nano.context(HttpServerTest.class));
+                .path("http://localhost:" + server.address().getPort() + "/explode")
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(resp.statusCode()).isEqualTo(500);
         assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
@@ -278,17 +392,17 @@ class HttpServerTest {
         final Nano nano = new Nano(server, new HttpClient());
 
         nano.subscribeEvent(EVENT_HTTP_REQUEST_UNHANDLED, (event, request) ->
-            request.createResponse()
-                .statusCode(418)
-                .contentType(APPLICATION_PROBLEM_JSON)
-                .bodyT(new LinkedTypeMap()
-                    .putR("error", "I am a teapot")
-                    .putR("path", request.path()))
-                .respond(event));
+                request.createResponse()
+                        .statusCode(418)
+                        .contentType(APPLICATION_PROBLEM_JSON)
+                        .bodyT(new LinkedTypeMap()
+                                .putR("error", "I am a teapot")
+                                .putR("path", request.path()))
+                        .respond(event));
 
         final HttpObject resp = new HttpObject()
-            .path("http://localhost:" + server.address().getPort() + "/custom-error")
-            .send(nano.context(HttpServerTest.class));
+                .path("http://localhost:" + server.address().getPort() + "/custom-error")
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(resp.statusCode()).isEqualTo(418);
         assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
@@ -309,11 +423,11 @@ class HttpServerTest {
 
         // Channel-scoped error mapping → RFC7807-ish 422
         nano.subscribeError(EVENT_HTTP_REQUEST, event ->
-            event.payload().createResponse().failure(422, event.error()).respond(event));
+                event.payload().createResponse().failure(422, event.error()).respond(event));
 
         final HttpObject resp = new HttpObject()
-            .path("http://localhost:" + server.address().getPort() + "/explode-with-style")
-            .send(nano.context(HttpServerTest.class));
+                .path("http://localhost:" + server.address().getPort() + "/explode-with-style")
+                .send(nano.context(HttpServerTest.class));
 
         assertThat(resp.statusCode()).isEqualTo(422);
         assertThat(resp.contentType()).isEqualTo(APPLICATION_PROBLEM_JSON);
@@ -325,16 +439,16 @@ class HttpServerTest {
     private static void testHttpsServer(Path cert, Path key, String password) {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_CERT, cert,
-            CONFIG_SERVICE_HTTPS_KEY, key,
-            CONFIG_SERVICE_HTTPS_PASSWORD, password,
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_CERT, cert,
+                CONFIG_SERVICE_HTTPS_KEY, key,
+                CONFIG_SERVICE_HTTPS_PASSWORD, password,
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
         nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
-            .filter(req -> req.pathMatch("/test"))
-            .ifPresent(req -> req.createResponse().body("ok").respond(event)));
+                .filter(req -> req.pathMatch("/test"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
 
         final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
         assertThat(response.bodyAsString()).isEqualTo("ok");
@@ -346,15 +460,15 @@ class HttpServerTest {
     private static void testHttpsServerWithKeystore(Path kts) {
         final HttpServer server = new HttpServer();
         final Nano nano = new Nano(TypeMap.mapOf(
-            CONFIG_SERVICE_HTTPS_KTS, kts,
-            CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
-            CONFIG_SERVICE_HTTP_CLIENT, true,
-            CONFIG_HTTP_CLIENT_TRUST_ALL, true
+                CONFIG_SERVICE_HTTPS_KTS, kts,
+                CONFIG_SERVICE_HTTPS_PASSWORD, "testpassword",
+                CONFIG_SERVICE_HTTP_CLIENT, true,
+                CONFIG_HTTP_CLIENT_TRUST_ALL, true
         ), server);
 
         nano.subscribeEvent(EVENT_HTTP_REQUEST, event -> event.payloadOpt()
-            .filter(req -> req.pathMatch("/test"))
-            .ifPresent(req -> req.createResponse().body("ok").respond(event)));
+                .filter(req -> req.pathMatch("/test"))
+                .ifPresent(req -> req.createResponse().body("ok").respond(event)));
 
         final HttpObject response = new HttpObject().path("https://localhost:" + server.address().getPort() + "/test").send(nano.context(HttpServerTest.class));
         assertThat(response.bodyAsString()).isEqualTo("ok");

@@ -18,6 +18,7 @@ import java.util.logging.LogRecord;
 import static org.nanonative.nano.helper.config.ConfigRegister.registerConfig;
 import static org.nanonative.nano.helper.event.model.Channel.registerChannelId;
 
+@SuppressWarnings({"UnusedReturnValue", "unused"})
 public class LogService extends Service {
 
     // CONFIG
