@@ -1,0 +1,155 @@
+name: "TPL Build & Test"
+
+permissions: { } # No permissions at workflow level - granted per job
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        description: "Branch, tag or commit to checkout"
+      run_test:
+        type: boolean
+        required: false
+        default: true
+        description: "Run tests"
+      update_version:
+        type: boolean
+        required: false
+        default: false
+        description: "Generate and set new version in pom.xml (for deployment builds)"
+      timeout_minutes:
+        type: number
+        required: false
+        default: 15
+        description: "Job timeout in minutes"
+    outputs:
+      project_version:
+        description: "Current project version"
+        value: ${{ jobs.build.outputs.project_version }}
+      should_deploy:
+        description: "Whether deployment should proceed"
+        value: ${{ jobs.build.outputs.should_deploy }}
+      jacoco_report:
+        description: "Path to Jacoco coverage report"
+        value: ${{ jobs.build.outputs.jacoco_report }}
+
+concurrency:
+  group: java-build-test-${{ github.ref }}-${{ inputs.ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: "Build & Test [${{ inputs.ref || github.ref_name }}]"
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    permissions:
+      contents: read    # Read repository content for checkout
+    outputs:
+      project_version: ${{ steps.version.outputs.project_version }}
+      should_deploy: ${{ steps.metrics.outputs.should_deploy }}
+      jacoco_report: ${{ steps.metrics.outputs.jacoco_report }}
+    steps:
+      - name: "🔍 Checkout [${{ inputs.ref || github.ref_name }}]"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: "📋 Read Java Info"
+        id: "java_info"
+        uses: YunaBraska/java-info-action@main
+
+      - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }}]"
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ steps.java_info.outputs.java_version }}
+          distribution: 'temurin'
+
+      - name: "📝 Set Project Version"
+        id: version
+        run: |
+          project_version="${{ steps.java_info.outputs.project_version }}"
+          if [[ "${{ inputs.update_version }}" == "true" ]]; then
+            project_version=$(date -u '+%Y.%m.%j%H%M')
+            ${{ steps.java_info.outputs.cmd }} versions:set -DnewVersion="${project_version}" -DgenerateBackupPoms=false -B -q
+          fi
+          echo "project_version [${project_version}]"
+          echo "project_version=${project_version}" >> $GITHUB_OUTPUT
+
+      - name: "⬇️ Resolve dependencies"
+        run: ${{ steps.java_info.outputs.cmd }} -B dependency:go-offline
+
+      - name: "🔨 Build [${{ inputs.run_test && 'with tests' || 'only' }}] [${{ steps.java_info.outputs.builder_name }}]"
+        run: ${{ inputs.run_test && steps.java_info.outputs.cmd_test_build || steps.java_info.outputs.cmd_build }}
+
+      - name: "📊 Analyze metrics [${{ steps.version.outputs.project_version }}]"
+        id: metrics
+        run: |
+          # Find Jacoco report
+          jacoco_report=$(find . -type f -name "testCodeCoverageReport.xml" -o -name "jacocoTestReport.xml" -o -name "jacoco.xml" | head -n 1)
+          echo "Jacoco report: ${jacoco_report}"
+          echo "jacoco_report=${jacoco_report}" >> $GITHUB_OUTPUT
+
+          # Check if should deploy (only on default branch with changes)
+          if [[ "${{ github.ref_name }}" == "${{ github.event.repository.default_branch }}" ]]; then
+            echo "Should deploy: true (on default branch)"
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          else
+            echo "Should deploy: false (not on default branch)"
+            echo "should_deploy=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Print coverage details from jacoco report
+          if [ -n "$jacoco_report" ] && [ -f "$jacoco_report" ]; then
+            # Get the LAST LINE counter (totals)
+            line=$(
+              awk '{
+                s=$0
+                while (match(s, /<counter[^>]*type="LINE"[^>]*\/>/)) {
+                  last = substr(s, RSTART, RLENGTH)
+                  s = substr(s, RSTART + RLENGTH)
+                }
+              } END {
+                if (last) print last
+              }' "$jacoco_report")
+              if [ -n "$line" ]; then
+                cov=$(printf '%s\n' "$line" | sed -n 's/.*covered="\([0-9][0-9]*\)".*/\1/p')
+                miss=$(printf '%s\n' "$line" | sed -n 's/.*missed="\([0-9][0-9]*\)".*/\1/p')
+                cov=${cov:-0}
+                miss=${miss:-0}
+                total=$(( cov + miss ))
+                if [ "$total" -gt 0 ]; then
+                  pc=$(awk -v c="$cov" -v t="$total" 'BEGIN{ printf "%.2f", (100.0*c)/t }')
+                else
+                  pc=0.00
+                fi
+                echo "Total Coverage: ${pc}% (${cov}/${total} lines)"
+              else
+                echo "No LINE counter found in ${jacoco_report}."
+              fi
+          else
+            echo "No Jacoco XML report found."
+          fi
+
+      - name: "📦 Upload build artifacts [run-${{ github.run_id }}]"
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts-${{ github.run_id }}
+          path: |
+            target/
+            !target/**/*.jar.original
+          retention-days: 1
+          if-no-files-found: error

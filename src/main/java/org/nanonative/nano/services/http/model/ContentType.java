@@ -6,6 +6,7 @@ public enum ContentType {
 
     APPLICATION_ATOM_XML("application/atom+xml"),
     APPLICATION_FORM_URLENCODED("application/x-www-form-urlencoded"),
+    APPLICATION_JAVASCRIPT("application/javascript"),
     APPLICATION_JSON("application/json"),
     APPLICATION_PDF("application/pdf"),
     APPLICATION_OCTET_STREAM("application/octet-stream"),
@@ -23,6 +24,7 @@ public enum ContentType {
     IMAGE_TIFF("image/tiff"),
     IMAGE_WEBP("image/webp"),
     MULTIPART_FORM_DATA("multipart/form-data"),
+    TEXT_CSS("text/css"),
     TEXT_HTML("text/html"),
     TEXT_PLAIN("text/plain"),
     TEXT_XML("text/xml"),

@@ -1,0 +1,235 @@
+name: "TPL Deploy"
+
+permissions: { } # No permissions at workflow level - granted per job
+
+on:
+  workflow_call:
+    inputs:
+      run_test:
+        type: boolean
+        required: false
+        default: true
+        description: "Run tests during build to ensure code quality before deployment"
+      build_timeout_minutes:
+        type: number
+        required: false
+        default: 15
+        description: "Build job timeout in minutes"
+      deploy_timeout_minutes:
+        type: number
+        required: false
+        default: 30
+        description: "Deploy job timeout in minutes"
+      deploy_to_github:
+        type: boolean
+        required: false
+        default: true
+        description: "Deploy to GitHub Packages"
+      deploy_to_maven_central:
+        type: boolean
+        required: false
+        default: true
+        description: "Deploy to Maven Central"
+      use_environment:
+        type: boolean
+        required: false
+        default: true
+        description: "Use deployment environments"
+    secrets:
+      BOT_TOKEN:
+        description: "Optional bot token with bypass permissions for branch protection"
+        required: false
+      OSSH_USER:
+        required: false
+      OSSH_PASS:
+        required: false
+      GPG_SIGNING_KEY:
+        required: false
+      GPG_PASSPHRASE:
+        required: false
+
+concurrency:
+  group: java-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: "🏗️ Build Artifacts"
+    uses: ./.github/workflows/reusable_build_test.yml
+    permissions:
+      contents: read    # Read repository content for checkout
+    with:
+      run_test: ${{ inputs.run_test }}
+      update_version: true
+      timeout_minutes: ${{ inputs.build_timeout_minutes }}
+
+  deploy-github:
+    name: "📦 Deploy to GitHub Packages"
+    needs: [ build ]
+    if: ${{ inputs.deploy_to_github }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.deploy_timeout_minutes }}
+    environment: ${{ inputs.use_environment && 'github_packages' || null }}
+    permissions:
+      packages: write      # Deploy to GitHub Packages
+    steps:
+      - name: "🔍 Checkout [${{ github.ref_name }}]"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 100 # Create release notes
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
+        uses: actions/download-artifact@v5
+        with:
+          name: build-artifacts-${{ github.run_id }}
+          path: target/
+
+      - name: "📋 Read Java Info"
+        id: java_info
+        uses: YunaBraska/java-info-action@main
+
+      - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }} + GPG]"
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ steps.java_info.outputs.java_version }}
+          distribution: 'temurin'
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+          gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_SIGNING_KEY && 'GPG_PASSPHRASE' || '' }}
+
+      - name: "📦 Deploy to GitHub Packages [${{ needs.build.outputs.project_version }}]"
+        run: |
+          ${{ steps.java_info.outputs.cmd }} versions:set -DnewVersion="${{ needs.build.outputs.project_version }}" -DgenerateBackupPoms=false -B -q
+          ${{ steps.java_info.outputs.cmd }} deploy -Dmaven.test.skip=true -B -DaltDeploymentRepository=github::default::https://maven.pkg.github.com/${{ github.repository }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  deploy-maven-central:
+    name: "📦 Deploy to Maven Central"
+    needs: [ build, deploy-github ]
+    if: ${{ inputs.deploy_to_maven_central }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.deploy_timeout_minutes }}
+    environment: ${{ inputs.use_environment && 'maven_central' || null }}
+    permissions:
+      contents: read       # Read repository content for checkout
+    steps:
+      - name: "🔍 Checkout [${{ github.ref_name }}]"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
+        uses: actions/download-artifact@v5
+        with:
+          name: build-artifacts-${{ github.run_id }}
+          path: target/
+
+      - name: "📋 Read Java Info"
+        id: java_info
+        uses: YunaBraska/java-info-action@main
+
+      - name: "☕ Setup Java [${{ steps.java_info.outputs.java_version }} + GPG]"
+        uses: actions/setup-java@v5
+        with:
+          java-version: ${{ steps.java_info.outputs.java_version }}
+          distribution: 'temurin'
+          server-id: central
+          server-username: OSSH_USER
+          server-password: OSSH_PASS
+          gpg-private-key: ${{ secrets.GPG_SIGNING_KEY }}
+          gpg-passphrase: ${{ secrets.GPG_SIGNING_KEY && 'GPG_PASSPHRASE' || '' }}
+
+      - name: "📦 Deploy to Maven Central [${{ needs.build.outputs.project_version }}]"
+        run: |
+          ${{ steps.java_info.outputs.cmd }} versions:set -DnewVersion="${{ needs.build.outputs.project_version }}" -DgenerateBackupPoms=false -B -q
+          ${{ steps.java_info.outputs.cmd }} deploy -P release -Dmaven.test.skip=true ${{ secrets.GPG_PASSPHRASE && format('-Dgpg.passphrase="{0}"', secrets.GPG_PASSPHRASE) || '' }} -B
+        env:
+          OSSH_USER: ${{ secrets.OSSH_USER }}
+          OSSH_PASS: ${{ secrets.OSSH_PASS }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  finalize:
+    name: "🎉 Commit, Tag & Release"
+    needs: [ build, deploy-github, deploy-maven-central ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write      # Create releases and push version commits
+    steps:
+      - name: "🔍 Checkout [${{ github.ref_name }}]"
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 100 # create release notes
+          token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: "🗃️ Cache dependencies [${{ runner.os }}]"
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', '**/build.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-build-
+
+      - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
+        uses: actions/download-artifact@v5
+        with:
+          name: build-artifacts-${{ github.run_id }}
+          path: target/
+
+      - name: "📋 Read Java Info"
+        id: java_info
+        uses: YunaBraska/java-info-action@main
+
+      - name: "💾 Commit version changes [${{ needs.build.outputs.project_version }}]"
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        if: ${{ env.BOT_TOKEN != '' }}
+        run: |
+          ${{ steps.java_info.outputs.cmd }} versions:set -DnewVersion="${{ needs.build.outputs.project_version }}" -DgenerateBackupPoms=false -B -q
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add pom.xml
+          git commit -m "chore: release ${{ needs.build.outputs.project_version }}"
+          git push origin HEAD:${{ github.ref_name }}
+
+      - name: "🎉 Create release [${{ needs.build.outputs.project_version }}]"
+        id: release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ needs.build.outputs.project_version }}
+          name: ${{ needs.build.outputs.project_version }}
+          generateReleaseNotes: true
+          artifacts: target/*.jar
+          token: ${{ secrets.GITHUB_TOKEN }}
