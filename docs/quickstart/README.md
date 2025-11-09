@@ -15,6 +15,33 @@ Nano is a **lightweight approach to microservice development** that breaks away 
 - **TypeMap Everywhere**: Built-in type conversion and data transformation using TypeMap
 - **Global Error Handling**: Even errors are events that can be subscribed to and handled globally
 
+## ⚙️ Getting Nano
+
+Nano targets the latest Java LTS (21+). Add the library to your build and you are ready to run the examples below.
+
+**Maven**
+```xml
+<dependency>
+  <groupId>org.nanonative</groupId>
+  <artifactId>nano</artifactId>
+  <version>2025.1.3</version>
+</dependency>
+```
+
+**Gradle (Kotlin DSL)**
+```kotlin
+dependencies {
+  implementation("org.nanonative:nano:2025.1.3")
+}
+```
+
+Start a sample app with your build tool of choice, e.g.
+```bash
+mvn exec:java -Dexec.mainClass=org.example.UserRegistrationApp
+# or
+mvn package && java -jar target/your-app.jar
+```
+
 ## 🚀 Your First Nano Application
 
 Let's build a simple user registration API to understand Nano's approach:

@@ -6,21 +6,26 @@ import org.junit.jupiter.api.parallel.ExecutionMode;
 
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.nanonative.nano.core.config.TestConfig.TEST_REPEAT;
+import static org.nanonative.nano.core.config.TestConfig.TEST_TIMEOUT;
 import static org.nanonative.nano.core.model.NanoThread.GLOBAL_THREAD_POOL;
 import static org.nanonative.nano.core.model.NanoThread.activeCarrierThreads;
 import static org.nanonative.nano.core.model.NanoThread.activeNanoThreads;
+import static org.nanonative.nano.helper.NanoUtils.waitForCondition;
 
 @Execution(ExecutionMode.CONCURRENT)
 class NanoThreadTest {
 
-    public static final ExecutorService TEST_EXECUTOR = GLOBAL_THREAD_POOL;
+    // We deliberately track completions via AtomicInteger instead of a CountDownLatch.
+    // The latch inside waitFor(onComplete, ...) only tells us when the non-blocking callback fired.
+    // The AtomicInteger increments inside the worker body, proving that the work truly ran.
+    // Virtual threads can reschedule between the worker increment and the onComplete callback,
+    // so assertions must tolerate that brief visibility race (hence the waitForCondition below).
 
     @RepeatedTest(TEST_REPEAT)
     void waitForAll_shouldBlockAndWait() {
@@ -39,6 +44,10 @@ class NanoThreadTest {
 
         NanoThread.waitFor(onComplete, startConcurrentThreads(doneThreads));
         assertThat(latch.await(TEST_REPEAT, TimeUnit.SECONDS)).isTrue();
+        // waitFor(onComplete, ...) returns immediately, so the callback can fire before the AtomicInteger increment
+        // becomes visible. We poll until all increments are observed instead of blocking on another latch,
+        // which would defeat the non-blocking contract we want to verify here.
+        assertThat(waitForCondition(() -> doneThreads.get() == TEST_REPEAT, TEST_TIMEOUT)).isTrue();
         assertThat(doneThreads.get()).isEqualTo(TEST_REPEAT);
     }
 

@@ -27,7 +27,6 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 

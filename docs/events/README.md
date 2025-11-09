@@ -326,8 +326,49 @@ public class DatabaseService extends Service {
 | 🔲                 | `EVENT_APP_SERVICE_UNREGISTER`   | `Service`                     | `N/A`    | Triggered when a [Service](../services/README.md) is stopped                                                                                       |
 | 🔲                 | `EVENT_APP_SCHEDULER_REGISTER`   | `Scheduler`                   | `N/A`    | Triggered when a [Scheduler](../schedulers/README.md) is started                                                                                   |
 | 🔲                 | `EVENT_APP_SCHEDULER_UNREGISTER` | `Scheduler`                   | `N/A`    | Triggered when a [Scheduler](../schedulers/README.md) is stopped                                                                                   |
-| 🔲                 | `EVENT_APP_UNHANDLED`            | `Unhandled`, `HttpObject`,... | `N/A`    | Triggered when an unhandled error happened within the context                                                                                      |
 | 🔲                 | `EVENT_APP_OOM`                  | `Double`                      | `N/A`    | Triggered when the Application reached out of memory. When the event is not handled, the App will shutdown see config `app_oom_shutdown_threshold` |
 | 🔲                 | `EVENT_APP_HEARTBEAT`            | `Nano`                        | `N/A`    | Send every 256ms                                                                                                                                   |
 | 🔳                 | `EVENT_CONFIG_CHANGE`            | `TypeMap`                     | `N/A`    | Used to change configs on the fly for services which supports it                                                                                   |
 
+### ⚠️ Important: EVENT_CONFIG_CHANGE Best Practices
+
+**EVENT_CONFIG_CHANGE** requires special attention to ensure proper broadcasting to all listeners:
+
+**❌ AVOID - Acknowledging Config Change Events:**
+```java
+// This will prevent other listeners from receiving the event!
+nano.subscribeEvent(EVENT_CONFIG_CHANGE, event -> {
+    updateMyService(event.payload());
+    event.acknowledge(); // ❌ DON'T DO THIS - stops propagation
+});
+
+nano.subscribeEvent(EVENT_CONFIG_CHANGE, event -> {
+    updateMyCache(event.payloadAck()); // ❌ DON'T DO THIS - stops propagation
+});
+```
+
+**✅ RECOMMENDED - Don't Acknowledge Config Events:**
+```java
+// Listen without acknowledging - allows all listeners to receive
+nano.subscribeEvent(EVENT_CONFIG_CHANGE, event -> {
+    updateMyService(event.payload()); // ✅ Just use payload(), no acknowledgment
+});
+
+nano.subscribeEvent(EVENT_CONFIG_CHANGE, event -> {
+    updateMyCache(event.payload()); // ✅ All listeners will receive this
+});
+```
+
+**✅ ALTERNATIVE - Use Broadcast When Sending:**
+```java
+// If you must acknowledge, use broadcast to ensure all listeners receive
+context.newEvent(EVENT_CONFIG_CHANGE, () -> configUpdates)
+    .broadcast(true) // ✅ Forces delivery to all listeners
+    .send();
+```
+
+**Why This Matters:**
+- Configuration changes often need to update multiple services simultaneously
+- Database connections, caches, HTTP clients, and other services all need config updates
+- If the first listener acknowledges, subsequent listeners won't receive the event
+- This can lead to inconsistent configuration states across your application

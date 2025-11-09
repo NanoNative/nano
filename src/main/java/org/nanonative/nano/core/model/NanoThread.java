@@ -14,6 +14,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -23,12 +24,15 @@ import java.util.function.Supplier;
 import static java.util.Optional.ofNullable;
 import static org.nanonative.nano.helper.NanoUtils.handleJavaError;
 
+@SuppressWarnings("unused")
 public class NanoThread {
 
     protected final List<BiConsumer<NanoThread, Throwable>> listeners = new CopyOnWriteArrayList<>();
     protected final AtomicBoolean isComplete = new AtomicBoolean();
 
-    public static final ExecutorService GLOBAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("nano-thread-", 0).factory());
+    public static final String NANO_THREAD_PREFIX = "nano-thread-";
+    public static final ThreadFactory GLOBAL_THREAD_FACTORY = Thread.ofVirtual().name(NANO_THREAD_PREFIX, 0).factory();
+    public static final ExecutorService GLOBAL_THREAD_POOL = Executors.newThreadPerTaskExecutor(GLOBAL_THREAD_FACTORY);
     protected static final AtomicLong activeNanoThreadCount = new AtomicLong(0);
     private volatile Future<?> future;
 
@@ -112,8 +116,8 @@ public class NanoThread {
             .filter(Objects::nonNull)
             .filter(info -> (info.getThreadName() != null && info.getThreadName().startsWith("CarrierThread"))
                 || (info.getLockName() != null && info.getLockName().startsWith("java.lang.VirtualThread"))
-                || (info.getLockName() != null && info.getLockName().startsWith("nano-thread-"))
-                || (info.getLockOwnerName() != null && info.getLockName().startsWith("nano-thread-"))
+                || (info.getLockName() != null && info.getLockName().startsWith(NANO_THREAD_PREFIX))
+                || (info.getLockOwnerName() != null && info.getLockName().startsWith(NANO_THREAD_PREFIX))
             )
             .count();
     }

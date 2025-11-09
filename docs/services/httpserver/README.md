@@ -18,7 +18,7 @@ Nano's HTTP service provides:
 - **Non-blocking request handling** using virtual threads
 - **Built-in CORS support** with automatic origin handling
 - **Flexible request/response processing** through events
-- **SSL/TLS support** with multiple certificate formats
+- **SSL/TLS support** with multiple certificate formats and hot reloads
 - **Type-safe request parsing** with automatic JSON conversion
 - **Comprehensive error handling** at multiple levels
 
@@ -161,8 +161,8 @@ public static void main(final String[] args) {
     // Response
     app.subscribeEvent(EVENT_HTTP_REQUEST, RestEndpoint::helloWorldController);
 
-    // Error handling
-    app.subscribeEvent(EVENT_APP_UNHANDLED, RestEndpoint::controllerAdvice);
+    // Error handling for requests that bubbled up
+    app.subscribeEvent(EVENT_HTTP_REQUEST_UNHANDLED, RestEndpoint::controllerAdvice);
 }
 
 private static void helloWorldController(final Event<HttpObject, HttpObject> event) {
@@ -198,12 +198,21 @@ private static void controllerAdvice(final Event<HttpObject, HttpObject> event) 
 | `app_service_https_password`                    | `String`  | `null`                        | Optional password for private key or keystore               |
 | `app_service_https_certs`                       | `String`  | `null`                        | Comma-separated list of cert/key/store files or directories |
 
+### TLS Hot Reloading
+
+When HTTPS configs are present, the `HttpServer` automatically registers the relevant certificate/key paths with the [FileWatcher](../filewatcher/README.md). Any `ENTRY_MODIFY` events emitted for that watcher group (`CONFIG_SERVICE_HTTPS_CERT`) trigger an internal `EVENT_FILE_CHANGE` listener that rebuilds the SSL context without restarting the server. This allows you to rotate certificates by simply overwriting the files.
+
+You can also push new locations through `EVENT_CONFIG_CHANGE`. Broadcasting a map with updated `app_service_https_*` entries causes the server to reconfigure itself and refresh the watcher list. Successful updates keep handling requests seamlessly; invalid paths leave the previous SSL context in place but subsequent HTTPS requests will fail, matching the behaviour verified in the regression tests.
+
+To benefit from automatic reloads make sure the FileWatcher service is running; otherwise only explicit `EVENT_CONFIG_CHANGE` events will refresh the TLS state.
+
 ## Events
 
-| In 🔲 <br/> Out 🔳 | [Event](../../events/README.md) | Payload      | Response     | Description                                                                                                                                                                          |
-|--------------------|---------------------------------|--------------|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 🔲                 | `EVENT_HTTP_REQUEST`            | `HttpObject` | `HttpObject` | Triggered when an HTTP request is received.<br/>If a response is returned for this event, it is sent back to the client.                                                             |
-| 🔲                 | `EVENT_HTTP_REQUEST_UNHANDLED`  | `HttpObject` | `HttpObject` | Triggered when an HTTP request is received but not handled.<br/>If a response is returned for this event, it is sent back to the client.<br/>Else client will receive a `404         |
-| 🔲                 | `EVENT_APP_UNHANDLED`           | `HttpObject` | `HttpObject` | Triggered when an exception occurs while handling an HTTP request.<br/>If a response is returned for this event, it is sent back to the client.<br/>Else client will receive a `500` |
-| 🔲                 | `EVENT_HTTP_REQUEST`            | `HttpObject` | `HttpObject` | Listening for HTTP request                                                                                                                                                           |
-
+| In 🔲 <br/> Out 🔳 | [Event](../../events/README.md) | Payload           | Response     | Description                                                                                                                                                                          |
+|--------------------|---------------------------------|-------------------|--------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| 🔲                 | `EVENT_HTTP_REQUEST`            | `HttpObject`      | `HttpObject` | Triggered when an HTTP request is received.<br/>If a response is returned for this event, it is sent back to the client.                                                             |
+| 🔲                 | `EVENT_HTTP_REQUEST_UNHANDLED`  | `HttpObject`      | `HttpObject` | Triggered when an HTTP request reached the end of the pipeline without a response.<br/>Respond here to customize the default 404                                                     |
+| 🔲                 | `EVENT_APP_ERROR`               | `HttpObject`      | `HttpObject` | Triggered when an exception occurs while handling an HTTP request.<br/>If a response is returned for this event, it is sent back to the client.<br/>Else client will receive a `500` |
+| 🔲                 | `EVENT_HTTP_REQUEST`            | `HttpObject`      | `HttpObject` | Listening for HTTP request                                                                                                                                                           |
+| 🔲                 | `EVENT_FILE_CHANGE`             | `FileChangeEvent` | `Void`       | When the FileWatcher is active and the HTTPS watcher group fires, the server refreshes its SSL context automatically.                                                                |
+| 🔲                 | `EVENT_CONFIG_CHANGE`           | `TypeMap`         | `Void`       | Pushing new `app_service_https_*` keys causes the server to reload TLS assets and re-register the watcher group.                                                                     |
