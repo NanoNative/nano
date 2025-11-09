@@ -51,6 +51,8 @@ public class FileWatcher extends Service {
 
     // Reverse lookup: dir → groups watching it
     protected final Map<Path, Set<String>> dirToGroups = new ConcurrentHashMap<>();
+    // Recently unwatched groups to suppress stale events emitted while keys drain
+    protected final Map<String, Long> unwatchedGroups = new ConcurrentHashMap<>();
 
     @Override
     public void start() {
@@ -79,6 +81,7 @@ public class FileWatcher extends Service {
         // Clear group state
         groups.clear();
         dirToGroups.clear();
+        unwatchedGroups.clear();
     }
 
     @Override
@@ -135,6 +138,7 @@ public class FileWatcher extends Service {
 
     protected void onWatch(final FileWatchRequest req) {
         final String group = req.getGroupOrDefault();
+        unwatchedGroups.remove(group);
         final GroupState gs = groups.computeIfAbsent(group, k -> new GroupState());
 
         for (Path p : req.paths()) {
@@ -180,6 +184,7 @@ public class FileWatcher extends Service {
                 }
             }
         }
+        unwatchedGroups.put(group, System.nanoTime());
     }
 
     protected boolean watchDir(final Path dir) {
@@ -225,6 +230,7 @@ public class FileWatcher extends Service {
         if (gs == null || gs.isEmpty()) return;
 
         for (String g : gs) {
+            if (unwatchedGroups.containsKey(g)) continue;
             final GroupState s = groups.get(g);
             if (s == null) continue;
             // allowlist empty -> whole dir; otherwise only selected files
