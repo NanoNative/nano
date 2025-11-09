@@ -26,7 +26,7 @@ Nano favors static, event-driven Java code with zero reflection and minimal depe
 - Keep tests deterministic by injecting `Clock` or seeds, and assert exact payloads. Failing tests must reproduce locally with `./mvnw test -DfailIfNoTests=false`.
 
 ## Commit & Pull Request Guidelines
-- Follow semantic commit messages (`feat: add metric cache eviction`) and bump versions per SemVer when shipping artifacts.
+- Use Conventional Commits (`feat: add metric cache eviction`) for every change and bump versions per SemVer when shipping artifacts.
 - Branch from `main`, describe intent, link issues, and attach logs/screenshots for behavioral changes or UI assets.
 - PRs must list test evidence (`./mvnw clean verify` output) and restate any config toggles touched (e.g., `CONFIG_ENV_PROD`).
 

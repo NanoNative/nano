@@ -70,6 +70,7 @@ public static void handleRequest(Event<HttpObject, HttpObject> event) {
 - **No Reflection**: Framework avoids reflection for GraalVM compatibility
 - **Static Methods**: Business logic in static methods, not instance methods
 - **Event Naming**: Use constants like `EVENT_HTTP_REQUEST`, `EVENT_USER_CREATE`
+- **Conventional Commits**: Every commit message follows the Conventional Commits spec (e.g., `feat: add metric cache eviction`)
 - **TypeMap Usage**: Leverage TypeMap for data conversion and manipulation
 - **Clean Code**: Follow clean code principles as mentioned in CONTRIBUTING.md
 
