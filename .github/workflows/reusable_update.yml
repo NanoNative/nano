@@ -138,7 +138,7 @@ jobs:
           🤖 Automated dependency update (tests passed)"
 
           echo "📦 Pushing to main..."
-          git push origin head
+          git push origin HEAD:${GITHUB_REF_NAME}
 
   deploy:
     name: "Deploy Updated Dependencies"
