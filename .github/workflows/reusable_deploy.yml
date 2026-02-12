@@ -74,7 +74,7 @@ jobs:
       packages: write      # Deploy to GitHub Packages
     steps:
       - name: "🔍 Checkout [${{ github.ref_name }}]"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 100 # Create release notes
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -91,7 +91,7 @@ jobs:
             ${{ runner.os }}-build-
 
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: build-artifacts-${{ github.run_id }}
           path: target/
@@ -131,7 +131,7 @@ jobs:
       contents: read       # Read repository content for checkout
     steps:
       - name: "🔍 Checkout [${{ github.ref_name }}]"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -148,7 +148,7 @@ jobs:
             ${{ runner.os }}-build-
 
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: build-artifacts-${{ github.run_id }}
           path: target/
@@ -186,7 +186,7 @@ jobs:
       contents: write      # Create releases and push version commits
     steps:
       - name: "🔍 Checkout [${{ github.ref_name }}]"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 100 # create release notes
           token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
@@ -203,7 +203,7 @@ jobs:
             ${{ runner.os }}-build-
 
       - name: "📥 Download build artifacts [run-${{ github.run_id }}]"
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: build-artifacts-${{ github.run_id }}
           path: target/
