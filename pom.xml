@@ -42,9 +42,9 @@
         <type-map.version>2026.02.0330742</type-map.version>
 
         <!-- TEST -->
-        <junit.version>6.0.2</junit.version>
+        <junit.version>6.0.3</junit.version>
         <assertj-core.version>3.27.7</assertj-core.version>
-        <junit-launcher.version>6.0.2</junit-launcher.version>
+        <junit-launcher.version>6.0.3</junit-launcher.version>
 
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
