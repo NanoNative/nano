@@ -39,7 +39,7 @@
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
 
         <!-- PRODUCTION -->
-        <type-map.version>2026.06.1570916</type-map.version>
+        <type-map.version>2026.06.1801151</type-map.version>
 
         <!-- TEST -->
         <junit.version>6.1.1</junit.version>
