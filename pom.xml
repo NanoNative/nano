@@ -39,12 +39,12 @@
         <project.reporting.outputEncoding>${project.encoding}</project.reporting.outputEncoding>
 
         <!-- PRODUCTION -->
-        <type-map.version>2026.07.1941015</type-map.version>
+        <type-map.version>2026.08.2200739</type-map.version>
 
         <!-- TEST -->
-        <junit.version>6.1.2</junit.version>
+        <junit.version>6.1.3</junit.version>
         <assertj-core.version>3.27.7</assertj-core.version>
-        <junit-launcher.version>6.1.2</junit-launcher.version>
+        <junit-launcher.version>6.1.3</junit-launcher.version>
 
         <!-- BUILD -->
         <maven-gpg-plugin.version>1.6</maven-gpg-plugin.version>
