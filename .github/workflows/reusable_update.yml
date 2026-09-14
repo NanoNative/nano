@@ -63,7 +63,7 @@ jobs:
       contents: write      # Read repository and push changes to main
     steps:
       - name: "🔍 Checkout [main]"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           token: ${{ secrets.BOT_TOKEN || secrets.GITHUB_TOKEN }}
 
