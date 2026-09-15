@@ -354,7 +354,9 @@ public class HttpObject extends HttpRequest {
      */
     @SuppressWarnings("java:S1452") // generic wildcard payload
     public TypeInfo<?> bodyAsJson() {
-        return JsonDecoder.typeOf(bodyAsString());
+        final String body = bodyAsString();
+        final Object type = body.startsWith("<") ? XmlDecoder.xmlTypeOf(body) : body.isEmpty() ? "" : JsonDecoder.jsonOf(body);
+        return type instanceof TypeInfo<?> result ? result : new TypeList().addR(type);
     }
 
     /**
