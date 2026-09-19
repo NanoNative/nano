@@ -1,0 +1,32 @@
+name: 🧪 CI · Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Ref.
+        required: false
+        default: ''
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: build-pr-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      packages: read
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_build_common.yml@8518db0dca09463ab3c3a6e955675423e96b8870
+    with:
+      ref: ${{ inputs.ref || github.sha }}

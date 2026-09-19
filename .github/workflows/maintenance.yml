@@ -1,0 +1,24 @@
+name: 🛠️ CI · Maintenance
+
+on:
+  schedule:
+    - cron: '0 6 * * 0'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Dry run.
+        required: true
+        default: true
+        type: boolean
+
+permissions: {}
+
+jobs:
+  maven_wrapper:
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_update_maven_wrapper.yml@8518db0dca09463ab3c3a6e955675423e96b8870
+    with:
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
