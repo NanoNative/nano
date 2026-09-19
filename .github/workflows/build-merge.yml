@@ -1,0 +1,61 @@
+name: 🔄 CD · Snapshot
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      maven_central:
+        description: Maven Central.
+        required: true
+        default: true
+        type: boolean
+      github_packages:
+        description: GitHub Packages.
+        required: true
+        default: true
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: build-main-${{ github.ref || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    permissions:
+      contents: read
+      packages: read
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_release.yml@8518db0dca09463ab3c3a6e955675423e96b8870
+    with:
+      semver_strategy: snapshot
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && (inputs.maven_central != true || inputs.github_packages != true) }}
+
+  central:
+    needs:
+      - release
+    if: ${{ always() && !cancelled() && needs.release.result == 'success' }}
+    permissions:
+      actions: read
+      contents: read
+      deployments: write
+      packages: read
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_central.yml@8518db0dca09463ab3c3a6e955675423e96b8870
+    secrets:
+      CENTRAL_USER: ${{ secrets.OSSH_USER }}
+      CENTRAL_PASS: ${{ secrets.OSSH_PASS }}
+      GPG_SIGNING_KEY: ${{ secrets.GPG_SIGNING_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  packages:
+    needs:
+      - release
+    if: ${{ always() && !cancelled() && needs.release.result == 'success' }}
+    permissions:
+      actions: read
+      contents: read
+      deployments: write
+      packages: write
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_github_packages.yml@8518db0dca09463ab3c3a6e955675423e96b8870

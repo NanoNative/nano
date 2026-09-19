@@ -48,7 +48,7 @@ import static org.nanonative.nano.services.http.model.HttpHeaders.USER_AGENT;
 import static org.nanonative.nano.services.http.model.HttpMethod.GET;
 import static org.nanonative.nano.services.logging.LogService.CONFIG_LOG_LEVEL;
 
-@Execution(ExecutionMode.CONCURRENT)
+@Execution(ExecutionMode.SAME_THREAD)
 public class HttpClientTest {
 
     protected static String serverUrl;
@@ -60,8 +60,8 @@ public class HttpClientTest {
         nano = new Nano(Map.of(
             CONFIG_LOG_LEVEL,
             TEST_LOG_LEVEL, CONFIG_HTTP_CLIENT_MAX_RETRIES, 1,
-            CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS, 128,
-            CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS, 128
+            CONFIG_HTTP_CLIENT_READ_TIMEOUT_MS, 1_000,
+            CONFIG_HTTP_CLIENT_CON_TIMEOUT_MS, 1_000
         ), server, new HttpClient()).subscribeEvent(EVENT_HTTP_REQUEST, HttpClientTest::mimicRequest);
         serverUrl = "http://localhost:" + server.port();
     }
