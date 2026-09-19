@@ -173,18 +173,20 @@ public class FileWatcher extends Service {
         final GroupState gs = groups.remove(group);
         if (gs == null) return;
 
-        // Drop reverse links; unwatch dirs that no one else needs
-        for (Path dir : gs.dirs) {
-            final Set<String> watchers = dirToGroups.get(dir);
-            if (watchers != null) {
-                watchers.remove(group);
-                if (watchers.isEmpty()) {
-                    dirToGroups.remove(dir);
-                    unwatchDir(dir);
+        synchronized (gs) {
+            // Drop reverse links; unwatch dirs that no one else needs
+            for (Path dir : gs.dirs) {
+                final Set<String> watchers = dirToGroups.get(dir);
+                if (watchers != null) {
+                    watchers.remove(group);
+                    if (watchers.isEmpty()) {
+                        dirToGroups.remove(dir);
+                        unwatchDir(dir);
+                    }
                 }
             }
+            unwatchedGroups.put(group, System.nanoTime());
         }
-        unwatchedGroups.put(group, System.nanoTime());
     }
 
     protected boolean watchDir(final Path dir) {
@@ -230,13 +232,16 @@ public class FileWatcher extends Service {
         if (gs == null || gs.isEmpty()) return;
 
         for (String g : gs) {
-            if (unwatchedGroups.containsKey(g)) continue;
             final GroupState s = groups.get(g);
             if (s == null) continue;
-            // allowlist empty -> whole dir; otherwise only selected files
-            if (s.files.isEmpty() || s.files.contains(eventPath)) {
-                final FileChangeEvent ge = FileChangeEvent.of(eventPath, kind, g);
-                context.newEvent(EVENT_FILE_CHANGE).payload(() -> ge).broadcast(true).send();
+            synchronized (s) {
+                // Keep the decision and delivery linear with unwatch.
+                if (groups.get(g) != s || unwatchedGroups.containsKey(g)) continue;
+                // allowlist empty -> whole dir; otherwise only selected files
+                if (s.files.isEmpty() || s.files.contains(eventPath)) {
+                    final FileChangeEvent ge = FileChangeEvent.of(eventPath, kind, g);
+                    context.newEvent(EVENT_FILE_CHANGE).payload(() -> ge).broadcast(true).send();
+                }
             }
         }
     }
