@@ -99,7 +99,8 @@ class FileWatcherTest {
     @Test
     void shouldStopEmittingEventsAfterUnwatch() throws Exception {
         final Path dir = newTempDir("file-watcher-unwatch");
-        final Path file = dir.resolve("watch-me.txt");
+        final Path watchedFile = dir.resolve("watch-me.txt");
+        final Path unwatchedFile = dir.resolve("unwatched.txt");
         final BlockingQueue<FileChangeEvent> changes = new LinkedBlockingQueue<>();
 
         final Nano nano = new Nano(Map.of(CONFIG_LOG_LEVEL, TEST_LOG_LEVEL), new FileWatcher());
@@ -110,18 +111,18 @@ class FileWatcherTest {
             FileWatchRequest.forFilesWithGroup("OFF", List.of(dir))
         ).send();
 
-        Files.writeString(file, "one", UTF_8);
+        Files.writeString(watchedFile, "one", UTF_8);
         assertThat(pollMatching(changes, DEFAULT_TIMEOUT_MS,
-            ev -> ev.belongsToGroup("OFF") && ev.path().endsWith(file.getFileName()))).isPresent();
+            ev -> ev.belongsToGroup("OFF") && ev.path().endsWith(watchedFile.getFileName()))).isPresent();
         changes.clear();
 
         ctx.newEvent(EVENT_FILE_UNWATCH, () ->
             FileWatchRequest.forFilesWithGroup("OFF", List.of(dir))
         ).send();
 
-        Files.writeString(file, "second", UTF_8);
+        Files.writeString(unwatchedFile, "second", UTF_8);
         assertThat(pollMatching(changes, SHORT_TIMEOUT_MS,
-            ev -> ev.belongsToGroup("OFF"))).isEmpty();
+            ev -> ev.belongsToGroup("OFF") && ev.path().endsWith(unwatchedFile.getFileName()))).isEmpty();
 
         stopNano(nano, ctx);
     }
@@ -157,7 +158,7 @@ class FileWatcherTest {
         assertThat(pollMatching(changes, DEFAULT_TIMEOUT_MS,
             ev -> ev.belongsToGroup("GROUP2") && ev.isCreate())).isPresent();
         assertThat(pollMatching(changes, SHORT_TIMEOUT_MS,
-            ev -> ev.belongsToGroup("GROUP1"))).isEmpty();
+            ev -> ev.belongsToGroup("GROUP1") && ev.path().endsWith("second.txt"))).isEmpty();
 
         stopNano(nano, ctx);
     }
