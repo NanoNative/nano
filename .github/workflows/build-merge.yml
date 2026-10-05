@@ -42,7 +42,7 @@ jobs:
       contents: read
       deployments: write
       packages: read
-    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_central.yml@8518db0dca09463ab3c3a6e955675423e96b8870
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_central.yml@bb2cc27fe32fa9c3cbaaa009b69150faa129e7a9
     secrets:
       CENTRAL_USER: ${{ secrets.OSSH_USER }}
       CENTRAL_PASS: ${{ secrets.OSSH_PASS }}
