@@ -27,6 +27,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    uses: NanoNative/NanoNative/.github/workflows/wc_java_build_common.yml@45738a83961ad524700a86641a85a4e0435954c0
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_build_common.yml@fbbfa45f21bd2906381409634134148fb87610eb
     with:
       ref: ${{ github.event.inputs.ref || github.sha }}

@@ -19,6 +19,6 @@ jobs:
       actions: write
       contents: write
       pull-requests: write
-    uses: NanoNative/NanoNative/.github/workflows/wc_java_update_maven_wrapper.yml@45738a83961ad524700a86641a85a4e0435954c0
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_update_maven_wrapper.yml@fbbfa45f21bd2906381409634134148fb87610eb
     with:
       dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}

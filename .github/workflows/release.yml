@@ -27,7 +27,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    uses: NanoNative/NanoNative/.github/workflows/wc_java_release.yml@45738a83961ad524700a86641a85a4e0435954c0
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_release.yml@fbbfa45f21bd2906381409634134148fb87610eb
     with:
       force: ${{ inputs.force }}
       dry_run: ${{ inputs.maven_central != true || inputs.github_packages != true }}
@@ -41,7 +41,7 @@ jobs:
       contents: read
       deployments: write
       packages: read
-    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_central.yml@45738a83961ad524700a86641a85a4e0435954c0
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_central.yml@fbbfa45f21bd2906381409634134148fb87610eb
     secrets:
       CENTRAL_USER: ${{ secrets.OSSH_USER }}
       CENTRAL_PASS: ${{ secrets.OSSH_PASS }}
@@ -57,7 +57,7 @@ jobs:
       contents: read
       deployments: write
       packages: write
-    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_github_packages.yml@45738a83961ad524700a86641a85a4e0435954c0
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_publish_github_packages.yml@fbbfa45f21bd2906381409634134148fb87610eb
 
   github:
     needs:
@@ -68,7 +68,7 @@ jobs:
     permissions:
       actions: read
       contents: write
-    uses: NanoNative/NanoNative/.github/workflows/wc_java_create_github_release.yml@45738a83961ad524700a86641a85a4e0435954c0
+    uses: NanoNative/NanoNative/.github/workflows/wc_java_create_github_release.yml@fbbfa45f21bd2906381409634134148fb87610eb
     with:
       commit_sha: ${{ needs.release.outputs.commit_sha }}
       version: ${{ needs.release.outputs.version }}
